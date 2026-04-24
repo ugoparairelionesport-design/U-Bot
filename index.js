@@ -52,6 +52,13 @@ client.on('interactionCreate', async interaction => {
 
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
+      if (interaction.commandName === 'maintenance') {
+        return interaction.reply({
+          content: "❌ Cette commande est désactivée.",
+          flags: 64
+        });
+      }
+
       if (interaction.commandName === 'config_ticket') {
         return sendConfigPanel(interaction);
       }
