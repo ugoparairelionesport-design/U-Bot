@@ -46,3 +46,8 @@ jobs:
             echo "::error::Replit sync failed: $SUMMARY_OUTPUT"
             exit "$SYNC_STATUS"
           fi
+
+      - name: Restart Replit app
+        run: |
+          REPLIT_TARGET="${REPLIT_REPL_ID:-$REPLIT_REPL_SLUG}"
+          npx --yes replit run --restart "$REPLIT_TARGET"
