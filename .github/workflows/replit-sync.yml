@@ -10,23 +10,27 @@ jobs:
     runs-on: ubuntu-latest
     env:
       REPLIT_CONFIG_DIR: ${{ runner.temp }}/replit-cli
-      REPLIT_AUTH_KEY: ${{ secrets.REPLIT_KEY != '' && secrets.REPLIT_KEY || secrets.REPLIT_TOKEN }}
+      REPLIT_KEY: ${{ secrets.REPLIT_KEY }}
+      REPLIT_TOKEN: ${{ secrets.REPLIT_TOKEN }}
+      REPLIT_REPL_SLUG: ${{ secrets.REPLIT_REPL_SLUG }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
       - name: Validate Replit secrets
         run: |
-          if [ -z "$REPLIT_AUTH_KEY" ] || [ -z "${{ secrets.REPLIT_REPL_SLUG }}" ]; then
+          REPLIT_AUTH_KEY="${REPLIT_KEY:-$REPLIT_TOKEN}"
+          if [ -z "$REPLIT_AUTH_KEY" ] || [ -z "$REPLIT_REPL_SLUG" ]; then
             echo "ERROR: Define REPLIT_KEY (or REPLIT_TOKEN) and REPLIT_REPL_SLUG in GitHub Secrets."
             exit 1
           fi
 
       - name: Prepare Replit CLI config
         run: |
+          REPLIT_AUTH_KEY="${REPLIT_KEY:-$REPLIT_TOKEN}"
           mkdir -p "$REPLIT_CONFIG_DIR"
           printf '%s' "{\"key\": \"$REPLIT_AUTH_KEY\"}" > "$REPLIT_CONFIG_DIR/.replitcli.json"
 
       - name: Sync files to Replit
         run: |
-          npx --yes replit cp --repl "${{ secrets.REPLIT_REPL_SLUG }}" . repl: -q
+          npx --yes replit cp --repl "$REPLIT_REPL_SLUG" . repl: -q
