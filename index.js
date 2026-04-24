@@ -17,6 +17,7 @@ const {
   showStaffStats,
   resumeTicketState
 } = require('./Systems/configsystem');
+const { deployCommands } = require('./deploy-commands');
 
 require('dotenv').config();
 const CONFIG_MESSAGE_DELETE_DELAY_MS = 3 * 60 * 1000;
@@ -39,7 +40,18 @@ client.commands = new Map();
 // READY
 
 client.once('ready', async () => {
-  console.log(`✅ Connecté : ${client.user.tag}`);
+  console.log('Bot connecte :', client.user.tag);
+
+  if (process.env.CLIENT_ID) {
+    try {
+      await deployCommands();
+    } catch (error) {
+      console.error('❌ ECHEC DEPLOIEMENT COMMANDES AU DEMARRAGE:', error);
+    }
+  } else {
+    console.warn('⚠️ CLIENT_ID absent: deploiement des commandes ignore.');
+  }
+
   await resumeTicketState(client);
 });
 
@@ -184,4 +196,8 @@ process.on('SIGTERM', () => {
 // LOGIN
 
 client.login(process.env.TOKEN);
+
+
+
+
 

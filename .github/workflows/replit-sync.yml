@@ -3,77 +3,30 @@ name: Replit Sync
 on:
   push:
     branches: [ master ]
+  workflow_dispatch:
 
 jobs:
   sync-to-replit:
     runs-on: ubuntu-latest
+    env:
+      REPLIT_CONFIG_DIR: ${{ runner.temp }}/replit-cli
+      REPLIT_AUTH_KEY: ${{ secrets.REPLIT_KEY != '' && secrets.REPLIT_KEY || secrets.REPLIT_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
 
-      - name: Verify Replit secrets
+      - name: Validate Replit secrets
         run: |
-          if [ -z "${{ secrets.REPLIT_TOKEN }}" ] || [ -z "${{ secrets.REPLIT_REPL_SLUG }}" ]; then
-            echo "ERROR: REPLIT_TOKEN and REPLIT_REPL_SLUG must be set in GitHub Secrets."
+          if [ -z "$REPLIT_AUTH_KEY" ] || [ -z "${{ secrets.REPLIT_REPL_SLUG }}" ]; then
+            echo "ERROR: Define REPLIT_KEY (or REPLIT_TOKEN) and REPLIT_REPL_SLUG in GitHub Secrets."
             exit 1
           fi
 
-      - name: Get Replit Repl ID
-        id: get-repl-id
+      - name: Prepare Replit CLI config
         run: |
-          set -euo pipefail
-          RESPONSE=$(curl -sS -X POST https://replit.com/graphql \
-            -H "Authorization: Bearer ${{ secrets.REPLIT_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
-            -H "X-Requested-With: XMLHttpRequest" \
-            -H "Origin: https://replit.com" \
-            -H "Referer: https://replit.com/" \
-            -d '{
-              "query": "query { currentUser { repls { id slug } } }"
-            }')
+          mkdir -p "$REPLIT_CONFIG_DIR"
+          printf '%s' "{\"key\": \"$REPLIT_AUTH_KEY\"}" > "$REPLIT_CONFIG_DIR/.replitcli.json"
 
-          echo "DEBUG: Raw Replit response:"
-          echo "$RESPONSE"
-
-          REPL_ID=$(echo "$RESPONSE" | jq -r ".data.currentUser.repls[] | select(.slug == \"${{ secrets.REPLIT_REPL_SLUG }}\") | .id") || {
-            echo "ERROR: Failed to parse JSON response from Replit."
-            exit 1
-          }
-
-          if [ -z "$REPL_ID" ]; then
-            echo "ERROR: Could not find repl with slug ${{ secrets.REPLIT_REPL_SLUG }}"
-            exit 1
-          fi
-
-          echo "repl_id=$REPL_ID" >> $GITHUB_OUTPUT
-
-      - name: Sync Replit from GitHub
+      - name: Sync files to Replit
         run: |
-          RESPONSE=$(curl -sS -X POST https://replit.com/graphql \
-            -H "Authorization: Bearer ${{ secrets.REPLIT_TOKEN }}" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
-            -H "X-Requested-With: XMLHttpRequest" \
-            -H "Origin: https://replit.com" \
-            -H "Referer: https://replit.com/" \
-            -d "{\
-              \"query\": \"mutation SyncRepl(\$input: SyncReplInput!) { syncRepl(input: \$input) { ... on SyncReplSuccess { repl { id } } } }\",\
-              \"variables\": {\
-                \"input\": {\
-                  \"replId\": \"${{ steps.get-repl-id.outputs.repl_id }}\"\
-                }\
-              }\
-            }"
-
-          echo "DEBUG: Raw Sync response:"
-          echo "$RESPONSE"
-
-          if echo "$RESPONSE" | jq -e . >/dev/null 2>&1; then
-            echo "Sync response is valid JSON"
-          else
-            echo "ERROR: Sync response is not valid JSON"
-            exit 1
-          fi
+          npx --yes replit cp --repl "${{ secrets.REPLIT_REPL_SLUG }}" . repl: -q
