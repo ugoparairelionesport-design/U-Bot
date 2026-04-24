@@ -2,7 +2,7 @@ name: Replit Sync
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
 
 jobs:
   sync-to-replit:
