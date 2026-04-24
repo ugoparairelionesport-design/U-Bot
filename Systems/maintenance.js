@@ -12,7 +12,7 @@ class MaintenanceSystem {
     this.maintenanceMode = false;
     this.gitCheckInterval = null;
     this.AUTO_PULL_ENABLED = true; // Activer/Désactiver l'auto-pull
-    this.CHECK_INTERVAL_MS = 5 * 60 * 1000; // Vérification toutes les 5 minutes
+    this.CHECK_INTERVAL_MS = 2 * 60 * 1000; // Vérification toutes les 2 minutes (plus réactif)
 
     // Chemins à surveiller
     this.watchPaths = [
@@ -263,7 +263,7 @@ class MaintenanceSystem {
         },
         {
           name: 'Auto-Pull Git',
-          value: this.gitCheckInterval ? '🟢 Activé (5 min)' : '🔴 Désactivé',
+          value: this.gitCheckInterval ? `🟢 Activé (${this.CHECK_INTERVAL_MS / 60000} min)` : '🔴 Désactivé',
           inline: true
         },
         {

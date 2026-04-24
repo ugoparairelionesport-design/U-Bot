@@ -1,10 +1,12 @@
+const http = require('http');
 const {
   Client,
   GatewayIntentBits,
   Partials,
   ActionRowBuilder,
   StringSelectMenuBuilder,
-  EmbedBuilder
+  EmbedBuilder,
+  PermissionsBitField
 } = require('discord.js');
 
 const configSystem = require('./Systems/configsystem');
@@ -13,6 +15,14 @@ const MaintenanceSystem = require('./Systems/maintenance');
 const { deployCommands } = require('./deploy-commands');
 
 require('dotenv').config();
+
+// Serveur de maintien en vie pour Replit (24/7)
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.write("Bot is running!");
+  res.end();
+}).listen(8080);
+
 const CONFIG_MESSAGE_DELETE_DELAY_MS = 3 * 60 * 1000;
 
 /* ========================= */
@@ -61,6 +71,18 @@ client.on('interactionCreate', async interaction => {
 
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
+      // Liste des commandes nécessitant des permissions Administrateur
+      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats'];
+      
+      if (adminCommands.includes(interaction.commandName)) {
+        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+          return interaction.reply({
+            content: "❌ Vous n'avez pas les permissions (Administrateur) pour utiliser cette commande.",
+            flags: 64
+          });
+        }
+      }
+
       if (interaction.commandName === 'maintenance') {
         if (client.maintenance) {
           return client.maintenance.handleMaintenanceCommand(interaction);

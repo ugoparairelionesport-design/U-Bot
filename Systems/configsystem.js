@@ -598,7 +598,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
     },
     embeds: [
       new EmbedBuilder()
-        .setTitle("🎫 Ticket")
+        .setTitle("🎫 Support Actif")
         .setDescription(`${interaction.user}`)
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
     ],
@@ -903,6 +903,12 @@ async function handleButtons(interaction) {
         content: "❌ Option de modification invalide",
         flags: 64
       });
+    }
+
+    // Gestion des notes (1 à 5)
+    if (interaction.customId.startsWith('rate_')) {
+      const score = parseInt(interaction.customId.split('_')[1]);
+      return handleRating(interaction, score);
     }
 
     if (interaction.customId === 'refresh_stats') {
