@@ -21,20 +21,28 @@ jobs:
       - name: Get Replit Repl ID
         id: get-repl-id
         run: |
-          RESPONSE=$(curl -s -X POST https://replit.com/graphql \
+          set -euo pipefail
+          RESPONSE=$(curl -sS -X POST https://replit.com/graphql \
             -H "Authorization: Bearer ${{ secrets.REPLIT_TOKEN }}" \
             -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
             -d '{
               "query": "query { currentUser { repls { id slug } } }"
             }')
-          
-          REPL_ID=$(echo $RESPONSE | jq -r ".data.currentUser.repls[] | select(.slug == \"${{ secrets.REPLIT_REPL_SLUG }}\") | .id")
-          
+
+          echo "DEBUG: Raw Replit response:"
+          echo "$RESPONSE"
+
+          REPL_ID=$(echo "$RESPONSE" | jq -r ".data.currentUser.repls[] | select(.slug == \"${{ secrets.REPLIT_REPL_SLUG }}\") | .id") || {
+            echo "ERROR: Failed to parse JSON response from Replit."
+            exit 1
+          }
+
           if [ -z "$REPL_ID" ]; then
             echo "ERROR: Could not find repl with slug ${{ secrets.REPLIT_REPL_SLUG }}"
             exit 1
           fi
-          
+
           echo "repl_id=$REPL_ID" >> $GITHUB_OUTPUT
 
       - name: Sync Replit from GitHub
