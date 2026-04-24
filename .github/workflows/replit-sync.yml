@@ -1,0 +1,24 @@
+name: Replit Sync
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  sync-to-replit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Verify Replit secrets
+        run: |
+          if [ -z "${{ secrets.REPLIT_TOKEN }}" ] || [ -z "${{ secrets.REPLIT_REPL_ID }}" ]; then
+            echo "ERROR: REPLIT_TOKEN and REPLIT_REPL_ID must be set in GitHub Secrets."
+            exit 1
+          fi
+
+      - name: Trigger Replit deploy
+        run: |
+          echo "This workflow is ready to trigger Replit when configured."
+          echo "Add your Replit deployment request here once the API details are available."

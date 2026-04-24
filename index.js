@@ -35,6 +35,8 @@ const client = new Client({
   partials: [Partials.Channel, Partials.Message]
 });
 
+client.commands = new Map();
+
 /* ========================= */
 // READY
 
@@ -54,6 +56,13 @@ client.on('interactionCreate', async interaction => {
     console.log('⚡ Interaction reçue :', interaction.type, interaction.isChatInputCommand() ? interaction.commandName : 'non-command');
 
     /* ===== COMMANDES ===== */
+    if (interaction.isChatInputCommand() && client.maintenance?.maintenanceMode && interaction.commandName !== 'maintenance') {
+      return interaction.reply({
+        content: '⚠️ Le bot est en maintenance. Seule la commande `/maintenance` est disponible.',
+        flags: 64
+      });
+    }
+
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'maintenance' && !client.maintenance) {
         console.error('❌ Maintenance handler non initialisé');
@@ -146,6 +155,7 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageCreate', async message => {
   try {
+    if (client.maintenance?.maintenanceMode) return;
     await handleMessage(message);
   } catch (err) {
     console.error("❌ MESSAGE ERROR:", err);

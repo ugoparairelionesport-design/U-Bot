@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const chokidar = require('chokidar');
 const { REST, Routes } = require('discord.js');
 
 class MaintenanceSystem {
@@ -38,40 +39,35 @@ class MaintenanceSystem {
 
   startFileWatching() {
     this.watchPaths.forEach(watchPath => {
-      if (fs.existsSync(watchPath)) {
-        this.watchDirectory(watchPath);
-      }
+      if (!fs.existsSync(watchPath)) return;
+
+      const absolutePath = path.resolve(watchPath);
+      const watcher = chokidar.watch(absolutePath, {
+        ignored: /(^|[\/\\])\../,
+        persistent: true,
+        ignoreInitial: true,
+        awaitWriteFinish: {
+          stabilityThreshold: 500,
+          pollInterval: 100
+        }
+      });
+
+      watcher.on('all', (event, changedPath) => {
+        if (!changedPath.endsWith('.js')) return;
+        this.handleFileChange(changedPath);
+      });
+
+      watcher.on('error', error => {
+        console.error(`❌ Erreur watcher ${watchPath}:`, error.message);
+      });
+
+      this.watchers.set(watchPath, watcher);
+      console.log(`👀 Surveillance activée: ${watchPath}`);
     });
   }
 
   watchDirectory(dirPath) {
-    if (this.watchers.has(dirPath)) {
-      this.watchers.get(dirPath).close();
-    }
-
-    try {
-      const absolutePath = path.resolve(dirPath);
-      const stats = fs.statSync(absolutePath);
-      const watcherOptions = stats.isDirectory() ? { recursive: true } : undefined;
-
-      const watcher = fs.watch(absolutePath, watcherOptions, (eventType, filename) => {
-        if (stats.isDirectory()) {
-          if (filename && filename.endsWith('.js')) {
-            const filePath = path.join(absolutePath, filename);
-            this.handleFileChange(filePath);
-          }
-        } else {
-          if (absolutePath.endsWith('.js')) {
-            this.handleFileChange(absolutePath);
-          }
-        }
-      });
-
-      this.watchers.set(dirPath, watcher);
-      console.log(`👀 Surveillance activée: ${dirPath}`);
-    } catch (error) {
-      console.error(`❌ Erreur surveillance ${dirPath}:`, error.message);
-    }
+    // Méthode conservée pour compatibilité, la surveillance utilise chokidar.
   }
 
   handleFileChange(filePath) {
@@ -98,26 +94,30 @@ class MaintenanceSystem {
 
   async reloadModule(filePath) {
     try {
-      // Convertir le chemin relatif en chemin absolu depuis la racine du projet
-      const absolutePath = path.resolve(__dirname, '..', filePath);
+      const absolutePath = path.resolve(filePath);
+      if (!absolutePath.endsWith('.js')) return;
+
+      if (absolutePath.endsWith(`${path.sep}index.js`) || absolutePath.endsWith('/index.js')) {
+        console.warn('⚠️ Modification de index.js détectée : un redémarrage du bot est nécessaire pour appliquer ce changement.');
+        return;
+      }
+
       delete require.cache[absolutePath];
 
       // Recharger le module
       const module = require(absolutePath);
 
       // Mettre à jour les références selon le fichier
-      if (filePath.includes('configsystem.js')) {
+      if (absolutePath.includes('configsystem.js')) {
         this.updateConfigSystem(module);
-      } else if (filePath.includes('commands/')) {
-        this.updateCommand(filePath, module);
-      } else if (filePath.includes('deploy-commands.js')) {
+      } else if (absolutePath.includes(`${path.sep}commands${path.sep}`) || absolutePath.includes('/commands/')) {
+        this.updateCommand(absolutePath, module);
+      } else if (absolutePath.includes('deploy-commands.js')) {
         // Mettre à jour les commandes seulement quand deploy-commands.js change
         await this.updateCommands();
-      } else if (filePath.includes('index.js')) {
-        this.updateMainHandlers();
       }
 
-      console.log(`🔄 Module rechargé: ${path.basename(filePath)}`);
+      console.log(`🔄 Module rechargé: ${path.basename(absolutePath)}`);
 
     } catch (error) {
       console.error(`❌ Erreur rechargement ${filePath}:`, error.message);
@@ -136,14 +136,8 @@ class MaintenanceSystem {
   }
 
   updateMainHandlers() {
-    // Recharger les handlers principaux
-    try {
-      const mainIndexPath = path.resolve(__dirname, '..', 'index.js');
-      delete require.cache[require.resolve(mainIndexPath)];
-      console.log('🔄 Handlers principaux rechargés');
-    } catch (error) {
-      console.error('❌ Erreur rechargement handlers:', error.message);
-    }
+    // Rechargement complet de index.js non pris en charge sans redémarrage
+    console.warn('⚠️ Rechargement de index.js non pris en charge. Redémarrez le bot pour appliquer ces changements.');
   }
 
   startAutoUpdate() {
