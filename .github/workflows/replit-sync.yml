@@ -33,4 +33,13 @@ jobs:
 
       - name: Sync files to Replit
         run: |
-          npx --yes replit cp --repl "$REPLIT_REPL_SLUG" . repl: -q
+          set +e
+          SYNC_OUTPUT=$(npx --yes replit cp --repl "$REPLIT_REPL_SLUG" . repl: -q 2>&1)
+          SYNC_STATUS=$?
+          printf '%s\n' "$SYNC_OUTPUT"
+
+          if [ "$SYNC_STATUS" -ne 0 ]; then
+            SUMMARY_OUTPUT=$(printf '%s' "$SYNC_OUTPUT" | tail -c 600 | tr '\n' ' ')
+            echo "::error::Replit sync failed: $SUMMARY_OUTPUT"
+            exit "$SYNC_STATUS"
+          fi
