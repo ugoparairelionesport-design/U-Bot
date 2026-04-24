@@ -16,10 +16,15 @@ const { deployCommands } = require('./deploy-commands');
 
 require('dotenv').config();
 
+console.log('🚀 Lancement du bot en cours...');
+
 // Serveur de maintien en vie pour Replit (24/7)
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.write("Bot is running!");
+  res.write(`Bot is running!
+Status: Online
+Sync: Enabled (2min)
+Uptime: ${Math.floor(process.uptime() / 60)} minutes`);
   res.end();
 }).listen(8080);
 
@@ -39,15 +44,18 @@ const client = new Client({
 
 client.commands = new Map();
 client.configSystem = configSystem;
-client.maintenance = null;
+
+try {
+  client.maintenance = new MaintenanceSystem(client);
+} catch (err) {
+  console.error('❌ Erreur lors de l\'initialisation de la maintenance:', err);
+}
 
 /* ========================= */
 // READY
 
-client.once('clientReady', async () => {
+client.once('ready', async () => {
   console.log('Bot connecte :', client.user.tag);
-
-  client.maintenance = new MaintenanceSystem(client);
 
   if (process.env.CLIENT_ID) {
     try {

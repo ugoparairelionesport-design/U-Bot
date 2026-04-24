@@ -16,10 +16,10 @@ class MaintenanceSystem {
 
     // Chemins à surveiller
     this.watchPaths = [
-      './Systems',
-      './commands',
-      './index.js',
-      './deploy-commands.js'
+      path.resolve(__dirname, '../Systems'),
+      path.resolve(__dirname, '../commands'),
+      path.resolve(__dirname, '../index.js'),
+      path.resolve(__dirname, '../deploy-commands.js')
     ];
 
     this.init();
@@ -70,22 +70,31 @@ class MaintenanceSystem {
   }
 
   startGitWatch() {
-    console.log(`📡 Auto-pull activé (intervalle: ${this.CHECK_INTERVAL_MS / 60000} min)`);
-    this.gitCheckInterval = setInterval(() => {
-      this.checkGitUpdates();
-    }, this.CHECK_INTERVAL_MS);
+    if (fs.existsSync(path.resolve(__dirname, '../.git'))) {
+      console.log(`📡 Auto-pull activé (intervalle: ${this.CHECK_INTERVAL_MS / 60000} min)`);
+      this.gitCheckInterval = setInterval(() => {
+        this.checkGitUpdates();
+      }, this.CHECK_INTERVAL_MS);
+    } else {
+      console.warn('⚠️ Dossier .git introuvable : l\'auto-pull est désactivé.');
+    }
   }
 
   checkGitUpdates() {
     if (this.maintenanceMode) return;
 
-    exec('git pull origin master', (error, stdout, stderr) => {
+    // Stratégie "Force Merge" : On écrase tout ce qui est local sur Replit pour s'aligner sur GitHub
+    exec('git fetch origin master && git reset --hard origin/master', (error, stdout, stderr) => {
       if (error) {
-        // On ne log pas l'erreur systématiquement pour éviter de polluer si pas de connexion
+        // On ne log l'erreur que si elle est critique
+        if (!error.message.includes('already up to date')) {
+            console.error(`❌ Erreur Synchro Git : ${error.message}`);
+        }
         return;
       }
 
       if (stdout.includes('Already up to date')) {
+        console.log('✅ Déjà à jour sur GitHub.');
         return;
       }
 
