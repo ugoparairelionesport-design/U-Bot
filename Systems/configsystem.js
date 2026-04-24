@@ -1566,8 +1566,45 @@ async function handleMessageDelete(message) {
   }
 }
 
+async function sendEditConfigPanel(interaction) {
+  const menu = new StringSelectMenuBuilder()
+    .setCustomId('modif_select')
+    .setPlaceholder('Que veux-tu modifier ?')
+    .addOptions([
+      { label: 'Logs', value: 'logs', description: 'Modifier le salon des logs', emoji: '📝' },
+      { label: 'Catégorie', value: 'category', description: 'Modifier la catégorie d’une option', emoji: '📂' },
+      { label: 'Rôle', value: 'role', description: 'Modifier le rôle de modération d’une option', emoji: '🛡️' },
+      { label: 'Stats', value: 'stats', description: 'Modifier le salon des statistiques', emoji: '📊' }
+    ]);
+
+  const embed = new EmbedBuilder()
+    .setTitle("⚙️ Modification de la configuration")
+    .setDescription(
+      "Utilise le menu ci-dessous pour modifier un élément précis du système de tickets.\n\n" +
+      "📝 **Logs** → Modifier le salon des logs\n" +
+      "📂 **Catégorie** → Modifier la catégorie liée à une option\n" +
+      "🛡️ **Rôle** → Modifier le rôle de modération lié à une option\n" +
+      "📊 **Stats** → Modifier le salon des statistiques\n\n" +
+      "_Choisis l’élément que tu souhaites mettre à jour._"
+    )
+    .setColor("#5865F2")
+    .setFooter({ text: "Système de tickets Discord" })
+    .setTimestamp();
+
+  await interaction.reply({
+    embeds: [embed],
+    components: [new ActionRowBuilder().addComponents(menu)],
+    flags: 64
+  });
+
+  setTimeout(() => {
+    interaction.deleteReply().catch(() => {});
+  }, CONFIG_MESSAGE_DELETE_DELAY_MS);
+}
+
 module.exports = {
   sendConfigPanel,
+  sendEditConfigPanel,
   handleButtons,
   handleModal,
   handleMessage,
@@ -1576,4 +1613,3 @@ module.exports = {
   showStaffStats,
   resumeTicketState
 };
-

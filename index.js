@@ -7,16 +7,9 @@ const {
   EmbedBuilder
 } = require('discord.js');
 
-const {
-  sendConfigPanel,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState
-} = require('./Systems/configsystem');
+const configSystem = require('./Systems/configsystem');
+const MaintenanceSystem = require('./Systems/maintenance');
+
 const { deployCommands } = require('./deploy-commands');
 
 require('dotenv').config();
@@ -35,12 +28,16 @@ const client = new Client({
 });
 
 client.commands = new Map();
+client.configSystem = configSystem;
+client.maintenance = null;
 
 /* ========================= */
 // READY
 
 client.once('clientReady', async () => {
   console.log('Bot connecte :', client.user.tag);
+
+  client.maintenance = new MaintenanceSystem(client);
 
   if (process.env.CLIENT_ID) {
     try {
@@ -52,7 +49,7 @@ client.once('clientReady', async () => {
     console.warn('⚠️ CLIENT_ID absent: deploiement des commandes ignore.');
   }
 
-  await resumeTicketState(client);
+  await client.configSystem.resumeTicketState(client);
 });
 
 /* ========================= */
@@ -65,18 +62,22 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === 'maintenance') {
-        return interaction.reply({
-          content: "❌ Cette commande est désactivée.",
-          flags: 64
-        });
+        if (client.maintenance) {
+          return client.maintenance.handleMaintenanceCommand(interaction);
+        } else {
+          return interaction.reply({
+            content: "❌ Système de maintenance non initialisé.",
+            flags: 64
+          });
+        }
       }
 
       if (interaction.commandName === 'config_ticket') {
-        return sendConfigPanel(interaction);
+        return client.configSystem.sendConfigPanel(interaction);
       }
 
       if (interaction.commandName === 'stats') {
-        await updateStatsMessage(interaction.guild);
+        await client.configSystem.updateStatsMessage(interaction.guild);
         return interaction.reply({
           content: "📊 Stats mises à jour",
           flags: 64
@@ -84,57 +85,26 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'staff_stats') {
-        return showStaffStats(interaction);
+        return client.configSystem.showStaffStats(interaction);
       }
 
       if (interaction.commandName === 'modif_config_ticket') {
-
-        const menu = new StringSelectMenuBuilder()
-          .setCustomId('modif_select')
-          .setPlaceholder('Que veux-tu modifier ?')
-          .addOptions([
-            { label: 'Logs', value: 'logs', description: 'Modifier le salon des logs', emoji: '📝' },
-            { label: 'Catégorie', value: 'category', description: 'Modifier la catégorie d’une option', emoji: '📂' },
-            { label: 'Rôle', value: 'role', description: 'Modifier le rôle de modération d’une option', emoji: '🛡️' },
-            { label: 'Stats', value: 'stats', description: 'Modifier le salon des statistiques', emoji: '📊' }
-          ]);
-
-        const embed = new EmbedBuilder()
-          .setTitle("⚙️ Modification de la configuration")
-          .setDescription(
-            "Utilise le menu ci-dessous pour modifier un élément précis du système de tickets.\n\n" +
-            "📝 **Logs** → Modifier le salon des logs\n" +
-            "📂 **Catégorie** → Modifier la catégorie liée à une option\n" +
-            "🛡️ **Rôle** → Modifier le rôle de modération lié à une option\n" +
-            "📊 **Stats** → Modifier le salon des statistiques\n\n" +
-            "_Choisis l’élément que tu souhaites mettre à jour._"
-          )
-          .setColor("#5865F2")
-          .setFooter({ text: "Système de tickets Discord" })
-          .setTimestamp();
-
-        await interaction.reply({
-          embeds: [embed],
-          components: [new ActionRowBuilder().addComponents(menu)],
-          flags: 64
-        });
-
-        setTimeout(() => {
-          interaction.deleteReply().catch(() => {});
-        }, CONFIG_MESSAGE_DELETE_DELAY_MS);
-
-        return;
+        return client.configSystem.sendEditConfigPanel(interaction);
       }
     }
 
     /* ===== BUTTON / SELECT ===== */
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
-      return handleButtons(interaction);
+      // On vérifie d'abord si c'est un bouton du système de maintenance
+      if (interaction.customId.startsWith('maintenance_') && client.maintenance) {
+        return client.maintenance.handleButton(interaction);
+      }
+      return client.configSystem.handleButtons(interaction);
     }
 
     /* ===== MODAL ===== */
     if (interaction.isModalSubmit()) {
-      return handleModal(interaction);
+      return client.configSystem.handleModal(interaction);
     }
 
   } catch (err) {
@@ -154,7 +124,7 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageCreate', async message => {
   try {
-    await handleMessage(message);
+    await client.configSystem.handleMessage(message);
   } catch (err) {
     console.error("❌ MESSAGE ERROR:", err);
   }
@@ -162,7 +132,7 @@ client.on('messageCreate', async message => {
 
 client.on('messageDelete', async message => {
   try {
-    await handleMessageDelete(message);
+    await client.configSystem.handleMessageDelete(message);
   } catch (err) {
     console.error("❌ MESSAGE DELETE ERROR:", err);
   }
@@ -196,8 +166,3 @@ process.on('SIGTERM', () => {
 // LOGIN
 
 client.login(process.env.TOKEN);
-
-
-
-
-

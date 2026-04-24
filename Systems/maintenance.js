@@ -1,7 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
-const { REST, Routes, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
+const { exec } = require('child_process');
+const { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 class MaintenanceSystem {
   constructor(client) {
@@ -9,7 +10,9 @@ class MaintenanceSystem {
     this.watchers = new Map();
     this.lastModified = new Map();
     this.maintenanceMode = false;
-    this.autoUpdateInterval = null;
+    this.gitCheckInterval = null;
+    this.AUTO_PULL_ENABLED = true; // Activer/Désactiver l'auto-pull
+    this.CHECK_INTERVAL_MS = 5 * 60 * 1000; // Vérification toutes les 5 minutes
 
     // Chemins à surveiller
     this.watchPaths = [
@@ -28,8 +31,8 @@ class MaintenanceSystem {
     // Démarrer la surveillance automatique
     this.startFileWatching();
 
-    // Démarrer la mise à jour automatique des commandes
-    this.startAutoUpdate();
+    // Démarrer la surveillance Git
+    if (this.AUTO_PULL_ENABLED) this.startGitWatch();
 
     // Commande de maintenance
     this.registerMaintenanceCommands();
@@ -66,8 +69,29 @@ class MaintenanceSystem {
     });
   }
 
-  watchDirectory(dirPath) {
-    // Méthode conservée pour compatibilité, la surveillance utilise chokidar.
+  startGitWatch() {
+    console.log(`📡 Auto-pull activé (intervalle: ${this.CHECK_INTERVAL_MS / 60000} min)`);
+    this.gitCheckInterval = setInterval(() => {
+      this.checkGitUpdates();
+    }, this.CHECK_INTERVAL_MS);
+  }
+
+  checkGitUpdates() {
+    if (this.maintenanceMode) return;
+
+    exec('git pull origin master', (error, stdout, stderr) => {
+      if (error) {
+        // On ne log pas l'erreur systématiquement pour éviter de polluer si pas de connexion
+        return;
+      }
+
+      if (stdout.includes('Already up to date')) {
+        return;
+      }
+
+      console.log(`✨ Mise à jour détectée et téléchargée :\n${stdout}`);
+      // Le watcher chokidar prendra le relais pour recharger les fichiers modifiés
+    });
   }
 
   handleFileChange(filePath) {
@@ -102,14 +126,22 @@ class MaintenanceSystem {
         return;
       }
 
+      // On enlève le module du cache de Node.js
       delete require.cache[absolutePath];
 
-      // Recharger le module
       const module = require(absolutePath);
 
-      // Mettre à jour les références selon le fichier
       if (absolutePath.includes('configsystem.js')) {
-        this.updateConfigSystem(module);
+        // On met à jour les propriétés du système de config existant
+        // Cela permet de garder les références dans index.js intactes
+        Object.keys(module).forEach(key => {
+          this.client.configSystem[key] = module[key];
+        });
+        
+        // Ré-initialisation si nécessaire (pour recharger les variables locales du fichier)
+        if (this.client.configSystem.resumeTicketState) {
+          await this.client.configSystem.resumeTicketState(this.client);
+        }
       } else if (absolutePath.includes(`${path.sep}commands${path.sep}`) || absolutePath.includes('/commands/')) {
         this.updateCommand(absolutePath, module);
       } else if (absolutePath.includes('deploy-commands.js')) {
@@ -125,8 +157,9 @@ class MaintenanceSystem {
   }
 
   updateConfigSystem(newModule) {
-    // Mettre à jour les références dans le client
-    Object.assign(this.client.configSystem, newModule);
+    Object.keys(newModule).forEach(key => {
+      this.client.configSystem[key] = newModule[key];
+    });
   }
 
   updateCommand(filePath, module) {
@@ -135,16 +168,6 @@ class MaintenanceSystem {
     console.log(`📋 Commande mise à jour: ${commandName}`);
   }
 
-  updateMainHandlers() {
-    // Rechargement complet de index.js non pris en charge sans redémarrage
-    console.warn('⚠️ Rechargement de index.js non pris en charge. Redémarrez le bot pour appliquer ces changements.');
-  }
-
-  startAutoUpdate() {
-    // Mise à jour automatique des commandes seulement si nécessaire
-    // Les commandes seront mises à jour uniquement lors des changements de fichiers
-    console.log('🔄 Mise à jour automatique des commandes désactivée (mise à jour sur changement uniquement)');
-  }
 
   async updateCommands() {
     try {
@@ -239,8 +262,8 @@ class MaintenanceSystem {
           inline: true
         },
         {
-          name: 'Mise à jour auto',
-          value: this.autoUpdateInterval ? '🟢 Active (10s)' : '🔴 Inactive',
+          name: 'Auto-Pull Git',
+          value: this.gitCheckInterval ? '🟢 Activé (5 min)' : '🔴 Désactivé',
           inline: true
         },
         {
