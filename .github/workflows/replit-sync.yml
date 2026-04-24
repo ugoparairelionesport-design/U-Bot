@@ -26,7 +26,8 @@ jobs:
             -H "Authorization: Bearer ${{ secrets.REPLIT_TOKEN }}" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            -H "X-Requested-With: Replit" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+            -H "X-Requested-With: XMLHttpRequest" \
             -H "Origin: https://replit.com" \
             -H "Referer: https://replit.com/" \
             -d '{
@@ -50,18 +51,29 @@ jobs:
 
       - name: Sync Replit from GitHub
         run: |
-          curl -X POST https://replit.com/graphql \
+          RESPONSE=$(curl -sS -X POST https://replit.com/graphql \
             -H "Authorization: Bearer ${{ secrets.REPLIT_TOKEN }}" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            -H "X-Requested-With: Replit" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36" \
+            -H "X-Requested-With: XMLHttpRequest" \
             -H "Origin: https://replit.com" \
             -H "Referer: https://replit.com/" \
-            -d "{
-              \"query\": \"mutation SyncRepl(\$input: SyncReplInput!) { syncRepl(input: \$input) { ... on SyncReplSuccess { repl { id } } } }\",
-              \"variables\": {
-                \"input\": {
-                  \"replId\": \"${{ steps.get-repl-id.outputs.repl_id }}\"
-                }
-              }
+            -d "{\
+              \"query\": \"mutation SyncRepl(\$input: SyncReplInput!) { syncRepl(input: \$input) { ... on SyncReplSuccess { repl { id } } } }\",\
+              \"variables\": {\
+                \"input\": {\
+                  \"replId\": \"${{ steps.get-repl-id.outputs.repl_id }}\"\
+                }\
+              }\
             }"
+
+          echo "DEBUG: Raw Sync response:"
+          echo "$RESPONSE"
+
+          if echo "$RESPONSE" | jq -e . >/dev/null 2>&1; then
+            echo "Sync response is valid JSON"
+          else
+            echo "ERROR: Sync response is not valid JSON"
+            exit 1
+          fi
