@@ -18,8 +18,6 @@ const {
   resumeTicketState
 } = require('./Systems/configsystem');
 
-const MaintenanceSystem = require('./Systems/maintenance');
-
 require('dotenv').config();
 const CONFIG_MESSAGE_DELETE_DELAY_MS = 3 * 60 * 1000;
 
@@ -40,12 +38,9 @@ client.commands = new Map();
 /* ========================= */
 // READY
 
-client.once('clientReady', async () => {
+client.once('ready', async () => {
   console.log(`✅ Connecté : ${client.user.tag}`);
   await resumeTicketState(client);
-
-  // Initialiser le système de maintenance
-  client.maintenance = new MaintenanceSystem(client);
 });
 
 /* ========================= */
@@ -56,18 +51,7 @@ client.on('interactionCreate', async interaction => {
     console.log('⚡ Interaction reçue :', interaction.type, interaction.isChatInputCommand() ? interaction.commandName : 'non-command');
 
     /* ===== COMMANDES ===== */
-    if (interaction.isChatInputCommand() && client.maintenance?.maintenanceMode && interaction.commandName !== 'maintenance') {
-      return interaction.reply({
-        content: '⚠️ Le bot est en maintenance. Seule la commande `/maintenance` est disponible.',
-        flags: 64
-      });
-    }
-
     if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'maintenance' && !client.maintenance) {
-        console.error('❌ Maintenance handler non initialisé');
-      }
-
       if (interaction.commandName === 'config_ticket') {
         return sendConfigPanel(interaction);
       }
@@ -122,10 +106,6 @@ client.on('interactionCreate', async interaction => {
 
         return;
       }
-
-      if (interaction.commandName === 'maintenance') {
-        return client.maintenance.handleMaintenanceCommand(interaction);
-      }
     }
 
     /* ===== BUTTON / SELECT ===== */
@@ -155,7 +135,6 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageCreate', async message => {
   try {
-    if (client.maintenance?.maintenanceMode) return;
     await handleMessage(message);
   } catch (err) {
     console.error("❌ MESSAGE ERROR:", err);
@@ -181,21 +160,15 @@ process.on('uncaughtException', err => {
   console.error("UNCAUGHT EXCEPTION:", err);
 });
 
-// CLEANUP MAINTENANCE SYSTEM
+// CLEANUP
 process.on('SIGINT', () => {
   console.log('\n🛑 Arrêt du bot demandé...');
-  if (client.maintenance) {
-    client.maintenance.cleanup();
-  }
   client.destroy();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\n🛑 Arrêt du bot demandé...');
-  if (client.maintenance) {
-    client.maintenance.cleanup();
-  }
   client.destroy();
   process.exit(0);
 });

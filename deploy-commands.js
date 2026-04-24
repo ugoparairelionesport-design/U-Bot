@@ -17,21 +17,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('staff_stats')
-    .setDescription('Afficher les statistiques du staff tickets'),
-
-  new SlashCommandBuilder()
-    .setName('maintenance')
-    .setDescription('Commandes de maintenance du bot')
-    .addStringOption(option =>
-      option.setName('action')
-        .setDescription('Action à effectuer')
-        .setRequired(true)
-        .addChoices(
-          { name: 'status', value: 'status' },
-          { name: 'reload', value: 'reload' },
-          { name: 'toggle_mode', value: 'toggle_mode' }
-        )
-    )
+    .setDescription('Afficher les statistiques du staff tickets')
 
 ].map(cmd => cmd.toJSON());
 
@@ -51,11 +37,17 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
       setTimeout(() => reject(new Error('TIMEOUT: Le déploiement prend trop de temps (>30s)')), 30000);
     });
 
-    const deployPromise = rest.put(
-      Routes.applicationCommands(process.env.CLIENT_ID),
-      { body: commands }
-    );
+    const route = process.env.GUILD_ID
+      ? Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID)
+      : Routes.applicationCommands(process.env.CLIENT_ID);
 
+    if (process.env.GUILD_ID) {
+      console.log(`📍 Déploiement des commandes dans le guild ${process.env.GUILD_ID}`);
+    } else {
+      console.log('🌍 Déploiement des commandes globales (peut prendre quelques minutes)');
+    }
+
+    const deployPromise = rest.put(route, { body: commands });
     const result = await Promise.race([deployPromise, timeoutPromise]);
 
     console.log(`✅ Commandes déployées avec succès: ${result.length} commandes`);
@@ -80,5 +72,5 @@ const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   }
 })();
 
-// Exporter les commandes pour le système de maintenance
+// Exporter les commandes
 module.exports = { commands };

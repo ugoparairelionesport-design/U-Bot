@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const chokidar = require('chokidar');
-const { REST, Routes } = require('discord.js');
+const { REST, Routes, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } = require('discord.js');
 
 class MaintenanceSystem {
   constructor(client) {
@@ -167,86 +167,137 @@ class MaintenanceSystem {
   }
 
   async handleMaintenanceCommand(interaction) {
-    const action = interaction.options.getString('action');
-
-    switch (action) {
-      case 'status':
-        const statusEmbed = {
-          title: '🔧 État du système de maintenance',
-          fields: [
-            {
-              name: 'Mode maintenance',
-              value: this.maintenanceMode ? '🟢 Activé' : '🔴 Désactivé',
-              inline: true
-            },
-            {
-              name: 'Surveillance fichiers',
-              value: this.watchers.size > 0 ? '🟢 Active' : '🔴 Inactive',
-              inline: true
-            },
-            {
-              name: 'Mise à jour auto',
-              value: this.autoUpdateInterval ? '🟢 Active (10s)' : '🔴 Inactive',
-              inline: true
-            },
-            {
-              name: 'Modules surveillés',
-              value: this.watchPaths.length.toString(),
-              inline: true
-            }
-          ],
-          color: 0x5865F2,
-          timestamp: new Date()
-        };
-
-        await interaction.reply({ embeds: [statusEmbed], flags: 64 });
-        break;
-
-      case 'reload':
-        await interaction.deferReply({ flags: 64 });
-
-        try {
-          // Recharger tous les modules surveillés
-          this.watchPaths.forEach(path => {
-            if (fs.existsSync(path)) {
-              if (fs.statSync(path).isDirectory()) {
-                fs.readdirSync(path).forEach(file => {
-                  if (file.endsWith('.js')) {
-                    this.reloadModule(path + '/' + file);
-                  }
-                });
-              } else if (path.endsWith('.js')) {
-                this.reloadModule(path);
-              }
-            }
-          });
-
-          await interaction.editReply({ content: '✅ Tous les modules ont été rechargés !' });
-        } catch (error) {
-          await interaction.editReply({ content: `❌ Erreur lors du rechargement: ${error.message}` });
+    const embed = new EmbedBuilder()
+      .setTitle('🔧 Panneau de Maintenance')
+      .setDescription('Utilise les boutons ci-dessous pour gérer le système de maintenance du bot.')
+      .addFields(
+        {
+          name: '📊 Statut',
+          value: `Mode maintenance: ${this.maintenanceMode ? '🟢 Activé' : '🔴 Désactivé'}\nSurveillance: ${this.watchers.size > 0 ? '🟢 Active' : '🔴 Inactive'}`,
+          inline: true
+        },
+        {
+          name: '🔄 Actions',
+          value: '• **Status** : Voir l\'état détaillé\n• **Reload** : Recharger tous les modules\n• **Toggle** : Basculer le mode maintenance',
+          inline: true
         }
-        break;
+      )
+      .setColor(0x5865F2)
+      .setTimestamp();
 
-      case 'toggle_mode':
-        this.maintenanceMode = !this.maintenanceMode;
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('maintenance_status')
+        .setLabel('📊 Status')
+        .setStyle(ButtonStyle.Primary),
 
-        if (this.maintenanceMode) {
-          // Désactiver les mises à jour automatiques
-          if (this.autoUpdateInterval) {
-            clearInterval(this.autoUpdateInterval);
-            this.autoUpdateInterval = null;
-          }
-        } else {
-          // Réactiver les mises à jour (mais elles sont maintenant manuelles)
-          console.log('🔄 Mode maintenance désactivé - mises à jour sur changement de fichier uniquement');
-        }
+      new ButtonBuilder()
+        .setCustomId('maintenance_reload')
+        .setLabel('🔄 Reload')
+        .setStyle(ButtonStyle.Secondary),
 
-        await interaction.reply({
-          content: `🔧 Mode maintenance ${this.maintenanceMode ? 'activé' : 'désactivé'}`,
-          flags: 64
-        });
-        break;
+      new ButtonBuilder()
+        .setCustomId('maintenance_toggle')
+        .setLabel('🔧 Toggle Mode')
+        .setStyle(this.maintenanceMode ? ButtonStyle.Danger : ButtonStyle.Success)
+    );
+
+    await interaction.reply({
+      embeds: [embed],
+      components: [row],
+      flags: 64
+    });
+  }
+
+  async handleButton(interaction) {
+    const customId = interaction.customId;
+
+    switch (customId) {
+      case 'maintenance_status':
+        return this.handleStatusButton(interaction);
+      case 'maintenance_reload':
+        return this.handleReloadButton(interaction);
+      case 'maintenance_toggle':
+        return this.handleToggleButton(interaction);
+      default:
+        return;
     }
+  }
+
+  async handleStatusButton(interaction) {
+    const statusEmbed = new EmbedBuilder()
+      .setTitle('🔧 État du système de maintenance')
+      .addFields(
+        {
+          name: 'Mode maintenance',
+          value: this.maintenanceMode ? '🟢 Activé' : '🔴 Désactivé',
+          inline: true
+        },
+        {
+          name: 'Surveillance fichiers',
+          value: this.watchers.size > 0 ? '🟢 Active' : '🔴 Inactive',
+          inline: true
+        },
+        {
+          name: 'Mise à jour auto',
+          value: this.autoUpdateInterval ? '🟢 Active (10s)' : '🔴 Inactive',
+          inline: true
+        },
+        {
+          name: 'Modules surveillés',
+          value: this.watchPaths.length.toString(),
+          inline: true
+        }
+      )
+      .setColor(0x5865F2)
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [statusEmbed], flags: 64 });
+  }
+
+  async handleReloadButton(interaction) {
+    await interaction.deferReply({ flags: 64 });
+
+    try {
+      // Recharger tous les modules surveillés
+      this.watchPaths.forEach(watchPath => {
+        if (fs.existsSync(watchPath)) {
+          if (fs.statSync(watchPath).isDirectory()) {
+            fs.readdirSync(watchPath).forEach(file => {
+              if (file.endsWith('.js')) {
+                this.reloadModule(path.join(watchPath, file));
+              }
+            });
+          } else if (watchPath.endsWith('.js')) {
+            this.reloadModule(watchPath);
+          }
+        }
+      });
+
+      await interaction.editReply({ content: '✅ Tous les modules ont été rechargés !' });
+    } catch (error) {
+      await interaction.editReply({ content: `❌ Erreur lors du rechargement: ${error.message}` });
+    }
+  }
+
+  async handleToggleButton(interaction) {
+    this.maintenanceMode = !this.maintenanceMode;
+
+    if (this.maintenanceMode) {
+      // Désactiver les mises à jour automatiques
+      if (this.autoUpdateInterval) {
+        clearInterval(this.autoUpdateInterval);
+        this.autoUpdateInterval = null;
+      }
+    } else {
+      // Réactiver les mises à jour (mais elles sont maintenant manuelles)
+      console.log('🔄 Mode maintenance désactivé - mises à jour sur changement de fichier uniquement');
+    }
+
+    await interaction.reply({
+      content: `🔧 Mode maintenance ${this.maintenanceMode ? 'activé' : 'désactivé'}`,
+      flags: 64
+    });
   }
 
   cleanup() {
