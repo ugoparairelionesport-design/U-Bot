@@ -27,6 +27,8 @@ jobs:
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
             -H "X-Requested-With: Replit" \
+            -H "Origin: https://replit.com" \
+            -H "Referer: https://replit.com/" \
             -d '{
               "query": "query { currentUser { repls { id slug } } }"
             }')
@@ -50,8 +52,12 @@ jobs:
         run: |
           curl -X POST https://replit.com/graphql \
             -H "Authorization: Bearer ${{ secrets.REPLIT_TOKEN }}" \
-            -H "Content-Type: application/json" \            -H "Accept: application/json" \
-            -H "X-Requested-With: Replit" \            -d "{
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -H "X-Requested-With: Replit" \
+            -H "Origin: https://replit.com" \
+            -H "Referer: https://replit.com/" \
+            -d "{
               \"query\": \"mutation SyncRepl(\$input: SyncReplInput!) { syncRepl(input: \$input) { ... on SyncReplSuccess { repl { id } } } }\",
               \"variables\": {
                 \"input\": {
