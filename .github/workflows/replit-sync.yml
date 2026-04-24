@@ -12,6 +12,7 @@ jobs:
       REPLIT_CONFIG_DIR: /tmp/replit-cli
       REPLIT_KEY: ${{ secrets.REPLIT_KEY }}
       REPLIT_TOKEN: ${{ secrets.REPLIT_TOKEN }}
+      REPLIT_REPL_ID: ${{ secrets.REPLIT_REPL_ID }}
       REPLIT_REPL_SLUG: ${{ secrets.REPLIT_REPL_SLUG }}
     steps:
       - name: Checkout repository
@@ -20,8 +21,9 @@ jobs:
       - name: Validate Replit secrets
         run: |
           REPLIT_AUTH_KEY="${REPLIT_TOKEN:-$REPLIT_KEY}"
-          if [ -z "$REPLIT_AUTH_KEY" ] || [ -z "$REPLIT_REPL_SLUG" ]; then
-            echo "ERROR: Define REPLIT_KEY (or REPLIT_TOKEN) and REPLIT_REPL_SLUG in GitHub Secrets."
+          REPLIT_TARGET="${REPLIT_REPL_ID:-$REPLIT_REPL_SLUG}"
+          if [ -z "$REPLIT_AUTH_KEY" ] || [ -z "$REPLIT_TARGET" ]; then
+            echo "ERROR: Define REPLIT_KEY (or REPLIT_TOKEN) and REPLIT_REPL_ID (preferred) or REPLIT_REPL_SLUG in GitHub Secrets."
             exit 1
           fi
 
@@ -33,8 +35,9 @@ jobs:
 
       - name: Sync files to Replit
         run: |
+          REPLIT_TARGET="${REPLIT_REPL_ID:-$REPLIT_REPL_SLUG}"
           set +e
-          SYNC_OUTPUT=$(npx --yes replit cp --repl "$REPLIT_REPL_SLUG" . repl: -q 2>&1)
+          SYNC_OUTPUT=$(npx --yes replit cp --repl "$REPLIT_TARGET" . repl: -q 2>&1)
           SYNC_STATUS=$?
           printf '%s\n' "$SYNC_OUTPUT"
 
