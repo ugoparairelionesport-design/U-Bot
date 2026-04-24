@@ -9,7 +9,7 @@ jobs:
   sync-to-replit:
     runs-on: ubuntu-latest
     env:
-      REPLIT_CONFIG_DIR: ${{ runner.temp }}/replit-cli
+      REPLIT_CONFIG_DIR: /tmp/replit-cli
       REPLIT_KEY: ${{ secrets.REPLIT_KEY }}
       REPLIT_TOKEN: ${{ secrets.REPLIT_TOKEN }}
       REPLIT_REPL_SLUG: ${{ secrets.REPLIT_REPL_SLUG }}
