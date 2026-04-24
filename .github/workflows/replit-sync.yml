@@ -19,7 +19,7 @@ jobs:
 
       - name: Validate Replit secrets
         run: |
-          REPLIT_AUTH_KEY="${REPLIT_KEY:-$REPLIT_TOKEN}"
+          REPLIT_AUTH_KEY="${REPLIT_TOKEN:-$REPLIT_KEY}"
           if [ -z "$REPLIT_AUTH_KEY" ] || [ -z "$REPLIT_REPL_SLUG" ]; then
             echo "ERROR: Define REPLIT_KEY (or REPLIT_TOKEN) and REPLIT_REPL_SLUG in GitHub Secrets."
             exit 1
@@ -27,7 +27,7 @@ jobs:
 
       - name: Prepare Replit CLI config
         run: |
-          REPLIT_AUTH_KEY="${REPLIT_KEY:-$REPLIT_TOKEN}"
+          REPLIT_AUTH_KEY="${REPLIT_TOKEN:-$REPLIT_KEY}"
           mkdir -p "$REPLIT_CONFIG_DIR"
           printf '%s' "{\"key\": \"$REPLIT_AUTH_KEY\"}" > "$REPLIT_CONFIG_DIR/.replitcli.json"
 
