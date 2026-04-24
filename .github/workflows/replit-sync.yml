@@ -20,18 +20,29 @@ jobs:
 
       - name: Validate Replit secrets
         run: |
-          REPLIT_AUTH_KEY="${REPLIT_TOKEN:-$REPLIT_KEY}"
+          REPLIT_AUTH_KEY="$REPLIT_KEY"
           REPLIT_TARGET="${REPLIT_REPL_ID:-$REPLIT_REPL_SLUG}"
           if [ -z "$REPLIT_AUTH_KEY" ] || [ -z "$REPLIT_TARGET" ]; then
-            echo "ERROR: Define REPLIT_KEY (or REPLIT_TOKEN) and REPLIT_REPL_ID (preferred) or REPLIT_REPL_SLUG in GitHub Secrets."
+            echo "ERROR: Define REPLIT_KEY and REPLIT_REPL_ID (preferred) or REPLIT_REPL_SLUG in GitHub Secrets."
+            exit 1
+          fi
+          case "$REPLIT_AUTH_KEY" in
+            *:*)
+              ;;
+            *)
+              echo "ERROR: REPLIT_KEY must be a crosis API key in the form xxxxx:xxxxx"
+              exit 1
+              ;;
+          esac
+          if [ -n "$REPLIT_TOKEN" ] && [ "$REPLIT_TOKEN" = "$REPLIT_AUTH_KEY" ]; then
+            echo "ERROR: REPLIT_TOKEN appears to contain the same value as REPLIT_KEY. This workflow needs a crosis REPLIT_KEY, not a standard token."
             exit 1
           fi
 
       - name: Prepare Replit CLI config
         run: |
-          REPLIT_AUTH_KEY="${REPLIT_TOKEN:-$REPLIT_KEY}"
           mkdir -p "$REPLIT_CONFIG_DIR"
-          printf '%s' "{\"key\": \"$REPLIT_AUTH_KEY\"}" > "$REPLIT_CONFIG_DIR/.replitcli.json"
+          printf '%s' "{\"key\": \"$REPLIT_KEY\"}" > "$REPLIT_CONFIG_DIR/.replitcli.json"
 
       - name: Sync files to Replit
         run: |
