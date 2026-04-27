@@ -1,3 +1,4 @@
+// Bot Discord - Ticket System
 const http = require('http');
 const {
   Client,
@@ -6,7 +7,8 @@ const {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   EmbedBuilder,
-  PermissionsBitField
+  PermissionsBitField,
+  Events
 } = require('discord.js');
 
 const configSystem = require('./Systems/configsystem');
@@ -21,10 +23,14 @@ console.log('🚀 Lancement du bot en cours...');
 // Serveur de maintien en vie pour Replit (24/7)
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.write(`Bot is running!
-Status: Online
-Sync: Enabled (2min)
-Uptime: ${Math.floor(process.uptime() / 60)} minutes`);
+  const uptime = Math.floor(process.uptime());
+  const minutes = Math.floor(uptime / 60);
+  const hours = Math.floor(minutes / 60);
+  
+  res.write(`U-Bot Status
+-------------------
+Statut : Connecte (OK)
+Uptime : ${hours}h ${minutes % 60}m ${uptime % 60}s`);
   res.end();
 }).listen(8080);
 
@@ -54,7 +60,7 @@ try {
 /* ========================= */
 // READY
 
-client.once('ready', async () => {
+client.once(Events.ClientReady, async () => {
   console.log('Bot connecte :', client.user.tag);
 
   if (process.env.CLIENT_ID) {

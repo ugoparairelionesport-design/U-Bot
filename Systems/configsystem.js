@@ -1439,6 +1439,22 @@ async function handleModal(interaction) {
       return replyAndAutoDelete(interaction, { content: "✅ Rôle modifié", flags: 64 });
     }
 
+    // Modal pour l'ajout d'une option
+    if (interaction.customId === 'modal_panel_add_option') {
+      const name = interaction.fields.getTextInputValue('opt_name').trim();
+      const catId = interaction.fields.getTextInputValue('cat_id').trim();
+      const rolesRaw = interaction.fields.getTextInputValue('role_ids');
+      const roleIds = parseRoleIds(rolesRaw);
+      const category = await interaction.guild.channels.fetch(catId).catch(() => null);
+      if (!category || category.type !== ChannelType.GuildCategory) {
+        return interaction.reply({ content: "❌ ID de catégorie invalide.", flags: 64 });
+      }
+      configData.categories[name] = catId;
+      configData.roles[name] = roleIds;
+      saveConfig(configData);
+      return interaction.reply({ content: `✅ Option **${name}** ajoutée ! (Recréez le panel pour l'afficher)`, flags: 64 });
+    }
+
     if (interaction.customId === 'modal_ticket_opening') {
       const pendingCreation = pendingTicketCreations.get(interaction.user.id);
 
@@ -1597,9 +1613,14 @@ async function sendEditConfigPanel(interaction) {
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
 
+  const rowMenu = new ActionRowBuilder().addComponents(menu);
+  const rowBtn = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('config_panel_options').setLabel('Gérer les Options').setEmoji('🎫').setStyle(ButtonStyle.Primary)
+  );
+
   await interaction.reply({
     embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(menu)],
+    components: [rowMenu, rowBtn],
     flags: 64
   });
 

@@ -16,7 +16,11 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('staff_stats')
-    .setDescription('Afficher les statistiques du staff tickets')
+    .setDescription('Afficher les statistiques du staff tickets'),
+
+  new SlashCommandBuilder()
+    .setName('maintenance')
+    .setDescription('Ouvrir le panneau de maintenance (Admin uniquement)')
 ].map(cmd => cmd.toJSON());
 
 async function deployCommands() {

@@ -1,13 +1,7 @@
-const { getGuildConfig } = require('./config');
+const configSystem = require('./configsystem');
 
 async function sendLog(guild, message) {
-  const config = getGuildConfig(guild.id);
-  if (!config.logsChannel) return;
-
-  const channel = guild.channels.cache.get(config.logsChannel);
-  if (!channel) return;
-
-  channel.send({ content: message }).catch(() => {});
+  // Cette fonction est dépréciée au profit du système de log interne de configsystem.js
 }
 
 module.exports = { sendLog };

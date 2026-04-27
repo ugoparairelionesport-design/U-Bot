@@ -99,6 +99,7 @@ class MaintenanceSystem {
       }
 
       console.log(`✨ Mise à jour détectée et téléchargée :\n${stdout}`);
+      this.handleReloadButton(null); // On force un rechargement global après un pull Git réussi
       // Le watcher chokidar prendra le relais pour recharger les fichiers modifiés
     });
   }
@@ -181,13 +182,14 @@ class MaintenanceSystem {
   async updateCommands() {
     try {
       // Recharger les commandes depuis deploy-commands.js
-      delete require.cache[require.resolve('../deploy-commands.js')];
-      const { commands } = require('../deploy-commands.js');
+      const deployPath = require.resolve('../deploy-commands.js');
+      delete require.cache[deployPath];
+      const { commands, deployCommands } = require(deployPath);
 
-      // Déployer les commandes
-      await this.client.application.commands.set(commands);
+      // Utiliser la fonction de déploiement existante qui gère déjà les logs et les erreurs
+      await deployCommands();
 
-      console.log('🔄 Commandes mises à jour suite à modification de deploy-commands.js');
+      console.log(`🔄 ${commands.length} commandes redéployées suite à modification.`);
     } catch (error) {
       console.error('❌ Erreur mise à jour commandes:', error.message);
     }
@@ -288,7 +290,7 @@ class MaintenanceSystem {
   }
 
   async handleReloadButton(interaction) {
-    await interaction.deferReply({ flags: 64 });
+    if (interaction) await interaction.deferReply({ flags: 64 });
 
     try {
       // Recharger tous les modules surveillés
@@ -306,9 +308,9 @@ class MaintenanceSystem {
         }
       });
 
-      await interaction.editReply({ content: '✅ Tous les modules ont été rechargés !' });
+      if (interaction) await interaction.editReply({ content: '✅ Tous les modules ont été rechargés !' });
     } catch (error) {
-      await interaction.editReply({ content: `❌ Erreur lors du rechargement: ${error.message}` });
+      if (interaction) await interaction.editReply({ content: `❌ Erreur lors du rechargement: ${error.message}` });
     }
   }
 
@@ -317,9 +319,9 @@ class MaintenanceSystem {
 
     if (this.maintenanceMode) {
       // Désactiver les mises à jour automatiques
-      if (this.autoUpdateInterval) {
-        clearInterval(this.autoUpdateInterval);
-        this.autoUpdateInterval = null;
+      if (this.gitCheckInterval) {
+        clearInterval(this.gitCheckInterval);
+        this.gitCheckInterval = null;
       }
     } else {
       // Réactiver les mises à jour (mais elles sont maintenant manuelles)
@@ -338,9 +340,9 @@ class MaintenanceSystem {
     this.watchers.clear();
 
     // Arrêter l'auto-update
-    if (this.autoUpdateInterval) {
-      clearInterval(this.autoUpdateInterval);
-      this.autoUpdateInterval = null;
+    if (this.gitCheckInterval) {
+      clearInterval(this.gitCheckInterval);
+      this.gitCheckInterval = null;
     }
 
     console.log('🧹 Système de maintenance nettoyé');

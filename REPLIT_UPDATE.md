@@ -22,7 +22,8 @@ master
 Dans le Shell Replit :
 
 ```bash
-git pull origin master
+git fetch origin
+git reset --hard origin/master
 npm install
 npm start
 ```

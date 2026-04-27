@@ -38,8 +38,8 @@
 2. **Remplacez les fichiers** un par un :
    - Cliquez sur un fichier → "Upload file" → Sélectionnez le fichier local
 3. **Après upload** :
+   - Ou via Git (recommandé) :
    ```bash
-   npm install
    node deploy-commands.js
    npm start
    ```
