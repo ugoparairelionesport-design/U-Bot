@@ -133,6 +133,10 @@ client.on('interactionCreate', async interaction => {
       if (interaction.commandName === 'modif_config_ticket') {
         return client.configSystem.sendEditConfigPanel(interaction);
       }
+
+      if (interaction.commandName === 'set_config') {
+        return client.configSystem.sendBotNamePanel(interaction);
+      }
     }
 
     /* ===== BUTTON / SELECT ===== */

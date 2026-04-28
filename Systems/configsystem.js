@@ -1609,6 +1609,65 @@ async function sendEditConfigPanel(interaction) {
   }, CONFIG_MESSAGE_DELETE_DELAY_MS);
 }
 
+/* ========================= */
+// PERSONNALISATION DU NOM
+
+async function sendBotNamePanel(interaction) {
+  const botMember = interaction.guild.members.me;
+  const currentNickname = botMember?.nickname || interaction.client.user.username;
+
+  const embed = new EmbedBuilder()
+    .setTitle("🤖 Personnalisation du nom")
+    .setDescription(
+      "Vous pouvez modifier le nom sous lequel le bot apparaît sur **ce serveur uniquement**.\n\n" +
+      `**Nom actuel** : \`${currentNickname}\`\n\n` +
+      "Cliquez sur le bouton ci-dessous pour définir un nouveau surnom."
+    )
+    .setColor("#5865F2")
+    .setFooter({ text: "Cette modification n'affecte pas les autres serveurs." })
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('bot_name_set_btn')
+      .setLabel('Modifier le nom')
+      .setEmoji('✏️')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  await interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+}
+
+async function handleBotNameButtonClick(interaction) {
+  const modal = new ModalBuilder()
+    .setCustomId('modal_set_bot_nickname')
+    .setTitle('Changer le nom du bot')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('new_nickname')
+          .setLabel('Nouveau nom (vide pour réinitialiser)')
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(32)
+          .setRequired(false)
+      )
+    );
+
+  await interaction.showModal(modal);
+}
+
+async function handleSetBotNicknameModal(interaction) {
+  const newNickname = interaction.fields.getTextInputValue('new_nickname').trim();
+  
+  try {
+    await interaction.guild.members.me.setNickname(newNickname || null);
+    return interaction.reply({ content: `✅ Le nom du bot a été mis à jour : \`${newNickname || interaction.client.user.username}\``, flags: 64 });
+  } catch (err) {
+    console.error("Erreur changement surnom:", err);
+    return interaction.reply({ content: "❌ Je n'ai pas la permission de changer mon surnom sur ce serveur.", flags: 64 });
+  }
+}
+
 module.exports = {
   sendConfigPanel,
   sendEditConfigPanel,

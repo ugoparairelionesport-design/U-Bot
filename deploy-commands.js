@@ -28,21 +28,18 @@ const commands = [
 ].map(cmd => cmd.toJSON());
 
 async function deployCommands() {
-  const token = process.env.DISCORD_TOKEN || process.env.TOKEN;
-  const clientId = process.env.CLIENT_ID;
-
-  if (!token || !clientId) {
-    console.error('❌ Erreur: TOKEN (ou DISCORD_TOKEN) ou CLIENT_ID manquant dans les Secrets/Env');
+  if (!process.env.TOKEN || !process.env.CLIENT_ID) {
+    console.error('❌ Erreur: TOKEN ou CLIENT_ID manquant dans le .env');
     return;
   }
 
-  const rest = new REST({ version: '10' }).setToken(token);
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
 
   try {
     console.log('Deployement des commandes...');
     console.log(`Nombre de commandes: ${commands.length}`);
-    console.log(`Token present: ${!!token}`);
-    console.log(`Client ID: ${clientId}`);
+    console.log(`Token present: ${!!process.env.TOKEN}`);
+    console.log(`Client ID: ${process.env.CLIENT_ID}`);
 
     // Note: Pour que le bot apparaisse dans la liste des membres, 
     // assurez-vous d'utiliser le scope 'bot' lors de l'invitation.
