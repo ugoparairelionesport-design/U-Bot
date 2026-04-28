@@ -21,18 +21,31 @@ require('dotenv').config();
 console.log('🚀 Lancement du bot en cours...');
 
 // Serveur de maintien en vie pour Replit (24/7)
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
+  // Petit log pour confirmer le ping d'UptimeRobot dans la console
+  console.log(`📶 Ping reçu d'UptimeRobot à ${new Date().toLocaleTimeString()}`);
   const uptime = Math.floor(process.uptime());
   const minutes = Math.floor(uptime / 60);
   const hours = Math.floor(minutes / 60);
   
-  res.write(`U-Bot Status
+  res.write(`U-Bot System
 -------------------
 Statut : Connecte (OK)
+Sync : Bot synchronise et a jour
 Uptime : ${hours}h ${minutes % 60}m ${uptime % 60}s`);
   res.end();
-}).listen(8080);
+});
+
+server.listen(8080, () => {
+  console.log('🌐 Serveur HTTP prêt sur le port 8080');
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.warn('⚠️ Port 8080 déjà utilisé. Le bot continue sans démarrer un nouveau serveur HTTP.');
+  } else {
+    console.error('❌ Erreur serveur HTTP:', err);
+  }
+});
 
 const CONFIG_MESSAGE_DELETE_DELAY_MS = 3 * 60 * 1000;
 
@@ -51,6 +64,8 @@ const client = new Client({
 client.commands = new Map();
 client.configSystem = configSystem;
 
+console.log('📡 Initialisation du serveur HTTP sur le port 8080...');
+
 try {
   client.maintenance = new MaintenanceSystem(client);
 } catch (err) {
@@ -61,17 +76,8 @@ try {
 // READY
 
 client.once(Events.ClientReady, async () => {
-  console.log('Bot connecte :', client.user.tag);
-
-  if (process.env.CLIENT_ID) {
-    try {
-      await deployCommands();
-    } catch (error) {
-      console.error('❌ ECHEC DEPLOIEMENT COMMANDES AU DEMARRAGE:', error);
-    }
-  } else {
-    console.warn('⚠️ CLIENT_ID absent: deploiement des commandes ignore.');
-  }
+  console.log(`✅ Bot en ligne : ${client.user.tag}`);
+  console.log(`🌍 Serveur(s) : ${client.guilds.cache.size}`);
 
   await client.configSystem.resumeTicketState(client);
 });
@@ -86,7 +92,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats'];
+      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'set_config'];
       
       if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -126,6 +132,10 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'modif_config_ticket') {
         return client.configSystem.sendEditConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'set_config') {
+        return client.configSystem.sendBotNamePanel(interaction);
       }
     }
 
@@ -188,17 +198,25 @@ process.on('uncaughtException', err => {
 // CLEANUP
 process.on('SIGINT', () => {
   console.log('\n🛑 Arrêt du bot demandé...');
+  server.close();
+  if (client.maintenance) client.maintenance.cleanup();
   client.destroy();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
   console.log('\n🛑 Arrêt du bot demandé...');
+  server.close();
+  if (client.maintenance) client.maintenance.cleanup();
   client.destroy();
   process.exit(0);
 });
 
+// Maintien en vie du processus pour éviter l'exit code 0 sur Replit
+setInterval(() => {}, 1000 * 60 * 60);
+
 /* ========================= */
 // LOGIN
 
-client.login(process.env.TOKEN);
+console.log('⚙️ Connexion a Discord en cours...');
+client.login(process.env.TOKEN).catch(err => console.error("❌ ECHEC LOGIN:", err));

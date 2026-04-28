@@ -99,6 +99,7 @@ class MaintenanceSystem {
       }
 
       console.log(`✨ Mise à jour détectée et téléchargée :\n${stdout}`);
+      console.log('✅ Bot synchronisé et à jour');
       this.handleReloadButton(null); // On force un rechargement global après un pull Git réussi
       // Le watcher chokidar prendra le relais pour recharger les fichiers modifiés
     });

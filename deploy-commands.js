@@ -20,22 +20,32 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('maintenance')
-    .setDescription('Ouvrir le panneau de maintenance (Admin uniquement)')
+    .setDescription('Ouvrir le panneau de maintenance (Admin uniquement)'),
+
+  new SlashCommandBuilder()
+    .setName('set_config')
+    .setDescription('Personnaliser le bot sur ce serveur (nom, etc.)')
 ].map(cmd => cmd.toJSON());
 
 async function deployCommands() {
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+  const token = process.env.DISCORD_TOKEN || process.env.TOKEN;
+  const clientId = process.env.CLIENT_ID;
+
+  if (!token || !clientId) {
+    console.error('❌ Erreur: TOKEN (ou DISCORD_TOKEN) ou CLIENT_ID manquant dans les Secrets/Env');
+    return;
+  }
+
+  const rest = new REST({ version: '10' }).setToken(token);
 
   try {
     console.log('Deployement des commandes...');
     console.log(`Nombre de commandes: ${commands.length}`);
-    console.log(`Token present: ${!!process.env.TOKEN}`);
-    console.log(`Client ID: ${process.env.CLIENT_ID}`);
+    console.log(`Token present: ${!!token}`);
+    console.log(`Client ID: ${clientId}`);
 
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('TIMEOUT: Le deployement prend trop de temps (>30s)')), 30000);
-    });
-
+    // Note: Pour que le bot apparaisse dans la liste des membres, 
+    // assurez-vous d'utiliser le scope 'bot' lors de l'invitation.
     const route = process.env.GUILD_ID
       ? Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID)
       : Routes.applicationCommands(process.env.CLIENT_ID);
@@ -46,8 +56,7 @@ async function deployCommands() {
       console.log('Deployement des commandes globales');
     }
 
-    const deployPromise = rest.put(route, { body: commands });
-    const result = await Promise.race([deployPromise, timeoutPromise]);
+    const result = await rest.put(route, { body: commands });
 
     console.log(`Commandes deployees avec succes: ${result.length}`);
     return result;

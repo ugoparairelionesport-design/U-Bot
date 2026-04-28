@@ -18,6 +18,10 @@ const {
 const configPath = path.join(__dirname, '../Data/config.json');
 
 const defaultConfig = {
+  guilds: {} // Structure: { "guildId": { categories: {}, roles: {}, ... } }
+};
+
+const defaultGuildSettings = {
   categories: {},
   roles: {},
   logsChannel: null,
@@ -34,7 +38,6 @@ const defaultConfig = {
   pendingClosures: {}
 };
 
-/* ========================= */
 function loadConfig() {
   const configDir = path.dirname(configPath);
 
@@ -47,33 +50,24 @@ function loadConfig() {
     return { ...defaultConfig };
   }
 
-  const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-  return {
-    ...defaultConfig,
-    ...data,
-    categories: data.categories || {},
-    roles: data.roles || {},
-    panelMessages: data.panelMessages || {},
-    panelOptions: data.panelOptions || {},
-    claims: data.claims || {},
-    ticketCount: data.ticketCount || {},
-    ticketOwners: data.ticketOwners || {},
-    ticketOpenTime: data.ticketOpenTime || {},
-    staffStats: data.staffStats || {},
-    pendingClosures: data.pendingClosures || {},
-    stats: {
-      ...defaultConfig.stats,
-      ...(data.stats || {})
-    }
-  };
+  return JSON.parse(fs.readFileSync(configPath, 'utf8'));
 }
 
 function saveConfig(data) {
   fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
 }
 
-const configData = loadConfig();
+let configData = loadConfig();
+
+function getGuildConfig(guildId) {
+  if (!configData.guilds) configData.guilds = {};
+  if (!configData.guilds[guildId]) {
+    configData.guilds[guildId] = JSON.parse(JSON.stringify(defaultGuildSettings));
+    saveConfig(configData);
+  }
+  return configData.guilds[guildId];
+}
+
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
 const CONFIG_MESSAGE_DELETE_DELAY_MS = 3 * 60 * 1000;
 const PENDING_CLOSE_EXPIRE_MS = 10 * 60 * 1000;
@@ -102,21 +96,24 @@ function parseRoleIds(input) {
   )];
 }
 
-function getTicketCount(userId) {
-  return Number(configData.ticketCount[userId] || 0);
+function getTicketCount(guildId, userId) {
+  const guildConfig = getGuildConfig(guildId);
+  return Number(guildConfig.ticketCount[userId] || 0);
 }
 
-function setTicketCount(userId, value) {
+function setTicketCount(guildId, userId, value) {
+  const guildConfig = getGuildConfig(guildId);
   if (value <= 0) {
-    delete configData.ticketCount[userId];
+    delete guildConfig.ticketCount[userId];
     return;
   }
-
-  configData.ticketCount[userId] = value;
+  guildConfig.ticketCount[userId] = value;
+  saveConfig(configData);
 }
 
-function getStaffStats(userId) {
-  return configData.staffStats[userId] || { claimed: 0, closed: 0 };
+function getStaffStats(guildId, userId) {
+  const guildConfig = getGuildConfig(guildId);
+  return guildConfig.staffStats[userId] || { claimed: 0, closed: 0 };
 }
 
 async function safeInteractionReply(interaction, payload, deferred = false) {
@@ -186,25 +183,28 @@ function getClosingChannelName(channelName) {
   return `${baseName}-${suffix}`;
 }
 
-function incrementStaffStat(userId, key) {
-  const current = getStaffStats(userId);
-  configData.staffStats[userId] = {
+function incrementStaffStat(guildId, userId, key) {
+  const guildConfig = getGuildConfig(guildId);
+  const current = getStaffStats(guildId, userId);
+  guildConfig.staffStats[userId] = {
     ...current,
     [key]: Number(current[key] || 0) + 1
   };
+  saveConfig(configData);
 }
 
 function getPanelOptionFromChannel(channel) {
-  if (!channel) return null;
-
-  return Object.keys(configData.categories).find(option => channel.name.startsWith(`${option}-`)) || null;
+  if (!channel || !channel.guildId) return null;
+  const guildConfig = getGuildConfig(channel.guildId);
+  return Object.keys(guildConfig.categories).find(option => channel.name.startsWith(`${option}-`)) || null;
 }
 
 function hasConfiguredModRole(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
   const option = getPanelOptionFromChannel(interaction.channel);
   if (!option) return false;
 
-  const roleIds = getRoleIds(configData.roles[option]);
+  const roleIds = getRoleIds(guildConfig.roles[option]);
   if (!roleIds.length) return false;
 
   return roleIds.some(roleId => interaction.member?.roles?.cache?.has(roleId));
@@ -256,9 +256,10 @@ async function ensureBotPermissions(interaction) {
 }
 
 async function sendLog(guild, embed) {
-  if (!configData.logsChannel) return;
+  const guildConfig = getGuildConfig(guild.id);
+  if (!guildConfig.logsChannel) return;
 
-  const channel = await guild.channels.fetch(configData.logsChannel).catch(() => null);
+  const channel = await guild.channels.fetch(guildConfig.logsChannel).catch(() => null);
   if (!channel || channel.type !== ChannelType.GuildText) return;
 
   await channel.send({ embeds: [embed] }).catch(() => {});
@@ -320,9 +321,10 @@ async function sendMessageWithTimer(channel, payload, durationMs) {
 }
 
 function buildTicketContextFields(interaction, extraFields = []) {
-  const ownerId = configData.ticketOwners[interaction.channel?.id];
-  const claimedBy = configData.claims[interaction.channel?.id];
-  const openedAt = configData.ticketOpenTime[interaction.channel?.id];
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const ownerId = guildConfig.ticketOwners[interaction.channel?.id];
+  const claimedBy = guildConfig.claims[interaction.channel?.id];
+  const openedAt = guildConfig.ticketOpenTime[interaction.channel?.id];
   const durationMinutes = openedAt ? Math.max(1, Math.round((Date.now() - openedAt) / 60000)) : null;
 
   return [
@@ -336,12 +338,13 @@ function buildTicketContextFields(interaction, extraFields = []) {
   ];
 }
 
-function buildStatsPayload() {
+function buildStatsPayload(guildId) {
+  const guildConfig = getGuildConfig(guildId);
   const embed = new EmbedBuilder()
     .setTitle("📊 Statistiques")
     .addFields(
-      { name: "🎫 Ouverts", value: `${configData.stats.opened}`, inline: true },
-      { name: "🔒 Fermés", value: `${configData.stats.closed}`, inline: true }
+      { name: "🎫 Ouverts", value: `${guildConfig.stats.opened || 0}`, inline: true },
+      { name: "🔒 Fermés", value: `${guildConfig.stats.closed || 0}`, inline: true }
     )
     .setColor("#5865F2")
     .setTimestamp();
@@ -382,6 +385,7 @@ async function replyAndAutoDelete(interaction, payload, delay = CONFIG_MESSAGE_D
 }
 
 function buildChannelIdModal(customId, title, label) {
+  // Logic remains same as it only builds the UI
   return new ModalBuilder()
     .setCustomId(customId)
     .setTitle(title)
@@ -398,15 +402,16 @@ function buildChannelIdModal(customId, title, label) {
 
 /* ========================= */
 async function updateStatsMessage(guild) {
-  if (!configData.statsChannel) return;
+  const guildConfig = getGuildConfig(guild.id);
+  if (!guildConfig.statsChannel) return;
 
-  const channel = await guild.channels.fetch(configData.statsChannel).catch(() => null);
+  const channel = await guild.channels.fetch(guildConfig.statsChannel).catch(() => null);
   if (!channel || channel.type !== ChannelType.GuildText) return;
 
-  const payload = buildStatsPayload();
+  const payload = buildStatsPayload(guild.id);
 
-  if (configData.statsMessageId) {
-    const existingMessage = await channel.messages.fetch(configData.statsMessageId).catch(() => null);
+  if (guildConfig.statsMessageId) {
+    const existingMessage = await channel.messages.fetch(guildConfig.statsMessageId).catch(() => null);
 
     if (existingMessage) {
       await existingMessage.edit(payload).catch(() => {});
@@ -417,13 +422,14 @@ async function updateStatsMessage(guild) {
   const message = await channel.send(payload).catch(() => null);
 
   if (message) {
-    configData.statsMessageId = message.id;
+    guildConfig.statsMessageId = message.id;
     saveConfig(configData);
   }
 }
 
 async function showStaffStats(interaction) {
-  const entries = Object.entries(configData.staffStats)
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const entries = Object.entries(guildConfig.staffStats || {})
     .sort((a, b) => {
       const scoreA = Number(a[1]?.claimed || 0) + Number(a[1]?.closed || 0);
       const scoreB = Number(b[1]?.claimed || 0) + Number(b[1]?.closed || 0);
@@ -481,11 +487,12 @@ async function buildTicketArchive(channel) {
 }
 
 async function saveTicketArchive(guild, channel, requestedBy) {
-  if (!configData.logsChannel) {
+  const guildConfig = getGuildConfig(guild.id);
+  if (!guildConfig.logsChannel) {
     return { ok: false, reason: "❌ Aucun salon logs configuré" };
   }
 
-  const logsChannel = await guild.channels.fetch(configData.logsChannel).catch(() => null);
+  const logsChannel = await guild.channels.fetch(guildConfig.logsChannel).catch(() => null);
   if (!logsChannel || logsChannel.type !== ChannelType.GuildText) {
     return { ok: false, reason: "❌ Salon logs invalide" };
   }
@@ -515,8 +522,9 @@ async function saveTicketArchive(guild, channel, requestedBy) {
 }
 
 async function createTicketFromChoice(interaction, choice, openingReason = '') {
-  const categoryId = configData.categories[choice];
-  const roleIds = getRoleIds(configData.roles[choice]);
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const categoryId = guildConfig.categories[choice];
+  const roleIds = getRoleIds(guildConfig.roles[choice]);
 
   let deferred = false;
   try {
@@ -530,7 +538,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
     return respond({ content: "❌ Catégorie introuvable", flags: 64 });
   }
 
-  if (getTicketCount(interaction.user.id) >= 3) {
+  if (getTicketCount(interaction.guildId, interaction.user.id) >= 3) {
     return respond({ content: "❌ Max 3 tickets", flags: 64 });
   }
 
@@ -581,10 +589,10 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
     permissionOverwrites: perms
   });
 
-  configData.stats.opened++;
-  configData.ticketOwners[channel.id] = interaction.user.id;
-  configData.ticketOpenTime[channel.id] = Date.now();
-  setTicketCount(interaction.user.id, getTicketCount(interaction.user.id) + 1);
+  guildConfig.stats.opened = (guildConfig.stats.opened || 0) + 1;
+  guildConfig.ticketOwners[channel.id] = interaction.user.id;
+  guildConfig.ticketOpenTime[channel.id] = Date.now();
+  setTicketCount(interaction.guildId, interaction.user.id, getTicketCount(interaction.guildId, interaction.user.id) + 1);
   saveConfig(configData);
   await updateStatsMessage(interaction.guild);
 
@@ -648,102 +656,23 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
   return respond({ content: "✅ Ticket créé", flags: 64 });
 }
 
-function cleanupConfigState(client) {
-  let changed = false;
-
-  for (const [option, categoryId] of Object.entries(configData.categories)) {
-    const category = client.channels.cache.get(categoryId);
-
-    if (!category || category.type !== ChannelType.GuildCategory) {
-      delete configData.categories[option];
-      delete configData.roles[option];
-      changed = true;
-    }
-  }
-
-  for (const option of Object.keys(configData.roles)) {
-    if (!configData.categories[option]) {
-      delete configData.roles[option];
-      changed = true;
-      continue;
-    }
-
-    const validRoleIds = getRoleIds(configData.roles[option]).filter(roleId =>
-      client.guilds.cache.some(guild => guild.roles.cache.has(roleId))
-    );
-
-    if (validRoleIds.length !== getRoleIds(configData.roles[option]).length) {
-      configData.roles[option] = validRoleIds;
-      changed = true;
-    }
-  }
-
-  for (const [channelId] of Object.entries(configData.panelMessages)) {
-    const channel = client.channels.cache.get(channelId);
-
-    if (!channel || channel.type !== ChannelType.GuildText) {
-      delete configData.panelMessages[channelId];
-      changed = true;
-    }
-  }
-
-  for (const channelId of Object.keys(configData.panelOptions)) {
-    if (!configData.panelMessages[channelId]) {
-      delete configData.panelOptions[channelId];
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    saveConfig(configData);
-  }
-}
-
 async function resumeTicketState(client) {
-  const refreshedTicketOwners = {};
-  const refreshedTicketOpenTime = {};
-  const refreshedClaims = {};
-  const refreshedTicketCount = {};
-  const refreshedPendingClosures = {};
-  let changed = false;
+  if (!configData.guilds) return;
+  console.log(`🔄 Restauration de l'etat des tickets pour ${Object.keys(configData.guilds).length} serveurs...`);
 
-  for (const [channelId, ownerId] of Object.entries(configData.ticketOwners)) {
-    const channel = await client.channels.fetch(channelId).catch(() => null);
-
-    if (!channel || channel.type !== ChannelType.GuildText) {
-      changed = true;
-      continue;
+  for (const guildId of Object.keys(configData.guilds)) {
+    const guildConfig = configData.guilds[guildId];
+    const refreshedTicketOwners = {};
+    
+    for (const [channelId, ownerId] of Object.entries(guildConfig.ticketOwners || {})) {
+      const channel = await client.channels.fetch(channelId).catch(() => null);
+      if (channel) {
+        refreshedTicketOwners[channelId] = ownerId;
+      }
     }
-
-    refreshedTicketOwners[channelId] = ownerId;
-    refreshedTicketOpenTime[channelId] = configData.ticketOpenTime[channelId] || Date.now();
-    refreshedTicketCount[ownerId] = Number(refreshedTicketCount[ownerId] || 0) + 1;
-
-    if (configData.claims[channelId]) {
-      refreshedClaims[channelId] = configData.claims[channelId];
-    }
-
-    if (configData.pendingClosures[channelId]) {
-      refreshedPendingClosures[channelId] = configData.pendingClosures[channelId];
-    }
+    guildConfig.ticketOwners = refreshedTicketOwners;
   }
-
-  if (JSON.stringify(refreshedTicketOwners) !== JSON.stringify(configData.ticketOwners)) changed = true;
-  if (JSON.stringify(refreshedTicketOpenTime) !== JSON.stringify(configData.ticketOpenTime)) changed = true;
-  if (JSON.stringify(refreshedClaims) !== JSON.stringify(configData.claims)) changed = true;
-  if (JSON.stringify(refreshedTicketCount) !== JSON.stringify(configData.ticketCount)) changed = true;
-  if (JSON.stringify(refreshedPendingClosures) !== JSON.stringify(configData.pendingClosures)) changed = true;
-
-  if (changed) {
-    configData.ticketOwners = refreshedTicketOwners;
-    configData.ticketOpenTime = refreshedTicketOpenTime;
-    configData.claims = refreshedClaims;
-    configData.ticketCount = refreshedTicketCount;
-    configData.pendingClosures = refreshedPendingClosures;
-    saveConfig(configData);
-  }
-
-  cleanupConfigState(client);
+  saveConfig(configData);
 }
 
 /* ========================= */
@@ -787,20 +716,21 @@ function sendConfigPanel(interaction) {
 /* ========================= */
 async function handleButtons(interaction) {
   try {
+    const guildConfig = getGuildConfig(interaction.guildId);
     if (interaction.isStringSelectMenu()) {
       await resetSelectMenuToPlaceholder(interaction);
     }
 
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
       const choice = interaction.values[0];
-      const categoryId = configData.categories[choice];
-      const roleIds = getRoleIds(configData.roles[choice]);
+      const categoryId = guildConfig.categories[choice];
+      const roleIds = getRoleIds(guildConfig.roles[choice]);
 
       if (!categoryId) {
         return interaction.reply({ content: "❌ Catégorie introuvable", flags: 64 });
       }
 
-      if (getTicketCount(interaction.user.id) >= 3) {
+      if (getTicketCount(interaction.guildId, interaction.user.id) >= 3) {
         return interaction.reply({ content: "❌ Max 3 tickets", flags: 64 });
       }
 
@@ -905,15 +835,65 @@ async function handleButtons(interaction) {
       });
     }
 
-    // Gestion des notes (1 à 5)
-    if (interaction.customId.startsWith('rate_')) {
-      const score = parseInt(interaction.customId.split('_')[1]);
-      return handleRating(interaction, score);
-    }
-
     if (interaction.customId === 'refresh_stats') {
       await interaction.deferUpdate();
       return updateStatsMessage(interaction.guild);
+    }
+
+    // Gestion des options du panel (Ajout/Suppression)
+    if (interaction.customId === 'config_panel_options') {
+      const embed = new EmbedBuilder()
+        .setTitle("🎫 Gestion des options du panel")
+        .setDescription(
+          "Choisissez l'action à effectuer sur les options de vos tickets.\n\n" +
+          "➕ **Ajouter** : Créer une nouvelle option dans le système\n" +
+          "➖ **Supprimer** : Supprimer définitivement une option"
+        )
+        .setColor("#5865F2");
+
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('panel_opt_add').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'),
+        new ButtonBuilder().setCustomId('panel_opt_remove').setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('➖')
+      );
+
+      return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+    }
+
+    if (interaction.customId === 'panel_opt_add') {
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_panel_add_option')
+          .setTitle('Ajouter une option')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('opt_name').setLabel('Nom de l\'option').setStyle(TextInputStyle.Short).setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('cat_id').setLabel('ID de la catégorie').setStyle(TextInputStyle.Short).setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('role_ids').setLabel('ID(s) Rôle(s) (séparés par des virgules)').setStyle(TextInputStyle.Short).setRequired(false)
+            )
+          )
+      );
+    }
+
+    if (interaction.customId === 'panel_opt_remove') {
+      const options = Object.keys(guildConfig.categories);
+      if (options.length === 0) return interaction.reply({ content: "❌ Aucune option à supprimer.", flags: 64 });
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId('panel_opt_remove_select')
+        .setPlaceholder('Sélectionnez l\'option à supprimer')
+        .addOptions(options.map(opt => ({ label: opt, value: opt })));
+      return interaction.reply({ content: "Sélectionnez l'option à supprimer définitivement :", components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'panel_opt_remove_select') {
+      const optionToRemove = interaction.values[0];
+      delete guildConfig.categories[optionToRemove];
+      delete guildConfig.roles[optionToRemove];
+      saveConfig(configData);
+      return interaction.reply({ content: `✅ L'option **${optionToRemove}** a été supprimée du système.`, flags: 64 });
     }
 
     if (interaction.customId === 'config_logs') {
@@ -993,15 +973,15 @@ async function handleButtons(interaction) {
         return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
 
-      if (configData.claims[interaction.channel.id]) {
+      if (guildConfig.claims[interaction.channel.id]) {
         return interaction.reply({ content: "❌ Déjà pris", flags: 64 });
       }
 
-      configData.claims[interaction.channel.id] = interaction.user.id;
-      incrementStaffStat(interaction.user.id, 'claimed');
+      guildConfig.claims[interaction.channel.id] = interaction.user.id;
+      incrementStaffStat(interaction.guildId, interaction.user.id, 'claimed');
       saveConfig(configData);
 
-      const staffStats = getStaffStats(interaction.user.id);
+      const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
 
       await sendLog(
         interaction.guild,
@@ -1038,8 +1018,8 @@ async function handleButtons(interaction) {
         return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
 
-      const previousClaim = configData.claims[interaction.channel.id];
-      delete configData.claims[interaction.channel.id];
+      const previousClaim = guildConfig.claims[interaction.channel.id];
+      delete guildConfig.claims[interaction.channel.id];
       saveConfig(configData);
 
       await sendLog(
@@ -1112,13 +1092,13 @@ async function handleButtons(interaction) {
         return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
 
-      const pendingClose = configData.pendingClosures[interaction.channel.id];
+      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
       if (!pendingClose) {
         return interaction.reply({ content: "❌ Aucune fermeture en attente", flags: 64 });
       }
 
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete configData.pendingClosures[interaction.channel.id];
+        delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
         return interaction.reply({ content: "❌ La demande de fermeture a expiré", flags: 64 });
       }
@@ -1130,26 +1110,26 @@ async function handleButtons(interaction) {
       await interaction.reply({ content: "🔒 Fermeture...", flags: 64 });
       await interaction.channel.setName(getClosingChannelName(interaction.channel.name)).catch(() => {});
 
-      const ownerId = configData.ticketOwners[interaction.channel.id];
-      const claimedBy = configData.claims[interaction.channel.id];
-      const openedAt = configData.ticketOpenTime[interaction.channel.id];
+      const ownerId = guildConfig.ticketOwners[interaction.channel.id];
+      const claimedBy = guildConfig.claims[interaction.channel.id];
+      const openedAt = guildConfig.ticketOpenTime[interaction.channel.id];
       const durationMinutes = openedAt ? Math.max(1, Math.round((Date.now() - openedAt) / 60000)) : null;
 
-      configData.stats.closed++;
+      guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
 
       if (ownerId) {
-        setTicketCount(ownerId, getTicketCount(ownerId) - 1);
+        setTicketCount(interaction.guildId, ownerId, getTicketCount(interaction.guildId, ownerId) - 1);
       }
 
-      incrementStaffStat(interaction.user.id, 'closed');
-      delete configData.claims[interaction.channel.id];
-      delete configData.ticketOwners[interaction.channel.id];
-      delete configData.ticketOpenTime[interaction.channel.id];
-      delete configData.pendingClosures[interaction.channel.id];
+      incrementStaffStat(interaction.guildId, interaction.user.id, 'closed');
+      delete guildConfig.claims[interaction.channel.id];
+      delete guildConfig.ticketOwners[interaction.channel.id];
+      delete guildConfig.ticketOpenTime[interaction.channel.id];
+      delete guildConfig.pendingClosures[interaction.channel.id];
       saveConfig(configData);
       await updateStatsMessage(interaction.guild);
 
-      const staffStats = getStaffStats(interaction.user.id);
+      const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
 
       await sendMessageWithTimer(
         interaction.channel,
@@ -1200,13 +1180,13 @@ async function handleButtons(interaction) {
         return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
 
-      const pendingClose = configData.pendingClosures[interaction.channel.id];
+      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
       if (!pendingClose) {
         return interaction.reply({ content: "❌ Aucune fermeture en attente", flags: 64 });
       }
 
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete configData.pendingClosures[interaction.channel.id];
+        delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
         return interaction.reply({ content: "❌ La demande de fermeture a expiré", flags: 64 });
       }
@@ -1233,18 +1213,18 @@ async function handleButtons(interaction) {
         return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
 
-      const pendingClose = configData.pendingClosures[interaction.channel.id];
+      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
       if (!pendingClose) {
         return interaction.reply({ content: "❌ Aucune fermeture en attente", flags: 64 });
       }
 
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete configData.pendingClosures[interaction.channel.id];
+        delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
         return interaction.reply({ content: "❌ La demande de fermeture a expiré", flags: 64 });
       }
 
-      delete configData.pendingClosures[interaction.channel.id];
+      delete guildConfig.pendingClosures[interaction.channel.id];
       saveConfig(configData);
 
       return interaction.reply({ content: "❌ Fermeture annulée", flags: 64 });
@@ -1264,6 +1244,7 @@ async function handleButtons(interaction) {
 /* ========================= */
 async function handleModal(interaction) {
   try {
+    const guildConfig = getGuildConfig(interaction.guildId);
     if (interaction.customId === 'modal_logs') {
       const channelId = interaction.fields.getTextInputValue('channel_id');
       const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
@@ -1272,7 +1253,7 @@ async function handleModal(interaction) {
         return interaction.reply({ content: "❌ Salon invalide", flags: 64 });
       }
 
-      configData.logsChannel = channelId;
+      guildConfig.logsChannel = channelId;
       saveConfig(configData);
       return replyAndAutoDelete(interaction, { content: "✅ Logs configurés", flags: 64 });
     }
@@ -1285,7 +1266,7 @@ async function handleModal(interaction) {
         return interaction.reply({ content: "❌ Salon invalide", flags: 64 });
       }
 
-      configData.logsChannel = channelId;
+      guildConfig.logsChannel = channelId;
       saveConfig(configData);
       return replyAndAutoDelete(interaction, { content: "✅ Logs modifiés", flags: 64 });
     }
@@ -1298,8 +1279,8 @@ async function handleModal(interaction) {
         return interaction.reply({ content: "❌ Salon invalide", flags: 64 });
       }
 
-      configData.statsChannel = channelId;
-      configData.statsMessageId = null;
+      guildConfig.statsChannel = channelId;
+      guildConfig.statsMessageId = null;
       saveConfig(configData);
       await updateStatsMessage(interaction.guild);
       return replyAndAutoDelete(interaction, { content: "✅ Stats configurés", flags: 64 });
@@ -1313,8 +1294,8 @@ async function handleModal(interaction) {
         return interaction.reply({ content: "❌ Salon invalide", flags: 64 });
       }
 
-      configData.statsChannel = channelId;
-      configData.statsMessageId = null;
+      guildConfig.statsChannel = channelId;
+      guildConfig.statsMessageId = null;
       saveConfig(configData);
       await updateStatsMessage(interaction.guild);
       return replyAndAutoDelete(interaction, { content: "✅ Stats modifiées", flags: 64 });
@@ -1365,7 +1346,7 @@ async function handleModal(interaction) {
         }
       }
 
-      const existingPanelMessageId = configData.panelMessages[channelId];
+      const existingPanelMessageId = guildConfig.panelMessages[channelId];
       if (existingPanelMessageId) {
         const existingPanel = await channel.messages.fetch(existingPanelMessageId).catch(() => null);
 
@@ -1375,8 +1356,8 @@ async function handleModal(interaction) {
       }
 
       options.forEach((option, index) => {
-        configData.categories[option] = categoriesInput[index];
-        configData.roles[option] = roleIds;
+        guildConfig.categories[option] = categoriesInput[index];
+        guildConfig.roles[option] = roleIds;
       });
 
       saveConfig(configData);
@@ -1391,8 +1372,8 @@ async function handleModal(interaction) {
         components: [new ActionRowBuilder().addComponents(menu)]
       });
 
-      configData.panelMessages[channelId] = panelMessage.id;
-      configData.panelOptions[channelId] = options;
+      guildConfig.panelMessages[channelId] = panelMessage.id;
+      guildConfig.panelOptions[channelId] = options;
       saveConfig(configData);
 
       return replyAndAutoDelete(interaction, { content: "✅ Panel créé", flags: 64 });
@@ -1402,7 +1383,7 @@ async function handleModal(interaction) {
       const optionName = interaction.fields.getTextInputValue('option_name').trim();
       const categoryId = interaction.fields.getTextInputValue('category_id').trim();
 
-      if (!configData.categories[optionName]) {
+      if (!guildConfig.categories[optionName]) {
         return interaction.reply({ content: "❌ Option introuvable", flags: 64 });
       }
 
@@ -1412,7 +1393,7 @@ async function handleModal(interaction) {
         return interaction.reply({ content: "❌ Catégorie invalide", flags: 64 });
       }
 
-      configData.categories[optionName] = categoryId;
+      guildConfig.categories[optionName] = categoryId;
       saveConfig(configData);
 
       return replyAndAutoDelete(interaction, { content: "✅ Catégorie modifiée", flags: 64 });
@@ -1423,7 +1404,7 @@ async function handleModal(interaction) {
       const rolesInput = interaction.fields.getTextInputValue('roles') || "";
       const roleIds = parseRoleIds(rolesInput);
 
-      if (!configData.categories[optionName]) {
+      if (!guildConfig.categories[optionName]) {
         return interaction.reply({ content: "❌ Option introuvable", flags: 64 });
       }
 
@@ -1433,7 +1414,7 @@ async function handleModal(interaction) {
         }
       }
 
-      configData.roles[optionName] = roleIds;
+      guildConfig.roles[optionName] = roleIds;
       saveConfig(configData);
 
       return replyAndAutoDelete(interaction, { content: "✅ Rôle modifié", flags: 64 });
@@ -1449,8 +1430,8 @@ async function handleModal(interaction) {
       if (!category || category.type !== ChannelType.GuildCategory) {
         return interaction.reply({ content: "❌ ID de catégorie invalide.", flags: 64 });
       }
-      configData.categories[name] = catId;
-      configData.roles[name] = roleIds;
+      guildConfig.categories[name] = catId;
+      guildConfig.roles[name] = roleIds;
       saveConfig(configData);
       return interaction.reply({ content: `✅ Option **${name}** ajoutée ! (Recréez le panel pour l'afficher)`, flags: 64 });
     }
@@ -1522,7 +1503,7 @@ async function handleModal(interaction) {
       }
 
       const reason = interaction.fields.getTextInputValue('close_reason').trim();
-      configData.pendingClosures[interaction.channel.id] = {
+      guildConfig.pendingClosures[interaction.channel.id] = {
         userId: interaction.user.id,
         reason,
         expiresAt: Date.now() + PENDING_CLOSE_EXPIRE_MS
@@ -1567,22 +1548,21 @@ async function handleMessageDelete(message) {
       await message.fetch().catch(() => null);
     }
 
-    const panelEntry = Object.entries(configData.panelMessages).find(([, messageId]) => messageId === message.id);
+    // On cherche dans tous les serveurs quel panel a été supprimé
+    for (const guildId of Object.keys(configData.guilds)) {
+      const guildConfig = configData.guilds[guildId];
+      const panelEntry = Object.entries(guildConfig.panelMessages).find(([, messageId]) => messageId === message.id);
 
-    if (!panelEntry) return;
+      if (panelEntry) {
+        const [channelId] = panelEntry;
+        const optionNames = Array.isArray(guildConfig.panelOptions[channelId]) ? guildConfig.panelOptions[channelId] : [];
 
-    const [channelId] = panelEntry;
-    const optionNames = Array.isArray(configData.panelOptions[channelId]) ? configData.panelOptions[channelId] : [];
-
-    delete configData.panelMessages[channelId];
-
-    for (const optionName of optionNames) {
-      delete configData.categories[optionName];
-      delete configData.roles[optionName];
+        delete guildConfig.panelMessages[channelId];
+        delete guildConfig.panelOptions[channelId];
+        saveConfig(configData);
+        break;
+      }
     }
-
-    delete configData.panelOptions[channelId];
-    saveConfig(configData);
   } catch (err) {
     console.error("MESSAGE DELETE ERROR:", err);
   }
