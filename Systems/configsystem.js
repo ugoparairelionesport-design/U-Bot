@@ -1677,5 +1677,6 @@ module.exports = {
   handleMessageDelete,
   updateStatsMessage,
   showStaffStats,
-  resumeTicketState
+  resumeTicketState,
+  sendBotNamePanel
 };
