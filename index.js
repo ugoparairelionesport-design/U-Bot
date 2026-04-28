@@ -64,8 +64,6 @@ const client = new Client({
 client.commands = new Map();
 client.configSystem = configSystem;
 
-console.log('📡 Initialisation du serveur HTTP sur le port 8080...');
-
 try {
   client.maintenance = new MaintenanceSystem(client);
 } catch (err) {
@@ -132,6 +130,12 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'modif_config_ticket') {
         return client.configSystem.sendEditConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'set_config') {
+        // On accuse réception immédiatement pour éviter le timeout Discord
+        await interaction.deferReply({ flags: 64 });
+        return client.configSystem.sendBotNamePanel(interaction);
       }
     }
 

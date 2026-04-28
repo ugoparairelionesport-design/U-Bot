@@ -781,6 +781,24 @@ async function handleButtons(interaction) {
         );
       }
 
+      if (selected === 'options_panel') {
+        const embed = new EmbedBuilder()
+          .setTitle("🎫 Gestion des options du panel")
+          .setDescription(
+            "Choisissez l'action à effectuer sur les options de vos tickets.\n\n" +
+            "➕ **Ajouter** : Créer une nouvelle option dans le système\n" +
+            "➖ **Supprimer** : Supprimer définitivement une option"
+          )
+          .setColor("#5865F2");
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('panel_opt_add').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'),
+          new ButtonBuilder().setCustomId('panel_opt_remove').setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('➖')
+        );
+
+        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+      }
+
       if (selected === 'category') {
         return interaction.showModal(
           new ModalBuilder()
@@ -838,25 +856,6 @@ async function handleButtons(interaction) {
     if (interaction.customId === 'refresh_stats') {
       await interaction.deferUpdate();
       return updateStatsMessage(interaction.guild);
-    }
-
-    // Gestion des options du panel (Ajout/Suppression)
-    if (interaction.customId === 'config_panel_options') {
-      const embed = new EmbedBuilder()
-        .setTitle("🎫 Gestion des options du panel")
-        .setDescription(
-          "Choisissez l'action à effectuer sur les options de vos tickets.\n\n" +
-          "➕ **Ajouter** : Créer une nouvelle option dans le système\n" +
-          "➖ **Supprimer** : Supprimer définitivement une option"
-        )
-        .setColor("#5865F2");
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('panel_opt_add').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'),
-        new ButtonBuilder().setCustomId('panel_opt_remove').setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('➖')
-      );
-
-      return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
     }
 
     if (interaction.customId === 'panel_opt_add') {
@@ -1576,7 +1575,8 @@ async function sendEditConfigPanel(interaction) {
       { label: 'Logs', value: 'logs', description: 'Modifier le salon des logs', emoji: '📝' },
       { label: 'Catégorie', value: 'category', description: 'Modifier la catégorie d’une option', emoji: '📂' },
       { label: 'Rôle', value: 'role', description: 'Modifier le rôle de modération d’une option', emoji: '🛡️' },
-      { label: 'Stats', value: 'stats', description: 'Modifier le salon des statistiques', emoji: '📊' }
+      { label: 'Stats', value: 'stats', description: 'Modifier le salon des statistiques', emoji: '📊' },
+      { label: 'Options', value: 'options_panel', description: 'Gérer les options de tickets (Ajout/Suppression)', emoji: '🎫' }
     ]);
 
   const embed = new EmbedBuilder()
@@ -1586,7 +1586,8 @@ async function sendEditConfigPanel(interaction) {
       "📝 **Logs** → Modifier le salon des logs\n" +
       "📂 **Catégorie** → Modifier la catégorie liée à une option\n" +
       "🛡️ **Rôle** → Modifier le rôle de modération lié à une option\n" +
-      "📊 **Stats** → Modifier le salon des statistiques\n\n" +
+      "📊 **Stats** → Modifier le salon des statistiques\n" +
+      "🎫 **Options** → Ajouter ou supprimer des options de tickets\n\n" +
       "_Choisis l’élément que tu souhaites mettre à jour._"
     )
     .setColor("#5865F2")
@@ -1594,13 +1595,10 @@ async function sendEditConfigPanel(interaction) {
     .setTimestamp();
 
   const rowMenu = new ActionRowBuilder().addComponents(menu);
-  const rowBtn = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('config_panel_options').setLabel('Gérer les Options').setEmoji('🎫').setStyle(ButtonStyle.Primary)
-  );
 
   await interaction.reply({
     embeds: [embed],
-    components: [rowMenu, rowBtn],
+    components: [rowMenu],
     flags: 64
   });
 
@@ -1614,7 +1612,7 @@ async function sendEditConfigPanel(interaction) {
 
 async function sendBotNamePanel(interaction) {
   const botMember = interaction.guild.members.me;
-  const currentNickname = botMember?.nickname || interaction.client.user.username;
+  const currentNickname = botMember?.nickname || interaction.client.user.tag;
 
   const embed = new EmbedBuilder()
     .setTitle("🤖 Personnalisation du nom")
@@ -1635,7 +1633,11 @@ async function sendBotNamePanel(interaction) {
       .setStyle(ButtonStyle.Primary)
   );
 
-  await interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+  // On utilise editReply car l'interaction a été différée dans index.js
+  await interaction.editReply({ 
+    embeds: [embed], 
+    components: [row] 
+  });
 }
 
 async function handleBotNameButtonClick(interaction) {
