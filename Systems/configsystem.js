@@ -666,7 +666,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.0.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.0.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -692,6 +692,15 @@ async function resumeTicketState(client) {
         const delay = Math.max(5000, deleteAt - Date.now()); 
 
         console.log(`⏳ [TICKETS] Reprise de la suppression pour #${channel.name} dans ${Math.round(delay/60000)} min.`);
+
+        // REPRISE DU TIMER VISUEL : On cherche le message de fermeture du bot
+        const messages = await channel.messages.fetch({ limit: 20 }).catch(() => null);
+        const timerMessage = messages?.find(m => 
+          m.author.id === client.user.id && 
+          m.embeds[0]?.title === "🔒 Ticket fermé"
+        );
+
+        if (timerMessage) startVisualTimer(timerMessage, deleteAt);
 
         setTimeout(() => {
           try {
