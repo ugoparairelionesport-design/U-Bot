@@ -102,8 +102,6 @@ class MaintenanceSystem {
       }
 
       console.log(`✨ Mise à jour détectée et téléchargée :\n${stdout}`);
-      console.log('✅ Bot synchronisé et à jour');
-      this.handleReloadButton(null); // On force un rechargement global après un pull Git réussi
       // Le watcher chokidar prendra le relais pour recharger les fichiers modifiés
     });
   }
@@ -111,10 +109,11 @@ class MaintenanceSystem {
   handleFileChange(filePath) {
     const absolutePath = path.resolve(filePath);
     if (!absolutePath.endsWith('.js')) return;
+    
+    // On ignore index.js pour la surveillance car il nécessite un redémarrage manuel de toute façon
+    if (absolutePath.endsWith('index.js')) return;
 
     const relativePath = path.relative(path.resolve(__dirname, '..'), absolutePath).replace(/\\/g, '/');
-
-    // Éviter les changements trop fréquents (débounce)
     const now = Date.now();
     const lastMod = this.lastModified.get(relativePath) || 0;
 
@@ -263,6 +262,13 @@ class MaintenanceSystem {
   }
 
   async handleStatusButton(interaction) {
+    // Récupérer le dernier commit pour l'afficher
+    const lastCommit = await new Promise(resolve => {
+      exec('git log -1 --pretty=format:"%s (%h)"', (err, stdout) => {
+        resolve(err ? 'Inconnu' : stdout);
+      });
+    });
+
     const statusEmbed = new EmbedBuilder()
       .setTitle('🔧 État du système de maintenance')
       .addFields(
@@ -280,6 +286,11 @@ class MaintenanceSystem {
           name: 'Auto-Pull Git',
           value: this.gitCheckInterval ? `🟢 Activé (${this.CHECK_INTERVAL_MS / 60000} min)` : '🔴 Désactivé',
           inline: true
+        },
+        {
+          name: 'Version (GitHub)',
+          value: `\`${lastCommit}\``,
+          inline: false
         },
         {
           name: 'Modules surveillés',

@@ -35,7 +35,8 @@ const defaultGuildSettings = {
   ticketOwners: {},
   ticketOpenTime: {},
   staffStats: {},
-  pendingClosures: {}
+  pendingClosures: {},
+  pendingDeletions: {}
 };
 
 function loadConfig() {
@@ -665,21 +666,74 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔄 Restauration de l'etat des tickets pour ${Object.keys(configData.guilds).length} serveurs...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.0.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
-    const refreshedTicketOwners = {};
+    const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+    if (!guild) continue;
+
+    const channels = await guild.channels.fetch().catch(() => null);
+    if (!channels) continue;
+
+    const ticketCategoryIds = Object.values(guildConfig.categories || {});
     
-    for (const [channelId, ownerId] of Object.entries(guildConfig.ticketOwners || {})) {
-      const channel = await client.channels.fetch(channelId).catch(() => null);
-      if (channel) {
-        refreshedTicketOwners[channelId] = ownerId;
+    // 1. Analyse des salons physiques sur Discord
+    for (const channel of channels.values()) {
+      if (channel.type !== ChannelType.GuildText) continue;
+
+      const isClosing = channel.name.endsWith('fermeture-en-cours');
+      const isTicket = ticketCategoryIds.includes(channel.parentId) || guildConfig.ticketOwners[channel.id];
+
+      if (isClosing) {
+        // REPRISE DE FERMETURE : On recalcule le temps restant
+        const storedDeleteAt = guildConfig.pendingDeletions?.[channel.id];
+        const deleteAt = storedDeleteAt || (Date.now() + TICKET_DELETE_DELAY_MS);
+        const delay = Math.max(5000, deleteAt - Date.now()); 
+
+        console.log(`⏳ [TICKETS] Reprise de la suppression pour #${channel.name} dans ${Math.round(delay/60000)} min.`);
+
+        setTimeout(() => {
+          try {
+            if (guildConfig.pendingDeletions) delete guildConfig.pendingDeletions[channel.id];
+            saveConfig(configData);
+            channel.delete().catch(() => {});
+          } catch (_) {}
+        }, delay);
+      } else if (isTicket) {
+        // ADOPTION : Si le ticket est ouvert mais non listé dans la base, on le récupère
+        if (!guildConfig.ticketOwners[channel.id]) {
+          guildConfig.ticketOwners[channel.id] = "Inconnu (Adopté)";
+          if (!guildConfig.ticketOpenTime[channel.id]) {
+            guildConfig.ticketOpenTime[channel.id] = channel.createdTimestamp;
+          }
+          console.log(`🛡️ [TICKETS] Adoption du ticket orphelin : #${channel.name}`);
+        }
       }
     }
-    guildConfig.ticketOwners = refreshedTicketOwners;
+
+    // 2. Nettoyage des données "fantômes" (salons supprimés manuellement)
+    const cleanObj = (obj) => {
+      if (!obj) return;
+      let count = 0;
+      Object.keys(obj).forEach(id => {
+        if (!channels.has(id)) {
+          delete obj[id];
+          count++;
+        }
+      });
+      return count;
+    };
+
+    const totalCleaned = cleanObj(guildConfig.ticketOwners) + 
+                         cleanObj(guildConfig.claims) + 
+                         cleanObj(guildConfig.pendingClosures) + 
+                         cleanObj(guildConfig.pendingDeletions);
+
+    if (totalCleaned > 0) console.log(`🧹 [TICKETS] ${totalCleaned} données obsolètes nettoyées.`);
   }
   saveConfig(configData);
+  console.log(`✅ [SYSTEM] Restauration terminée.`);
 }
 
 /* ========================= */
@@ -1124,9 +1178,11 @@ async function handleButtons(interaction) {
       const ownerId = guildConfig.ticketOwners[interaction.channel.id];
       const claimedBy = guildConfig.claims[interaction.channel.id];
       const openedAt = guildConfig.ticketOpenTime[interaction.channel.id];
+      const deleteAt = Date.now() + TICKET_DELETE_DELAY_MS;
       const durationMinutes = openedAt ? Math.max(1, Math.round((Date.now() - openedAt) / 60000)) : null;
 
       guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
+      guildConfig.pendingDeletions[interaction.channel.id] = deleteAt;
 
       if (ownerId) {
         setTicketCount(interaction.guildId, ownerId, getTicketCount(interaction.guildId, ownerId) - 1);
@@ -1180,6 +1236,8 @@ async function handleButtons(interaction) {
       );
 
       setTimeout(() => {
+        delete guildConfig.pendingDeletions[interaction.channel.id];
+        saveConfig(configData);
         interaction.channel.delete().catch(() => {});
       }, TICKET_DELETE_DELAY_MS);
 
@@ -1688,14 +1746,39 @@ async function handleSetBotNicknameModal(interaction) {
     
     if (!botMember.permissions.has(PermissionsBitField.Flags.ChangeNickname) && 
         !botMember.permissions.has(PermissionsBitField.Flags.ManageNicknames)) {
-      return interaction.reply({ 
+      return await interaction.reply({ 
         content: "❌ Je n'ai pas la permission `Changer le pseudo` ou `Gérer les pseudos` sur ce serveur.", 
         flags: 64 
       });
     }
 
-    await botMember.setNickname(newNickname || null);
-    return interaction.reply({ content: `✅ Le nom du bot a été mis à jour : \`${newNickname || interaction.client.user.username}\``, flags: 64 });
+    // Vérification de la hiérarchie des rôles
+    try {
+      await botMember.setNickname(newNickname || null);
+
+      // Envoi d'un log pour tracer le changement de nom
+      await sendLog(
+        interaction.guild,
+        new EmbedBuilder()
+          .setTitle("🤖 Nom du bot modifié")
+          .addFields(
+            { name: "Nouveau nom", value: `\`${newNickname || interaction.client.user.username}\``, inline: true },
+            { name: "Modifié par", value: `${interaction.user}`, inline: true }
+          )
+          .setColor("#5865F2")
+          .setTimestamp()
+      );
+
+      return await interaction.reply({ 
+        content: `✅ Le nom du bot a été mis à jour : \`${newNickname || interaction.client.user.username}\``, 
+        flags: 64 
+      });
+    } catch (roleErr) {
+      return await interaction.reply({ 
+        content: "❌ Impossible de changer mon nom. Mon rôle est probablement trop bas dans la hiérarchie ou je n'ai pas les permissions suffisantes.", 
+        flags: 64 
+      });
+    }
   } catch (err) {
     console.error("Erreur changement surnom:", err);
     return interaction.reply({ content: "❌ Je n'ai pas la permission de changer mon surnom sur ce serveur.", flags: 64 });
