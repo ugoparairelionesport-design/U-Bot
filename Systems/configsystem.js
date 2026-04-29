@@ -50,7 +50,14 @@ function loadConfig() {
     return { ...defaultConfig };
   }
 
-  return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  try {
+    const content = fs.readFileSync(configPath, 'utf8');
+    if (!content.trim()) return { ...defaultConfig };
+    return JSON.parse(content);
+  } catch (err) {
+    console.error("❌ Erreur lecture config.json (Fichier corrompu) :", err.message);
+    return { ...defaultConfig };
+  }
 }
 
 function saveConfig(data) {
@@ -716,6 +723,11 @@ function sendConfigPanel(interaction) {
 /* ========================= */
 async function handleButtons(interaction) {
   try {
+    // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
+    if (interaction.customId === 'bot_name_set_btn') {
+      return await handleBotNameButtonClick(interaction);
+    }
+
     const guildConfig = getGuildConfig(interaction.guildId);
     if (interaction.isStringSelectMenu()) {
       await resetSelectMenuToPlaceholder(interaction);
@@ -1226,7 +1238,12 @@ async function handleButtons(interaction) {
       delete guildConfig.pendingClosures[interaction.channel.id];
       saveConfig(configData);
 
-      return interaction.reply({ content: "❌ Fermeture annulée", flags: 64 });
+      return interaction.reply({ content: '❌ Fermeture annulée', flags: 64 });
+    }
+
+    // Si aucune condition n'est remplie, on ne laisse pas l'interaction expirer
+    if (!interaction.replied && !interaction.deferred && interaction.isButton()) {
+        return interaction.reply({ content: "⚠️ Bouton non reconnu ou en cours de déploiement.", flags: 64 });
     }
   } catch (err) {
     console.error("BUTTON ERROR:", err);
@@ -1243,6 +1260,11 @@ async function handleButtons(interaction) {
 /* ========================= */
 async function handleModal(interaction) {
   try {
+    // RÉPONSE PRIORITAIRE : Traitement du formulaire de nom
+    if (interaction.customId === 'modal_set_bot_nickname') {
+      return await handleSetBotNicknameModal(interaction);
+    }
+
     const guildConfig = getGuildConfig(interaction.guildId);
     if (interaction.customId === 'modal_logs') {
       const channelId = interaction.fields.getTextInputValue('channel_id');
@@ -1611,8 +1633,8 @@ async function sendEditConfigPanel(interaction) {
 // PERSONNALISATION DU NOM
 
 async function sendBotNamePanel(interaction) {
-  const botMember = interaction.guild.members.me;
-  const currentNickname = botMember?.nickname || interaction.client.user.tag;
+  const botMember = await interaction.guild.members.fetchMe().catch(() => null);
+  const currentNickname = botMember?.nickname || interaction.client.user.username;
 
   const embed = new EmbedBuilder()
     .setTitle("🤖 Personnalisation du nom")
@@ -1633,10 +1655,10 @@ async function sendBotNamePanel(interaction) {
       .setStyle(ButtonStyle.Primary)
   );
 
-  // On utilise editReply car l'interaction a été différée dans index.js
-  await interaction.editReply({ 
+  await interaction.reply({ 
     embeds: [embed], 
-    components: [row] 
+    components: [row],
+    flags: 64
   });
 }
 
@@ -1662,7 +1684,17 @@ async function handleSetBotNicknameModal(interaction) {
   const newNickname = interaction.fields.getTextInputValue('new_nickname').trim();
   
   try {
-    await interaction.guild.members.me.setNickname(newNickname || null);
+    const botMember = await interaction.guild.members.fetchMe();
+    
+    if (!botMember.permissions.has(PermissionsBitField.Flags.ChangeNickname) && 
+        !botMember.permissions.has(PermissionsBitField.Flags.ManageNicknames)) {
+      return interaction.reply({ 
+        content: "❌ Je n'ai pas la permission `Changer le pseudo` ou `Gérer les pseudos` sur ce serveur.", 
+        flags: 64 
+      });
+    }
+
+    await botMember.setNickname(newNickname || null);
     return interaction.reply({ content: `✅ Le nom du bot a été mis à jour : \`${newNickname || interaction.client.user.username}\``, flags: 64 });
   } catch (err) {
     console.error("Erreur changement surnom:", err);

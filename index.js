@@ -56,7 +56,8 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers
   ],
   partials: [Partials.Channel, Partials.Message]
 });
@@ -85,16 +86,21 @@ client.once(Events.ClientReady, async () => {
 
 client.on('interactionCreate', async interaction => {
   try {
-    console.log('⚡ Interaction reçue :', interaction.type, interaction.isChatInputCommand() ? interaction.commandName : 'non-command');
+    const isCommand = interaction.isChatInputCommand();
+    console.log(`⚡ [VER: 1.0.1] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
+
+    if (interaction.isButton()) {
+        console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
+    }
 
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'set_config'];
+      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats'];
       
       if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-          return interaction.reply({
+          return await interaction.reply({
             content: "❌ Vous n'avez pas les permissions (Administrateur) pour utiliser cette commande.",
             flags: 64
           });
@@ -105,7 +111,7 @@ client.on('interactionCreate', async interaction => {
         if (client.maintenance) {
           return client.maintenance.handleMaintenanceCommand(interaction);
         } else {
-          return interaction.reply({
+          return await interaction.reply({
             content: "❌ Système de maintenance non initialisé.",
             flags: 64
           });
@@ -133,9 +139,19 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'set_config') {
-        // On accuse réception immédiatement pour éviter le timeout Discord
-        await interaction.deferReply({ flags: 64 });
-        return client.configSystem.sendBotNamePanel(interaction);
+        const guild = interaction.guild;
+        if (!guild) return;
+
+        // On récupère l'ID du propriétaire de manière sécurisée
+        const ownerId = guild.ownerId || (await guild.fetch().catch(() => ({}))).ownerId;
+
+        if (interaction.user.id !== ownerId) {
+          return await interaction.reply({
+            content: "❌ Seul le propriétaire (Fonda) du serveur peut utiliser cette commande.",
+            flags: 64
+          });
+        }
+        return await client.configSystem.sendBotNamePanel(interaction);
       }
     }
 
@@ -143,14 +159,14 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
       // On vérifie d'abord si c'est un bouton du système de maintenance
       if (interaction.customId.startsWith('maintenance_') && client.maintenance) {
-        return client.maintenance.handleButton(interaction);
+        return await client.maintenance.handleButton(interaction);
       }
-      return client.configSystem.handleButtons(interaction);
+      return await client.configSystem.handleButtons(interaction);
     }
 
     /* ===== MODAL ===== */
     if (interaction.isModalSubmit()) {
-      return client.configSystem.handleModal(interaction);
+      return await client.configSystem.handleModal(interaction);
     }
 
   } catch (err) {

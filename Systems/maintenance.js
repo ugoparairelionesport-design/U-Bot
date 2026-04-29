@@ -72,6 +72,7 @@ class MaintenanceSystem {
   startGitWatch() {
     if (fs.existsSync(path.resolve(__dirname, '../.git'))) {
       console.log(`📡 Auto-pull activé (intervalle: ${this.CHECK_INTERVAL_MS / 60000} min)`);
+      this.checkGitUpdates(); // Vérification immédiate au démarrage
       this.gitCheckInterval = setInterval(() => {
         this.checkGitUpdates();
       }, this.CHECK_INTERVAL_MS);
@@ -82,9 +83,11 @@ class MaintenanceSystem {
 
   checkGitUpdates() {
     if (this.maintenanceMode) return;
+    console.log('🔄 Vérification des mises à jour sur GitHub (main)...');
 
-    // Stratégie "Force Merge" : On écrase tout ce qui est local sur Replit pour s'aligner sur GitHub
-    exec('git fetch origin master && git reset --hard origin/master', (error, stdout, stderr) => {
+    // Synchronisation forcée sur la branche main
+    const syncCmd = 'git fetch --all && git reset --hard origin/main';
+    exec(syncCmd, (error, stdout, stderr) => {
       if (error) {
         // On ne log l'erreur que si elle est critique
         if (!error.message.includes('already up to date')) {
@@ -94,7 +97,7 @@ class MaintenanceSystem {
       }
 
       if (stdout.includes('Already up to date')) {
-        console.log('✅ Déjà à jour sur GitHub.');
+        console.log('✅ Synchronisation terminée : Le code est déjà à jour.');
         return;
       }
 
