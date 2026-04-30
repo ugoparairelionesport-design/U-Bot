@@ -85,34 +85,36 @@ class MaintenanceSystem {
     if (this.maintenanceMode) return;
     console.log('🔄 Vérification des mises à jour sur GitHub (main)...');
 
-    // Synchronisation forcée avec le dépôt distant
-    const syncCmd = 'git fetch origin && git reset --hard origin/main && git clean -fd -e Data/';
-    
-    exec(syncCmd, (error, stdout, stderr) => {
+    // On utilise ls-remote pour comparer le hash distant sans polluer le stdout du reset
+    const checkCmd = 'git rev-parse HEAD && git ls-remote origin refs/heads/main | cut -f1';
+
+    exec(checkCmd, (error, stdout, stderr) => {
       if (error) {
-        if (!error.message.includes('already up to date')) {
-            console.error(`❌ Erreur Synchro Git : ${error.message}`);
-        }
+        console.error(`❌ Erreur Git Check : ${error.message}`);
         return;
       }
 
-      if (stdout.includes('HEAD is now at') || stdout.includes('Updating')) {
-        console.log(`✨ [GIT] Mise à jour détectée : ${stdout.split('\n')[0]}`);
+      const results = stdout.split('\n').map(h => h.trim()).filter(Boolean);
+      const localHash = results[0];
+      const remoteHash = results[1];
+
+      if (remoteHash && localHash !== remoteHash && remoteHash.length >= 40) {
+        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (Local: ${localHash ? localHash.slice(0, 7) : '???'})`);
         
-        // On force le redémarrage immédiat sur Replit pour éviter que l'ancien code ne crash
-        // On vérifie REPL_SLUG ou REPL_ID qui sont plus fiables
-        if (process.env.REPL_ID || process.env.REPL_SLUG || process.env.REPL_OWNER) {
-          console.log('🔄 [REPLIT] Mise à jour détectée : Redémarrage immédiat...');
-          setTimeout(() => {
-            try { this.cleanup(); } catch(e) {}
-            process.exit(0); // Replit relance automatiquement via .replit
-          }, 100); // 100ms pour laisser le temps au log de s'afficher
-        } else {
-          // En local, on tente un rechargement à chaud
-          this.handleReloadButton();
-        }
+        const updateCmd = 'git fetch origin main && git reset --hard origin/main && git clean -fd -e Data/';
+        exec(updateCmd, () => {
+          if (process.env.REPL_ID || process.env.REPL_SLUG) {
+            console.log('🔄 [REPLIT] Code mis à jour. Redémarrage dans 2s...');
+            setTimeout(() => {
+              try { this.cleanup(); } catch(e) {}
+              process.exit(0);
+            }, 2000); // Délai augmenté pour éviter le spam de redémarrage
+          } else {
+            this.handleReloadButton();
+          }
+        });
       } else {
-        console.log('✅ Synchronisation terminée : Le code est déjà à jour.');
+        console.log(`✅ [GIT] Déjà à jour (${localHash ? localHash.slice(0, 7) : '???'})`);
       }
     });
   }
