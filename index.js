@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [INDEX.JS] Loading version 1.3.8...');
+console.log('🚀 [index.js] Loading version 1.4.5...');
 const {
   Client,
   GatewayIntentBits,
@@ -14,6 +14,7 @@ const {
 
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
+const LiveSystem = require('./Systems/livesystem');
 
 const { deployCommands } = require('./deploy-commands');
 
@@ -69,6 +70,7 @@ client.configSystem = configSystem;
 // Initialisation de la maintenance AVANT tout le reste (important pour le redémarrage rapide)
 try {
   client.maintenance = new MaintenanceSystem(client);
+  client.liveSystem = new LiveSystem(client);
 } catch (err) {
   console.error('❌ Erreur lors de l\'initialisation de la maintenance:', err);
 }
@@ -97,7 +99,7 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 1.3.8] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
+    console.log(`⚡ [VER: 1.4.5] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }
@@ -105,7 +107,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats'];
+      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live'];
       
       if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -162,6 +164,10 @@ client.on('interactionCreate', async interaction => {
         }
         return await client.configSystem.sendBotNamePanel(interaction);
       }
+
+      if (interaction.commandName === 'config_live') {
+        return client.configSystem.sendLiveConfigPanel(interaction);
+      }
     }
 
     /* ===== BUTTON / SELECT ===== */
@@ -170,11 +176,21 @@ client.on('interactionCreate', async interaction => {
       if (interaction.customId.startsWith('maintenance_') && client.maintenance) {
         return await client.maintenance.handleButton(interaction);
       }
+      
+      if (interaction.customId.startsWith('live_config_')) {
+        const platform = interaction.customId.replace('live_config_', '');
+        return interaction.showModal(client.configSystem.buildLiveConfigModal(platform));
+      }
+
       return await client.configSystem.handleButtons(interaction);
     }
 
     /* ===== MODAL ===== */
     if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith('modal_live_config_')) {
+        const platform = interaction.customId.replace('modal_live_config_', '');
+        return client.configSystem.saveLiveConfig(interaction, platform);
+      }
       return await client.configSystem.handleModal(interaction);
     }
 
@@ -244,4 +260,5 @@ setInterval(() => {}, 1000 * 60 * 60);
 // LOGIN
 
 console.log('⚙️ Connexion a Discord en cours...');
-client.login(process.env.TOKEN).catch(err => console.error("❌ ECHEC LOGIN:", err));
+const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
+client.login(token).catch(err => console.error("❌ ECHEC LOGIN:", err));

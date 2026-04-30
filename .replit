@@ -8,3 +8,7 @@ channel = "stable-23_11"
 [[ports]]
 localPort = 8080
 externalPort = 8080
+
+[deployment]
+run = "npm start"
+build = "npm install"

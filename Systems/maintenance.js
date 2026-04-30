@@ -99,12 +99,12 @@ class MaintenanceSystem {
       const remoteHash = results[1];
 
       if (remoteHash && localHash !== remoteHash && remoteHash.length >= 40) {
-        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (Local: ${localHash ? localHash.slice(0, 7) : '???'})`);
+        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (v1.4.5)`);
         
         const updateCmd = 'git fetch origin main && git reset --hard origin/main && git clean -fd -e Data/';
         exec(updateCmd, () => {
           if (process.env.REPL_ID || process.env.REPL_SLUG) {
-            console.log('🔄 [REPLIT] Code mis à jour. Redémarrage dans 2s...');
+            console.log('🔄 [REPLIT] Code mis à jour (v1.4.5). Redémarrage dans 2s...');
             setTimeout(() => {
               try { this.cleanup(); } catch(e) {}
               process.exit(0);
