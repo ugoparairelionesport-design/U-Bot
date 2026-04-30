@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-const {
+console.log('🚀 [INDEX.JS] Loading version 1.2.
   Client,
   GatewayIntentBits,
   Partials,
@@ -65,6 +65,7 @@ const client = new Client({
 client.commands = new Map();
 client.configSystem = configSystem;
 
+// Initialisation de la maintenance AVANT tout le reste (important pour le redémarrage rapide)
 try {
   client.maintenance = new MaintenanceSystem(client);
 } catch (err) {
@@ -78,7 +79,15 @@ client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot en ligne : ${client.user.tag}`);
   console.log(`🌍 Serveur(s) : ${client.guilds.cache.size}`);
 
-  await client.configSystem.resumeTicketState(client);
+  try {
+    if (client.configSystem && typeof client.configSystem.resumeTicketState === 'function') {
+      await client.configSystem.resumeTicketState(client);
+    } else {
+      console.warn("⚠️ resumeTicketState n'est pas encore disponible (chargement...)");
+    }
+  } catch (err) {
+    console.error("❌ CRITICAL: Échec de la restauration des tickets :", err.message);
+  }
 });
 
 /* ========================= */
@@ -87,8 +96,7 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 1.0.4] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
-
+    console.log(`⚡ [VER: 1.2.7] Interaction: ${intera
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }

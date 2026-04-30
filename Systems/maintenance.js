@@ -11,7 +11,7 @@ class MaintenanceSystem {
     this.lastModified = new Map();
     this.maintenanceMode = false;
     this.gitCheckInterval = null;
-    this.AUTO_PULL_ENABLED = true; // Activer/Désactiver l'auto-pull
+    this.AUTO_PULL_ENABLED = true; // Activé pour suivre le flux VS Code -> GitHub -> Replit
     this.CHECK_INTERVAL_MS = 2 * 60 * 1000; // Vérification toutes les 2 minutes (plus réactif)
 
     // Chemins à surveiller
@@ -85,24 +85,35 @@ class MaintenanceSystem {
     if (this.maintenanceMode) return;
     console.log('🔄 Vérification des mises à jour sur GitHub (main)...');
 
-    // Synchronisation forcée sur la branche main
-    const syncCmd = 'git fetch --all && git reset --hard origin/main';
+    // Synchronisation forcée avec le dépôt distant
+    const syncCmd = 'git fetch origin && git reset --hard origin/main && git clean -fd -e Data/';
+    
     exec(syncCmd, (error, stdout, stderr) => {
       if (error) {
-        // On ne log l'erreur que si elle est critique
         if (!error.message.includes('already up to date')) {
             console.error(`❌ Erreur Synchro Git : ${error.message}`);
         }
         return;
       }
 
-      if (stdout.includes('Already up to date')) {
+      if (stdout.includes('HEAD is now at') || stdout.includes('Updating')) {
+        console.log(`✨ [GIT] Mise à jour détectée : ${stdout.split('\n')[0]}`);
+        
+        // On force le redémarrage immédiat sur Replit pour éviter que l'ancien code ne crash
+        // On vérifie REPL_SLUG ou REPL_ID qui sont plus fiables
+        if (process.env.REPL_ID || process.env.REPL_SLUG || process.env.REPL_OWNER) {
+          console.log('🔄 [REPLIT] Mise à jour détectée : Redémarrage immédiat...');
+          setTimeout(() => {
+            try { this.cleanup(); } catch(e) {}
+            process.exit(0); // Replit relance automatiquement via .replit
+          }, 100); // 100ms pour laisser le temps au log de s'afficher
+        } else {
+          // En local, on tente un rechargement à chaud
+          this.handleReloadButton();
+        }
+      } else {
         console.log('✅ Synchronisation terminée : Le code est déjà à jour.');
-        return;
       }
-
-      console.log(`✨ Mise à jour détectée et téléchargée :\n${stdout}`);
-      // Le watcher chokidar prendra le relais pour recharger les fichiers modifiés
     });
   }
 
@@ -151,9 +162,10 @@ class MaintenanceSystem {
           this.client.configSystem[key] = module[key];
         });
         
-        // Ré-initialisation si nécessaire (pour recharger les variables locales du fichier)
+        // On ne relance pas resumeTicketState automatiquement à chaque changement de fichier
+        // car c'est une opération lourde qui fait expirer les interactions.
         if (this.client.configSystem.resumeTicketState) {
-          await this.client.configSystem.resumeTicketState(this.client);
+          console.log('ℹ️ configsystem.js mis à jour (resumeTicketState prêt pour le prochain lancement)');
         }
       } else if (absolutePath.includes(`${path.sep}commands${path.sep}`) || absolutePath.includes('/commands/')) {
         this.updateCommand(absolutePath, module);
@@ -215,7 +227,7 @@ class MaintenanceSystem {
         },
         {
           name: '🔄 Actions',
-          value: '• **Status** : Voir l\'état détaillé\n• **Reload** : Recharger tous les modules\n• **Toggle** : Basculer le mode maintenance',
+          value: '• **Status** : État détaillé\n• **Reload** : Recharger modules\n• **Sync** : Forcer Git Pull\n• **Toggle** : Mode maintenance',
           inline: true
         }
       )
@@ -232,6 +244,11 @@ class MaintenanceSystem {
         .setCustomId('maintenance_reload')
         .setLabel('🔄 Reload')
         .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId('maintenance_sync')
+        .setLabel('📡 Sync Git')
+        .setStyle(ButtonStyle.Primary),
 
       new ButtonBuilder()
         .setCustomId('maintenance_toggle')
@@ -252,6 +269,8 @@ class MaintenanceSystem {
     switch (customId) {
       case 'maintenance_status':
         return this.handleStatusButton(interaction);
+      case 'maintenance_sync':
+        return this.handleSyncButton(interaction);
       case 'maintenance_reload':
         return this.handleReloadButton(interaction);
       case 'maintenance_toggle':
@@ -304,28 +323,40 @@ class MaintenanceSystem {
     await interaction.reply({ embeds: [statusEmbed], flags: 64 });
   }
 
+  async handleSyncButton(interaction) {
+    await interaction.reply({ content: '📡 Lancement de la synchronisation Git forcé...', flags: 64 });
+    this.checkGitUpdates();
+  }
+
   async handleReloadButton(interaction) {
-    if (interaction) await interaction.deferReply({ flags: 64 });
+    if (interaction) {
+      await interaction.deferReply({ flags: 64 }).catch(() => {});
+    }
 
     try {
-      // Recharger tous les modules surveillés
-      this.watchPaths.forEach(watchPath => {
+      // Recharger tous les modules surveillés de manière séquentielle
+      for (const watchPath of this.watchPaths) {
         if (fs.existsSync(watchPath)) {
           if (fs.statSync(watchPath).isDirectory()) {
-            fs.readdirSync(watchPath).forEach(file => {
+            const files = fs.readdirSync(watchPath);
+            for (const file of files) {
               if (file.endsWith('.js')) {
-                this.reloadModule(path.join(watchPath, file));
+                await this.reloadModule(path.join(watchPath, file));
               }
-            });
+            }
           } else if (watchPath.endsWith('.js')) {
-            this.reloadModule(watchPath);
+            await this.reloadModule(watchPath);
           }
         }
-      });
+      }
 
-      if (interaction) await interaction.editReply({ content: '✅ Tous les modules ont été rechargés !' });
+      if (interaction && (interaction.deferred || interaction.replied)) {
+        await interaction.editReply({ content: '✅ Tous les modules ont été rechargés !' }).catch(() => {});
+      }
     } catch (error) {
-      if (interaction) await interaction.editReply({ content: `❌ Erreur lors du rechargement: ${error.message}` });
+      if (interaction && (interaction.deferred || interaction.replied)) {
+        await interaction.editReply({ content: `❌ Erreur lors du rechargement: ${error.message}` }).catch(() => {});
+      }
     }
   }
 

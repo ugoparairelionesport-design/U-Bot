@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+console.log('🚀 [CONFIGSYSTEM.JS] Loading version 1.2.7...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -12,7 +13,6 @@ const {
   AttachmentBuilder,
   ChannelType,
   PermissionsBitField,
-  InteractionResponseFlags
 } = require('discord.js');
 
 const configPath = path.join(__dirname, '../Data/config.json');
@@ -72,8 +72,51 @@ function getGuildConfig(guildId) {
   if (!configData.guilds[guildId]) {
     configData.guilds[guildId] = JSON.parse(JSON.stringify(defaultGuildSettings));
     saveConfig(configData);
+  } else {
+    // Migration : s'assure que tous les nouveaux champs de defaultGuildSettings existent
+    let modified = false;
+    if (!configData.guilds[guildId] || typeof configData.guilds[guildId] !== 'object') {
+      configData.guilds[guildId] = JSON.parse(JSON.stringify(defaultGuildSettings));
+      modified = true;
+    }
+    
+    for (const key in defaultGuildSettings) {
+      if (configData.guilds[guildId][key] === undefined) {
+        configData.guilds[guildId][key] = JSON.parse(JSON.stringify(defaultGuildSettings[key]));
+        modified = true;
+      }
+    }
+    if (modified) saveConfig(configData);
   }
   return configData.guilds[guildId];
+}
+
+function startVisualTimer(message, deleteAt) {
+  let lastSecond = -1;
+  const timerInterval = setInterval(async () => {
+    try {
+      const timeRemaining = deleteAt - Date.now();
+      if (timeRemaining <= 0) {
+        clearInterval(timerInterval);
+        return;
+      }
+      const currentSecond = Math.floor(timeRemaining / 1000);
+      if (currentSecond !== lastSecond) {
+        lastSecond = currentSecond;
+        const minutes = Math.floor(timeRemaining / 60000);
+        const seconds = Math.floor((timeRemaining % 60000) / 1000);
+        const timeStr = `⏱️ Suppression dans ${minutes}:${seconds.toString().padStart(2, '0')}`;
+        if (message.embeds && message.embeds.length > 0) {
+          try {
+            const embeds = message.embeds.map(embed =>
+              EmbedBuilder.from(embed.toJSON()).setFooter({ text: timeStr })
+            );
+            await message.edit({ embeds });
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+  }, 250);
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
@@ -132,7 +175,16 @@ async function safeInteractionReply(interaction, payload, deferred = false) {
       const { flags, ...editPayload } = payload;
       message = await interaction.editReply(editPayload);
     } else if (!interaction.replied) {
-      message = await interaction.reply(payload);
+      try {
+        message = await interaction.reply(payload);
+      } catch (err) {
+        // Gestion de l'erreur 40060 (Interaction déjà acquittée)
+        if (err.code === 40060 || err.message?.includes('already acknowledged')) {
+          message = await interaction.followUp(payload);
+        } else {
+          throw err;
+        }
+      }
     } else {
       message = await interaction.followUp(payload);
     }
@@ -219,8 +271,12 @@ function hasConfiguredModRole(interaction) {
 }
 
 function canManageTicket(interaction) {
-  return hasConfiguredModRole(interaction) ||
-    interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageChannels);
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const isTicketOwner = guildConfig.ticketOwners[interaction.channel?.id] === interaction.user.id;
+  return isTicketOwner || 
+    hasConfiguredModRole(interaction) ||
+    interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageChannels) ||
+    interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
 }
 
 function getMissingBotPermissions(guild) {
@@ -290,37 +346,8 @@ async function sendMessageWithTimer(channel, payload, durationMs) {
   try {
     const message = await channel.send(payload);
     const deleteAt = Date.now() + durationMs;
-    let lastSecond = -1;
-    
-    const timerInterval = setInterval(async () => {
-      try {
-        const timeRemaining = deleteAt - Date.now();
-        if (timeRemaining <= 0) {
-          clearInterval(timerInterval);
-          return;
-        }
-        
-        const currentSecond = Math.floor(timeRemaining / 1000);
-        
-        // Only update if seconds changed
-        if (currentSecond !== lastSecond) {
-          lastSecond = currentSecond;
-          const minutes = Math.floor(timeRemaining / 60000);
-          const seconds = Math.floor((timeRemaining % 60000) / 1000);
-          const timeStr = `⏱️ Suppression dans ${minutes}:${seconds.toString().padStart(2, '0')}`;
-          
-          if (message.embeds && message.embeds.length > 0) {
-            try {
-              const embeds = message.embeds.map(embed => 
-                EmbedBuilder.from(embed.toJSON()).setFooter({ text: timeStr })
-              );
-              await message.edit({ embeds });
-            } catch (_) {}
-          }
-        }
-      } catch (_) {}
-    }, 250);
-    
+
+    if (typeof startVisualTimer === 'function') startVisualTimer(message, deleteAt);
     return message;
   } catch (err) {
     console.error("ERROR sending message with timer:", err);
@@ -382,14 +409,6 @@ function buildCloseConfirmRow() {
       .setLabel('❌ Annuler')
       .setStyle(ButtonStyle.Secondary)
   );
-}
-
-async function replyAndAutoDelete(interaction, payload, delay = CONFIG_MESSAGE_DELETE_DELAY_MS) {
-  await interaction.reply(payload);
-
-  setTimeout(() => {
-    interaction.deleteReply().catch(() => {});
-  }, delay);
 }
 
 function buildChannelIdModal(customId, title, label) {
@@ -536,7 +555,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
   let deferred = false;
   try {
-    await interaction.deferReply({ flags: InteractionResponseFlags.Ephemeral });
+    await interaction.deferReply({ flags: 64 });
     deferred = true;
   } catch (_) {}
 
@@ -666,7 +685,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.0.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.2.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -700,7 +719,15 @@ async function resumeTicketState(client) {
           m.embeds[0]?.title === "🔒 Ticket fermé"
         );
 
-        if (timerMessage) startVisualTimer(timerMessage, deleteAt);
+        if (timerMessage) {
+          try {
+            // Appel ultra-sécurisé : on vérifie la fonction locale ET l'export
+            const timer = (typeof startVisualTimer === 'function') ? startVisualTimer : 
+                          (module.exports && module.exports.startVisualTimer);
+            
+            if (typeof timer === 'function') timer(timerMessage, deleteAt);
+          } catch (_) {}
+        }
 
         setTimeout(() => {
           try {
@@ -1191,6 +1218,8 @@ async function handleButtons(interaction) {
       const durationMinutes = openedAt ? Math.max(1, Math.round((Date.now() - openedAt) / 60000)) : null;
 
       guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
+      
+      if (!guildConfig.pendingDeletions) guildConfig.pendingDeletions = {};
       guildConfig.pendingDeletions[interaction.channel.id] = deleteAt;
 
       if (ownerId) {
@@ -1804,5 +1833,6 @@ module.exports = {
   updateStatsMessage,
   showStaffStats,
   resumeTicketState,
-  sendBotNamePanel
+  sendBotNamePanel,
+  startVisualTimer
 };
