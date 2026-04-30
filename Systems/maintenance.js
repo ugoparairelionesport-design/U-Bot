@@ -105,6 +105,11 @@ class MaintenanceSystem {
         exec(updateCmd, () => {
           if (process.env.REPL_ID || process.env.REPL_SLUG) {
             console.log('🔄 [REPLIT] Code mis à jour (v1.4.5). Redémarrage dans 2s...');
+            
+            // On stoppe la surveillance pour éviter les rechargements inutiles pendant le shutdown
+            this.maintenanceMode = true;
+            this.watchers.forEach(w => w.close());
+            
             setTimeout(() => {
               try { this.cleanup(); } catch(e) {}
               process.exit(0);

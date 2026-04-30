@@ -1,5 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const configSystem = require('./configsystem');
+const fs = require('fs');
+const path = require('path');
 
 class LiveSystem {
   constructor(client) {
@@ -14,9 +16,14 @@ class LiveSystem {
   }
 
   async checkAllLives() {
-    // On récupère la config globale
-    const config = configSystem.resumeTicketState ? require('../Data/config.json') : {}; 
-    if (!config.guilds) return;
+    // On lit le fichier de config à chaque fois pour éviter le cache require
+    let config;
+    try {
+      const configPath = path.join(__dirname, '../Data/config.json');
+      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    } catch (e) { return; }
+    
+    if (!config || !config.guilds) return;
 
     for (const guildId of Object.keys(config.guilds)) {
       const guildConfig = config.guilds[guildId];
@@ -56,30 +63,30 @@ class LiveSystem {
     if (!channel) return;
 
     const platformData = {
-      twitch: { color: 0x6441A5, name: 'Twitch', emoji: '💜' },
-      youtube: { color: 0xFF0000, name: 'YouTube', emoji: '❤️' },
-      tiktok: { color: 0x010101, name: 'TikTok', emoji: '🖤' }
+      twitch: { color: "#6441A5", name: 'Twitch', emoji: '💜' },
+      youtube: { color: "#FF0000", name: 'YouTube', emoji: '❤️' },
+      tiktok: { color: "#010101", name: 'TikTok', emoji: '🖤' }
     };
 
     const data = platformData[live.platform];
 
     const embed = new EmbedBuilder()
-      .setTitle(`${data.emoji} Alerte Live ${data.name}`)
+      .setTitle(`${data.emoji} ALERT LIVE - ${data.name.toUpperCase()}`)
       .setURL(live.url)
-      .setDescription(live.text)
-      .addFields({ name: 'Lien du live', value: `Cliquez ici pour regarder` })
-      .setColor(data.color)
-      .setImage('https://i.imgur.com/example-preview.png') // On pourrait récupérer la preview via API
+      .setDescription(`>>> ${live.text}`)
+      .setColor(data.color || "#5865F2")
+      .setThumbnail(`https://www.google.com/s2/favicons?sz=64&domain=${live.platform}.com`)
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setLabel(`Regarder sur ${data.name}`)
+        .setLabel(`Visualiser le live sur ${data.name}`)
         .setURL(live.url)
         .setStyle(ButtonStyle.Link)
     );
 
-    const content = live.roleId ? `<@&${live.roleId}>` : null;
+    // On met le lien dans le content pour que Discord génère le lecteur automatique
+    const content = `${live.roleId ? `<@&${live.roleId}> ` : ""}\n**${data.emoji} LE LIVE COMMENCE :** ${live.url}`;
     
     const message = await channel.send({ content, embeds: [embed], components: [row] }).catch(() => null);
     
@@ -105,8 +112,6 @@ class LiveSystem {
   saveUpdate() {
     // On force la sauvegarde via le configsystem
     const config = require('../Data/config.json');
-    const fs = require('fs');
-    const path = require('path');
     fs.writeFileSync(path.join(__dirname, '../Data/config.json'), JSON.stringify(config, null, 2));
   }
 }
