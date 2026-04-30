@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [INDEX.JS] Loading version 1.2.
+console.log('🚀 [INDEX.JS] Loading version 1.2.8...');
   Client,
   GatewayIntentBits,
   Partials,
@@ -96,7 +96,7 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 1.2.7] Interaction: ${intera
+    console.log(`⚡ [VER: 1.2.8] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }

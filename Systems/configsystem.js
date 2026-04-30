@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [CONFIGSYSTEM.JS] Loading version 1.2.7...');
+console.log('🚀 [CONFIGSYSTEM.JS] Loading version 1.2.8...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -116,7 +116,7 @@ function startVisualTimer(message, deleteAt) {
         }
       }
     } catch (_) {}
-  }, 250);
+  }, 100); // Réduit l'intervalle pour une mise à jour visuelle plus fluide
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
@@ -685,7 +685,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.2.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.2.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
