@@ -1,4 +1,4 @@
-run = "npm cache clean --force && npm install && node index.js"
+run = "npm start"
 entrypoint = "index.js" # Assure-toi que c'est bien index.js
 modules = ["nodejs-20"]
 

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [CONFIGSYSTEM.JS] Loading version 1.3.1...');
+console.log('🚀 [CONFIGSYSTEM.JS] Loading version 1.3.5...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -93,18 +93,18 @@ function getGuildConfig(guildId) {
 
 function startVisualTimer(message, deleteAt) {
   let lastSecond = -1;
-  const timerInterval = setInterval(async () => {
+  const updateFooter = async () => {
     try {
+      if (!message || !message.editable) return;
       const timeRemaining = deleteAt - Date.now();
-      if (timeRemaining <= 0) {
-        clearInterval(timerInterval);
-        return;
-      }
+      
+      if (timeRemaining <= 0) return;
+
       const currentSecond = Math.floor(timeRemaining / 1000);
       if (currentSecond !== lastSecond) {
         lastSecond = currentSecond;
-        const minutes = Math.floor(timeRemaining / 60000);
-        const seconds = Math.floor((timeRemaining % 60000) / 1000);
+        const minutes = Math.floor(currentSecond / 60);
+        const seconds = currentSecond % 60;
         const timeStr = `⏱️ Suppression dans ${minutes}:${seconds.toString().padStart(2, '0')}`;
         if (message.embeds && message.embeds.length > 0) {
           try {
@@ -116,7 +116,18 @@ function startVisualTimer(message, deleteAt) {
         }
       }
     } catch (_) {}
-  }, 100); // Réduit l'intervalle pour une mise à jour visuelle plus fluide
+  };
+
+  // Premier appel immédiat pour éviter le délai de 100ms
+  updateFooter();
+
+  const timerInterval = setInterval(async () => {
+    if (Date.now() >= deleteAt) {
+      clearInterval(timerInterval);
+      return;
+    }
+    await updateFooter();
+  }, 100);
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
@@ -685,7 +696,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.3.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.3.5] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
