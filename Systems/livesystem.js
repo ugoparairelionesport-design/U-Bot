@@ -180,7 +180,7 @@ class LiveSystem {
         name: `${displayName} est en LIVE maintenant !`, 
         iconURL: profilePic
       })
-      .setTitle(`${data.emoji} ${liveTitle}`)
+      .setTitle(`${data.emoji} ${liveTitle || `Rejoignez le live de ${displayName} sur ${data.name} !`}`)
       // Nettoyage de l'URL pour éviter les erreurs de validation Discord (supprime < et >)
       .setURL(live.url.replace(/<|>/g, ''))
       .addFields(
@@ -201,7 +201,7 @@ class LiveSystem {
     );
 
     // On met le lien dans le content pour que Discord génère le lecteur automatique
-    const content = `${live.roleId ? `<@&${live.roleId}>` : ""}\n🔥 **Alerte Détection :** Un nouveau direct vient de commencer !`;
+    const content = `${live.roleId ? `<@&${live.roleId}>` : ""}\n🔥 **Alerte Détection :** Un nouveau direct vient de commencer !\n${live.url.replace(/<|>/g, '')}`;
     
     const message = await channel.send({ content, embeds: [embed], components: [row] }).catch(() => null);
     
@@ -278,15 +278,28 @@ class LiveSystem {
           if (res.ok) {
             const html = await res.text();
             
-            // Tentative 1: Extraction via l'objet JSON interne (avatarLarger)
-            const jsonAvatar = html.match(/"avatarLarger":"([^"]+)"/) || html.match(/"avatarThumb":"([^"]+)"/);
-            if (jsonAvatar) {
-              // Nettoyage des caractères unicode (\u002F -> /)
-              info.profilePictureUrl = jsonAvatar[1].replace(/\\u002F/g, '/');
-            } else {
-              // Tentative 2: Balise OpenGraph classique
-              const ogMatch = html.match(/<meta property="og:image" content="([^"]+)"/);
-              if (ogMatch) info.profilePictureUrl = ogMatch[1];
+            // Tentative 1: Extraction via le script JSON interne de TikTok (très robuste)
+            const stateMatch = html.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">([\s\S]*?)<\/script>/);
+            if (stateMatch) {
+              try {
+                const jsonData = JSON.parse(stateMatch[1]);
+                const userData = jsonData?.__DEFAULT_SCOPE__?.['webapp.user-detail']?.userInfo?.user;
+                if (userData) {
+                  info.profilePictureUrl = userData.avatarLarger || userData.avatarMedium || userData.avatarThumb;
+                  if (userData.nickname) info.displayName = userData.nickname;
+                }
+              } catch (_) {}
+            }
+
+            // Tentative 2: Fallback Regex si le JSON est absent ou incomplet
+            if (!info.profilePictureUrl) {
+              const jsonAvatar = html.match(/"avatarLarger":"([^"]+)"/) || html.match(/"avatarThumb":"([^"]+)"/);
+              if (jsonAvatar) {
+                info.profilePictureUrl = jsonAvatar[1].replace(/\\u002F/g, '/');
+              } else {
+                const ogMatch = html.match(/<meta property="og:image" content="([^"]+)"/);
+                if (ogMatch) info.profilePictureUrl = ogMatch[1];
+              }
             }
             
             // Extraction du nom d'affichage via le titre de la page
