@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const configSystem = require('./configsystem');
-const fs = require('fs');
+const fs = require('fs'); // Garder fs et path pour d'autres usages si besoin, mais pas pour config.json directement
 const path = require('path');
 const { fetch } = require('undici'); // Utilisation de undici (déjà dans package.json)
 
@@ -14,15 +14,14 @@ class LiveSystem {
   }
 
   init() {
-    // La vérification initiale est maintenant gérée par index.js au moment du Ready
     setInterval(() => this.checkAllLives().catch(err => console.error("❌ LiveSystem Loop Error:", err)), this.checkInterval); // Catch pour éviter les plantages globaux
     console.log('📡 Système de détection Live initialisé');
   }
 
   async checkAllLives() {
-    console.log(`🔍 [LIVE] Vérification en cours pour ${this.client.guilds.cache.size} serveur(s)...`);
+    console.log(`🔍 [LIVE] Vérification en cours pour ${this.client.guilds.cache.size} serveur(s) connectés...`);
 
-    for (const [guildId, guild] of this.client.guilds.cache) {
+    for (const [guildId, guild] of this.client.guilds.cache) { // Itérer sur les guildes connectées
       const guildConfig = configSystem.getGuildConfig(guildId);
       if (!guildConfig.liveConfigs || guildConfig.liveConfigs.length === 0) continue;
 
@@ -56,7 +55,7 @@ class LiveSystem {
     }
 
     if (liveTitle && !live.isLive) {
-        console.log(`🚀 [LIVE] Tentative d'envoi de notification pour ${live.url}...`);
+        console.log(`🚀 [LIVE] Tentative d'envoi de notification pour ${live.url} dans #${live.channelId}...`);
         await this.sendLiveNotification(guild, live, liveTitle);
     } else if (liveTitle && live.isLive) {
         console.log(`ℹ️ [LIVE] Notification déjà active pour ${live.url} (isLive: true).`);
@@ -64,6 +63,9 @@ class LiveSystem {
       console.log(`🧹 [LIVE] Fin de live détectée pour ${live.url}.`);
       await this.cleanupLiveNotification(guild, live);
     }
+
+    // Sauvegarder la configuration après tout changement de statut live
+    configSystem.saveConfig(configSystem.getFullConfig());
   }
 
   async getTwitchToken() {
@@ -157,6 +159,7 @@ class LiveSystem {
   }
 
   async fetchLiveStatus(platform, url, guild) {
+    // Cette fonction est responsable de vérifier le statut live sur la plateforme
     try {
       if (platform === 'twitch') return await this.checkTwitch(url);
       if (platform === 'youtube') return await this.checkYouTube(url);
@@ -169,6 +172,12 @@ class LiveSystem {
   }
 
   async sendLiveNotification(guild, live, liveTitle) {
+    // Cette fonction est responsable d'envoyer la notification Discord
+    if (!live.channelId) {
+        console.error(`❌ [LIVE] Aucun salon de destination (channelId) configuré pour ${live.url}`);
+        return;
+    }
+
     const channel = await guild.channels.fetch(live.channelId).catch(() => null);
     if (!channel || !channel.isTextBased()) return;
 
@@ -211,6 +220,7 @@ class LiveSystem {
     if (message) {
       live.isLive = true;
       live.lastMessageId = message.id;
+      console.log(`✅ [LIVE] Notification envoyée avec succès dans #${channel.name}`);
     }
   }
 
@@ -272,19 +282,6 @@ class LiveSystem {
     
     live.isLive = false;
     live.lastMessageId = null;
-  }
-
-  saveUpdate(config) {
-    // On utilise une lecture/écriture synchrone fraîche pour éviter les conflits de cache
-    // et s'assurer que les modifications du LiveSystem sont persistantes.
-    try {
-      const configPath = path.join(__dirname, '../Data/config.json');
-      // On ne lit pas le fichier à nouveau ici, on utilise l'objet 'config' passé en paramètre
-      // qui a été mis à jour dans checkAllLives.
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2)); 
-    } catch (err) {
-      console.error("❌ Erreur sauvegarde LiveSystem:", err);
-    }
   }
 }
 
