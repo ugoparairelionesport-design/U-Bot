@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.0.8...');
+console.log('🚀 [configsystem.js] Loading version 2.0.9...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -136,6 +136,7 @@ function startVisualTimer(message, deleteAt) {
   }, 100);
 }
 
+console.log('DEBUG: Defining replyAndAutoDelete function in configsystem.js');
 async function replyAndAutoDelete(interaction, payload, durationMs = 300000) {
   const message = await safeInteractionReply(interaction, payload);
   if (message && durationMs > 0 && (!payload.flags || payload.flags !== 64)) {
@@ -710,7 +711,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.0.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.0.9] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1527,6 +1528,57 @@ async function handleLiveDelete(interaction, url) {
   return interaction.reply({ content: "❌ Erreur lors de la suppression.", flags: 64 });
 }
 
+module.exports = {
+  // Core functions
+  loadConfig,
+  saveConfig,
+  getFullConfig,
+  getGuildConfig,
+  sendConfigPanel,
+  sendEditConfigPanel,
+  handleButtons,
+  handleModal,
+  handleMessage,
+  handleMessageDelete,
+  updateStatsMessage,
+  showStaffStats,
+  resumeTicketState,
+  sendBotNamePanel,
+  startVisualTimer,
+  // Live System functions
+  sendLiveConfigPanel,
+  buildLiveConfigModal,
+  saveLiveConfig,
+  sendLiveEditList,
+  handleLiveEditSelect,
+  handleLiveDelete
+  // Helper functions
+  replyAndAutoDelete,
+  formatDate,
+  parseRoleIds,
+  getRoleIds,
+  getTicketCount,
+  setTicketCount,
+  getStaffStats,
+  safeInteractionReply,
+  resetSelectMenuToPlaceholder,
+  getClosingChannelName,
+  incrementStaffStat,
+  getPanelOptionFromChannel,
+  hasConfiguredModRole,
+  canManageTicket,
+  getMissingBotPermissions,
+  ensureBotPermissions,
+  sendLog,
+  sendRolePingMessage,
+  sendMessageWithTimer,
+  buildTicketContextFields,
+  buildStatsPayload,
+  buildCloseConfirmRow,
+  buildChannelIdModal,
+  handleBotNameButtonClick,
+  handleSetBotNicknameModal
+};
 /* ========================= */
 async function handleModal(interaction) {
   try {
@@ -1998,7 +2050,6 @@ async function handleSetBotNicknameModal(interaction) {
 }
 
 module.exports = {
-  getGuildConfig,
   sendConfigPanel,
   sendEditConfigPanel,
   handleButtons,
@@ -2009,38 +2060,5 @@ module.exports = {
   showStaffStats,
   resumeTicketState,
   sendBotNamePanel,
-  startVisualTimer,
-  sendLiveConfigPanel,
-  buildLiveConfigModal,
-  saveLiveConfig,
-  sendLiveEditList,
-  handleLiveEditSelect,
-  handleLiveDelete,
-  formatDate,
-  parseRoleIds,
-  saveConfig,
-  replyAndAutoDelete
-};
-module.exports = {
-  getGuildConfig,
-  getFullConfig,
-  saveConfig,
-  sendConfigPanel,
-  sendEditConfigPanel,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState,
-  sendBotNamePanel,
-  startVisualTimer,
-  sendLiveConfigPanel,
-  buildLiveConfigModal,
-  saveLiveConfig,
-  sendLiveEditList,
-  handleLiveEditSelect,
-  handleLiveDelete,
-  replyAndAutoDelete
+  startVisualTimer
 };

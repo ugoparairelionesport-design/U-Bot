@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const configSystem = require('./configsystem');
-const fs = require('fs');
+const fs = require('fs'); // Garder fs et path pour d'autres usages si besoin, mais pas pour config.json directement
 const path = require('path');
 const { fetch } = require('undici');
 
@@ -14,47 +14,24 @@ class LiveSystem {
   }
 
   init() {
-    // Vérification immédiate au lancement pour ne pas attendre 4 minutes
-    this.checkAllLives().catch(err => console.error("❌ LiveSystem Initial Check Error:", err));
-    
+    // La vérification initiale est maintenant gérée par index.js au moment du Ready
     setInterval(() => this.checkAllLives().catch(err => console.error("❌ LiveSystem Loop Error:", err)), this.checkInterval); // Catch pour éviter les plantages globaux
     console.log('📡 Système de détection Live initialisé');
   }
 
   async checkAllLives() {
-    // On lit le fichier de config à chaque fois pour éviter le cache require
-    let config;
-    try {
-      const configPath = path.join(__dirname, '../Data/config.json');
-      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (e) { return; }
-    
-    if (!config || !config.guilds) return;
+    console.log(`🔍 [LIVE] Vérification en cours pour ${this.client.guilds.cache.size} serveur(s)...`);
 
-    console.log(`🔍 [LIVE] Vérification en cours pour ${Object.keys(config.guilds).length} serveur(s)...`);
-
-    let modified = false;
-    for (const guildId of Object.keys(config.guilds)) {
-      const guildConfig = config.guilds[guildId];
+    for (const [guildId, guild] of this.client.guilds.cache) {
+      const guildConfig = configSystem.getGuildConfig(guildId);
       if (!guildConfig.liveConfigs || guildConfig.liveConfigs.length === 0) continue;
 
       console.log(`📡 [LIVE] ${guildConfig.liveConfigs.length} config(s) trouvée(s) pour le serveur ${guildId}`);
-      const guild = this.client.guilds.cache.get(guildId);
-      if (!guild) continue;
 
       for (const live of guildConfig.liveConfigs) {
-        const wasLive = live.isLive;
-        const msgId = live.lastMessageId;
-
         await this.processLiveCheck(guild, live);
-        
-        if (wasLive !== live.isLive || msgId !== live.lastMessageId) {
-          modified = true;
-        }
       }
     }
-
-    if (modified) this.saveUpdate(config);
   }
 
   async processLiveCheck(guild, live) {
@@ -73,7 +50,7 @@ class LiveSystem {
       const cleanHashtag = hashtag.toLowerCase().trim();
       
       if (!cleanTitle.includes(cleanHashtag)) {
-        console.log(`ℹ️ [LIVE] Live de ${live.url} ignoré : Hashtag "${cleanHashtag}" absent du titre.`);
+        console.log(`ℹ️ [LIVE] Live de ${live.url} ignoré : Hashtag "${cleanHashtag}" non trouvé dans le titre.`);
         liveTitle = null; 
       }
     }
@@ -87,6 +64,10 @@ class LiveSystem {
       console.log(`🧹 [LIVE] Fin de live détectée pour ${live.url}.`);
       await this.cleanupLiveNotification(guild, live);
     }
+
+    // Sauvegarder la configuration après tout changement de statut live
+    // Cette sauvegarde est maintenant gérée une seule fois à la fin de checkAllLives
+    // configSystem.saveConfig(configSystem.getFullConfig()); 
   }
 
   async getTwitchToken() {
@@ -109,7 +90,7 @@ class LiveSystem {
     const clientID = process.env.TWITCH_CLIENT_ID;
     if (!token || !clientID) return false;
 
-    const username = url.split('/').pop();
+    const username = url.replace(/<|>/g, '').split('/').pop();
     const res = await fetch(`https://api.twitch.tv/helix/streams?user_login=${username}`, {
       headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
     });
@@ -122,14 +103,15 @@ class LiveSystem {
     if (!apiKey) return null;
 
     // Extraction propre de l'ID ou du handle
-    const handleMatch = url.match(/@([^/?]+)/);
+    const cleanUrl = url.replace(/<|>/g, '');
+    const handleMatch = cleanUrl.match(/@([^/?]+)/);
     let queryUrl;
 
     if (handleMatch) {
       // Si c'est un @pseudo, on cherche via search (nécessite que la chaîne soit indexée)
-      queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${handleMatch[1]}&type=video&eventType=live&key=${apiKey}`;
+      queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${handleMatch[1]}&type=video&eventType=live&maxResults=1&key=${apiKey}`;
     } else {
-      const channelId = url.split('/').pop();
+      const channelId = cleanUrl.split('/').pop();
       queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&eventType=live&key=${apiKey}`;
     }
 
@@ -147,8 +129,9 @@ class LiveSystem {
 
     try {
       // Extraction plus robuste du pseudo (gère @pseudo ou juste le lien)
-      const match = url.match(/@([^/?#]+)/);
-      const username = match ? match[1] : url.split('/').pop();
+      const cleanUrl = url.replace(/<|>/g, '');
+      const match = cleanUrl.match(/@([^/?#]+)/);
+      const username = match ? match[1] : cleanUrl.split('/').pop();
       if (!username) return false;
 
       // On tente d'accéder à la page de live directement
@@ -158,15 +141,11 @@ class LiveSystem {
         }
       });
       
-      if (!res.ok) {
-        console.error(`❌ [TIKTOK] Erreur HTTP ${res.status} pour ${username}`);
-        return false;
-      }
-
+      if (!res.ok) return false;
       const html = await res.text();
       
       const isLive = html.includes('"room_id":') && !html.includes('"live_status":0');
-      if (!isLive) return null; // Retourne null si pas de live détecté dans le HTML
+      if (!isLive) return null;
 
       const titleMatch = html.match(/"title":"([^"]+)"/) || html.match(/"share_title":"([^"]+)"/);
       if (titleMatch) {
