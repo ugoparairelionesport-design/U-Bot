@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 1.7.6...');
+console.log('🚀 [configsystem.js] Loading version 1.7.7...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -697,7 +697,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.7.6] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.7.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1835,7 +1835,157 @@ async function handleSetBotNicknameModal(interaction) {
   }
 }
 
+/* ========================= */
+// CONFIGURATION LIVE
+
+async function sendLiveConfigPanel(interaction) {
+  const embed = new EmbedBuilder()
+    .setTitle("📡 Configuration des Alertes Live")
+    .setDescription(
+      "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
+      "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
+    )
+    .setColor("#5865F2")
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('live_config_twitch').setLabel('Twitch').setStyle(ButtonStyle.Primary).setEmoji('1499576322869956668'),
+    new ButtonBuilder().setCustomId('live_config_youtube').setLabel('YouTube').setStyle(ButtonStyle.Danger).setEmoji('1499576375911383110'),
+    new ButtonBuilder().setCustomId('live_config_tiktok').setLabel('TikTok').setStyle(ButtonStyle.Secondary).setEmoji('1499576285951823902')
+  );
+
+  return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+}
+
+function buildLiveConfigModal(platform, existingData = null) {
+  return new ModalBuilder()
+    .setCustomId(`modal_live_config_${platform}`)
+    .setTitle(`Alerte ${platform.charAt(0).toUpperCase() + platform.slice(1)}`)
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('channel_url')
+          .setLabel('Lien de la chaîne / Pseudo')
+          .setPlaceholder('https://twitch.tv/nom_du_streamer')
+          .setValue(existingData?.url || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('notif_channel_id')
+          .setLabel('ID du salon de notification')
+          .setValue(existingData?.channelId || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('role_id')
+          .setLabel('ID du rôle à mentionner (Optionnel)')
+          .setValue(existingData?.roleId || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('security_hashtag')
+          .setLabel('Hashtag de sécurité (Ex: #live)')
+          .setPlaceholder('Le live doit contenir ce hashtag pour être notifié')
+          .setValue(existingData?.securityHashtag || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+      )
+    );
+}
+
+async function saveLiveConfig(interaction, platform) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const url = interaction.fields.getTextInputValue('channel_url').trim();
+  const channelId = interaction.fields.getTextInputValue('notif_channel_id').trim();
+  const roleId = interaction.fields.getTextInputValue('role_id').trim();
+  const securityHashtag = interaction.fields.getTextInputValue('security_hashtag').trim();
+
+  const targetChannel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+  if (!targetChannel) return interaction.reply({ content: "❌ ID de salon invalide.", flags: 64 });
+
+  const newConfig = {
+    platform,
+    url,
+    channelId,
+    roleId: roleId || null,
+    securityHashtag: securityHashtag || null,
+    lastMessageId: null,
+    isLive: false
+  };
+
+  if (!guildConfig.liveConfigs) guildConfig.liveConfigs = [];
+  const index = guildConfig.liveConfigs.findIndex(c => c.url === url);
+  if (index !== -1) guildConfig.liveConfigs[index] = newConfig;
+  else guildConfig.liveConfigs.push(newConfig);
+
+  saveConfig(configData);
+  return interaction.reply({ content: `✅ Configuration live enregistrée pour **${platform}** (${url}) !`, flags: 64 });
+}
+
+async function sendLiveEditList(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const lives = guildConfig.liveConfigs || [];
+
+  if (lives.length === 0) return interaction.reply({ content: "❌ Aucune configuration trouvée.", flags: 64 });
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('live_edit_select')
+    .setPlaceholder('Choisir une chaîne à gérer...')
+    .addOptions(lives.map(l => ({
+      label: l.url.split('/').pop().replace('@', ''),
+      description: `${l.platform.toUpperCase()} - Salon: ${l.channelId}`,
+      value: l.url,
+      emoji: l.platform === 'twitch' ? '1499576322869956668' : (l.platform === 'youtube' ? '1499576375911383110' : '1499576285951823902')
+    })));
+
+  return interaction.reply({ 
+    content: "📝 **Gestion des lives**\nSélectionnez une chaîne pour la modifier ou la supprimer.", 
+    components: [new ActionRowBuilder().addComponents(select)], 
+    flags: 64 
+  });
+}
+
+async function handleLiveEditSelect(interaction, url) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const live = guildConfig.liveConfigs.find(l => l.url === url);
+  if (!live) return interaction.reply({ content: "❌ Config introuvable.", flags: 64 });
+
+  const embed = new EmbedBuilder()
+    .setTitle(`⚙️ Gestion : ${url.split('/').pop()}`)
+    .addFields(
+      { name: "Hashtag", value: `\`${live.securityHashtag || 'Aucun'}\``, inline: true },
+      { name: "Salon", value: `<#${live.channelId}>`, inline: true },
+      { name: "Rôle", value: live.roleId ? `<@&${live.roleId}>` : "`Aucun`", inline: true }
+    )
+    .setColor("#5865F2");
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`live_btn_edit_${url}`).setLabel('Modifier').setStyle(ButtonStyle.Primary).setEmoji('✏️'),
+    new ButtonBuilder().setCustomId(`live_btn_del_${url}`).setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
+  );
+
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function handleLiveDelete(interaction, url) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const index = guildConfig.liveConfigs.findIndex(l => l.url === url);
+  if (index !== -1) {
+    guildConfig.liveConfigs.splice(index, 1);
+    saveConfig(configData);
+    return interaction.update({ content: `✅ Configuration supprimée pour **${url}**.`, embeds: [], components: [], flags: 64 });
+  }
+  return interaction.reply({ content: "❌ Erreur lors de la suppression.", flags: 64 });
+}
+
 module.exports = {
+  getGuildConfig,
   sendConfigPanel,
   sendEditConfigPanel,
   handleButtons,
@@ -1846,13 +1996,11 @@ module.exports = {
   showStaffStats,
   resumeTicketState,
   sendBotNamePanel,
-  startVisualTimer
+  startVisualTimer,
+  sendLiveConfigPanel,
+  buildLiveConfigModal,
+  saveLiveConfig,
+  sendLiveEditList,
+  handleLiveEditSelect,
+  handleLiveDelete
 };
-
-// Exportation des fonctions du LiveSystem
-module.exports.sendLiveConfigPanel = sendLiveConfigPanel;
-module.exports.buildLiveConfigModal = buildLiveConfigModal;
-module.exports.saveLiveConfig = saveLiveConfig;
-module.exports.sendLiveEditList = sendLiveEditList;
-module.exports.handleLiveEditSelect = handleLiveEditSelect;
-module.exports.handleLiveDelete = handleLiveDelete;
