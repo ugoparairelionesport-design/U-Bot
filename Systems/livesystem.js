@@ -129,7 +129,10 @@ class LiveSystem {
 
   async checkTikTok(url) {
     // Bypass pour tes tests
-    if (url.includes('test-live')) return "🔴 LIVE DE TEST - Rejoignez l'aventure !";
+    if (url.includes('test-live')) {
+        const guildConfig = configSystem.getGuildConfig(this.client.guilds.cache.first()?.id);
+        return `🔴 LIVE DE TEST ${guildConfig?.securityHashtag || ''} - Rejoignez l'aventure !`;
+    }
 
     try {
       // Extraction plus robuste du pseudo (gère @pseudo ou juste le lien)
