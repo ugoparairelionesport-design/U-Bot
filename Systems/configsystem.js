@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.0.7...');
+console.log('🚀 [configsystem.js] Loading version 2.0.8...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -710,7 +710,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.0.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.0.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1997,6 +1997,30 @@ async function handleSetBotNicknameModal(interaction) {
   }
 }
 
+module.exports = {
+  getGuildConfig,
+  sendConfigPanel,
+  sendEditConfigPanel,
+  handleButtons,
+  handleModal,
+  handleMessage,
+  handleMessageDelete,
+  updateStatsMessage,
+  showStaffStats,
+  resumeTicketState,
+  sendBotNamePanel,
+  startVisualTimer,
+  sendLiveConfigPanel,
+  buildLiveConfigModal,
+  saveLiveConfig,
+  sendLiveEditList,
+  handleLiveEditSelect,
+  handleLiveDelete,
+  formatDate,
+  parseRoleIds,
+  saveConfig,
+  replyAndAutoDelete
+};
 module.exports = {
   getGuildConfig,
   getFullConfig,
