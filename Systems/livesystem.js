@@ -55,7 +55,7 @@ class LiveSystem {
   }
 
   async processLiveCheck(guild, live) {
-    let liveTitle = await this.fetchLiveStatus(live.platform, live.url);
+    let liveTitle = await this.fetchLiveStatus(live.platform, live.url, guild);
     const guildConfig = configSystem.getGuildConfig(guild.id);
     
     // On utilise le hashtag spécifique à ce live ou le global du serveur
@@ -160,11 +160,11 @@ class LiveSystem {
     }
   }
 
-  async fetchLiveStatus(platform, url) {
+  async fetchLiveStatus(platform, url, guild) {
     try {
       if (platform === 'twitch') return await this.checkTwitch(url);
       if (platform === 'youtube') return await this.checkYouTube(url);
-      if (platform === 'tiktok') return await this.checkTikTok(url);
+      if (platform === 'tiktok') return await this.checkTikTok(url, guild);
       return false;
     } catch (err) {
       console.error(`❌ Erreur check ${platform}:`, err.message);
