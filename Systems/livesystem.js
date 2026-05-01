@@ -32,6 +32,8 @@ class LiveSystem {
         await this.processLiveCheck(guild, live);
       }
     }
+    // Sauvegarder l'état (isLive, lastMessageId) pour persistance au redémarrage
+    configSystem.saveConfig(configSystem.getFullConfig());
   }
 
   async processLiveCheck(guild, live) {

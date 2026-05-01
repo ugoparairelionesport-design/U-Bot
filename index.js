@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 2.1.4...');
+console.log('🚀 [index.js] Loading version 2.1.5...');
 const {
   Client,
   GatewayIntentBits,
@@ -91,6 +91,11 @@ client.once(Events.ClientReady, async () => {
   } catch (err) {
     console.error("❌ CRITICAL: Échec de la restauration des tickets :", err.message);
   }
+
+  // Vérification initiale des lives au démarrage
+  if (client.liveSystem) {
+    client.liveSystem.checkAllLives().catch(err => console.error("❌ Erreur check live initial:", err));
+  }
 });
 
 /* ========================= */
@@ -99,7 +104,7 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 2.1.4] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
+    console.log(`⚡ [VER: 2.1.5] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }
