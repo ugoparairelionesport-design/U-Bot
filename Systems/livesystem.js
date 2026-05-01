@@ -31,11 +31,14 @@ class LiveSystem {
     
     if (!config || !config.guilds) return;
 
+    console.log(`🔍 [LIVE] Vérification en cours pour ${Object.keys(config.guilds).length} serveur(s)...`);
+
     let modified = false;
     for (const guildId of Object.keys(config.guilds)) {
       const guildConfig = config.guilds[guildId];
       if (!guildConfig.liveConfigs || guildConfig.liveConfigs.length === 0) continue;
 
+      console.log(`📡 [LIVE] ${guildConfig.liveConfigs.length} config(s) trouvée(s) pour le serveur ${guildId}`);
       const guild = this.client.guilds.cache.get(guildId);
       if (!guild) continue;
 
