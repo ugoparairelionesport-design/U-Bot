@@ -14,7 +14,7 @@ class LiveSystem {
   }
 
   init() {
-    setInterval(() => this.checkAllLives(), this.checkInterval);
+    setInterval(() => this.checkAllLives().catch(err => console.error("❌ LiveSystem Loop Error:", err)), this.checkInterval); // Catch pour éviter les plantages globaux
     console.log('📡 Système de détection Live initialisé');
   }
 
@@ -328,9 +328,12 @@ class LiveSystem {
 
   saveUpdate(config) {
     // On utilise une lecture/écriture synchrone fraîche pour éviter les conflits de cache
+    // et s'assurer que les modifications du LiveSystem sont persistantes.
     try {
       const configPath = path.join(__dirname, '../Data/config.json');
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+      // On ne lit pas le fichier à nouveau ici, on utilise l'objet 'config' passé en paramètre
+      // qui a été mis à jour dans checkAllLives.
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2)); 
     } catch (err) {
       console.error("❌ Erreur sauvegarde LiveSystem:", err);
     }
