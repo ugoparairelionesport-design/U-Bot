@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.1.1...');
+console.log('🚀 [configsystem.js] Loading version 2.1.3...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -92,6 +92,19 @@ function getGuildConfig(guildId) {
         modified = true;
       }
     }
+
+    // Migration/Nettoyage automatique des URLs de Live pour éviter le crash des 100 caractères
+    if (configData.guilds[guildId].liveConfigs) {
+      configData.guilds[guildId].liveConfigs.forEach(l => {
+        if (l.url && (l.url.includes('?') || l.url.includes('<') || l.url.includes('>'))) {
+          try {
+            l.url = l.url.replace(/<|>/g, '').split('?')[0].replace(/\/$/, '');
+            modified = true;
+          } catch (e) {}
+        }
+      });
+    }
+
     if (modified) saveConfig(configData);
   }
   return configData.guilds[guildId];
@@ -711,7 +724,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.1.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.1.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1445,10 +1458,23 @@ function buildLiveConfigModal(platform, existingData = null) {
 
 async function saveLiveConfig(interaction, platform) {
   const guildConfig = getGuildConfig(interaction.guildId);
-  const url = interaction.fields.getTextInputValue('channel_url').trim();
+  let url = interaction.fields.getTextInputValue('channel_url').trim();
   const channelId = interaction.fields.getTextInputValue('notif_channel_id').trim();
   const roleId = interaction.fields.getTextInputValue('role_id').trim();
   const securityHashtag = interaction.fields.getTextInputValue('security_hashtag').trim();
+
+  // Nettoyage de l'URL pour respecter la limite de 100 caractères des IDs Discord
+  url = url.replace(/<|>/g, '');
+  try {
+    if (url.startsWith('http')) {
+      const urlObj = new URL(url);
+      urlObj.search = ''; // Supprime les paramètres ?...
+      urlObj.hash = '';   // Supprime les ancres #...
+      url = urlObj.toString().replace(/\/$/, ''); // Uniformisation sans slash final
+    }
+  } catch (e) {
+    // On garde la valeur brute si ce n'est pas une URL complète
+  }
 
   const targetChannel = await interaction.guild.channels.fetch(channelId).catch(() => null);
   if (!targetChannel) return interaction.reply({ content: "❌ ID de salon invalide.", flags: 64 });
@@ -1518,67 +1544,20 @@ async function handleLiveEditSelect(interaction, url) {
 }
 
 async function handleLiveDelete(interaction, url) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  const index = guildConfig.liveConfigs.findIndex(l => l.url === url);
-  if (index !== -1) {
-    guildConfig.liveConfigs.splice(index, 1);
-    saveConfig(configData);
-    return interaction.update({ content: `✅ Configuration supprimée pour **${url}**.`, embeds: [], components: [], flags: 64 });
+  try {
+    const guildConfig = getGuildConfig(interaction.guildId);
+    const index = guildConfig.liveConfigs.findIndex(l => l.url === url);
+    if (index !== -1) {
+      guildConfig.liveConfigs.splice(index, 1);
+      saveConfig(configData);
+      return await interaction.update({ content: `✅ Configuration supprimée pour **${url}**.`, embeds: [], components: [], flags: 64 });
+    }
+    return await interaction.reply({ content: "❌ Erreur lors de la suppression.", flags: 64 });
+  } catch (err) {
+    console.error("❌ Erreur suppression live:", err);
   }
-  return interaction.reply({ content: "❌ Erreur lors de la suppression.", flags: 64 });
 }
 
-module.exports = {
-  // Core functions
-  loadConfig,
-  saveConfig,
-  getFullConfig,
-  getGuildConfig,
-  sendConfigPanel,
-  sendEditConfigPanel,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState,
-  sendBotNamePanel,
-  startVisualTimer,
-  // Live System functions
-  sendLiveConfigPanel,
-  buildLiveConfigModal,
-  saveLiveConfig,
-  sendLiveEditList,
-  handleLiveEditSelect,
-  handleLiveDelete
-  , // <-- VIRGULE MANQUANTE ICI
-  replyAndAutoDelete,
-  formatDate,
-  parseRoleIds,
-  getRoleIds,
-  getTicketCount,
-  setTicketCount,
-  getStaffStats,
-  safeInteractionReply,
-  resetSelectMenuToPlaceholder,
-  getClosingChannelName,
-  incrementStaffStat,
-  getPanelOptionFromChannel,
-  hasConfiguredModRole,
-  canManageTicket,
-  getMissingBotPermissions,
-  ensureBotPermissions,
-  sendLog,
-  sendRolePingMessage,
-  sendMessageWithTimer,
-  buildTicketContextFields,
-  buildStatsPayload,
-  buildCloseConfirmRow,
-  buildChannelIdModal,
-  handleBotNameButtonClick,
-  handleSetBotNicknameModal
-};
 /* ========================= */
 async function handleModal(interaction) {
   try {
