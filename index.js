@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 1.9.6...');
+console.log('🚀 [index.js] Loading version 1.9.7...');
 const {
   Client,
   GatewayIntentBits,
@@ -82,6 +82,11 @@ client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot en ligne : ${client.user.tag}`);
   console.log(`🌍 Serveur(s) : ${client.guilds.cache.size}`);
 
+  // Lancement du premier scan Live une fois que le cache des serveurs est prêt
+  if (client.liveSystem) {
+    client.liveSystem.checkAllLives().catch(err => console.error("❌ LiveSystem Initial Check Error:", err));
+  }
+
   try {
     if (client.configSystem && typeof client.configSystem.resumeTicketState === 'function') {
       await client.configSystem.resumeTicketState(client);
@@ -99,7 +104,7 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 1.9.6] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
+    console.log(`⚡ [VER: 1.9.7] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }

@@ -14,8 +14,7 @@ class LiveSystem {
   }
 
   init() {
-    // Vérification immédiate au lancement pour ne pas attendre 4 minutes
-    this.checkAllLives().catch(err => console.error("❌ LiveSystem Initial Check Error:", err));
+    // La vérification initiale est maintenant gérée par index.js au moment du Ready
     
     setInterval(() => this.checkAllLives().catch(err => console.error("❌ LiveSystem Loop Error:", err)), this.checkInterval); // Catch pour éviter les plantages globaux
     console.log('📡 Système de détection Live initialisé');
@@ -163,18 +162,6 @@ class LiveSystem {
   }
 
   async fetchLiveStatus(platform, url, guild) {
-    try {
-      if (platform === 'twitch') return await this.checkTwitch(url);
-      if (platform === 'youtube') return await this.checkYouTube(url);
-      if (platform === 'tiktok') return await this.checkTikTok(url, guild);
-      return null;
-    } catch (err) {
-      console.error(`❌ Erreur check ${platform}:`, err.message);
-      return null;
-    }
-  }
-
-  async sendLiveNotification(guild, live, liveTitle) {
     try {
       if (platform === 'twitch') return await this.checkTwitch(url);
       if (platform === 'youtube') return await this.checkYouTube(url);
