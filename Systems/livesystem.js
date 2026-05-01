@@ -160,6 +160,113 @@ class LiveSystem {
     }
   }
 
+  async fetchLiveStatus(platform, url, guild) {
+    try {
+      if (platform === 'twitch') return await this.checkTwitch(url);
+      if (platform === 'youtube') return await this.checkYouTube(url);
+      if (platform === 'tiktok') return await this.checkTikTok(url, guild);
+      return null;
+    } catch (err) {
+      console.error(`❌ Erreur check ${platform}:`, err.message);
+      return null;
+    }
+  }
+
+  async sendLiveNotification(guild, live, liveTitle) {
+    const channel = await guild.channels.fetch(live.channelId).catch(() => null);
+    if (!channel || !channel.isTextBased()) return;
+
+    const platformData = {
+      twitch: { color: "#9146FF", name: 'Twitch', emoji: '💜', favicon: 'https://www.twitch.tv/favicon.ico' },
+      youtube: { color: "#FF0000", name: 'YouTube', emoji: '❤️', favicon: 'https://www.youtube.com/favicon.ico' },
+      tiktok: { color: "#010101", name: 'TikTok', emoji: '🖤', favicon: 'https://www.tiktok.com/favicon.ico' }
+    };
+
+    const data = platformData[live.platform];
+    const channelInfo = await this._fetchChannelInfo(live.platform, live.url);
+    const displayName = channelInfo.displayName || live.url.split('/').pop().replace('@', '');
+    const profilePic = channelInfo.profilePictureUrl || data.favicon;
+
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: `${displayName} est en LIVE maintenant !`, iconURL: profilePic })
+      .setTitle(`${data.emoji} ${liveTitle || `Rejoignez le live de ${displayName} sur ${data.name} !`}`)
+      .setURL(live.url.replace(/<|>/g, ''))
+      .addFields(
+        { name: '🎮 Plateforme', value: `\`${data.name}\``, inline: true },
+        { name: '👥 Audience', value: `\`En direct\``, inline: true },
+        { name: '🔗 Lien direct', value: `Cliquez ici`, inline: true }
+      )
+      .setColor(data.color || "#5865F2")
+      .setImage(profilePic)
+      .setFooter({ text: `U-Bot System • ${data.name} Notification`, iconURL: data.favicon })
+      .setTimestamp();
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel(`Visualiser le live sur ${data.name}`)
+        .setURL(live.url.replace(/<|>/g, ''))
+        .setStyle(ButtonStyle.Link)
+    );
+
+    const content = `${live.roleId ? `<@&${live.roleId}>` : ""}\n🔥 **Alerte Détection :** Un nouveau direct vient de commencer !\n${live.url.replace(/<|>/g, '')}`;
+    
+    const message = await channel.send({ content, embeds: [embed], components: [row] }).catch(() => null);
+    
+    if (message) {
+      live.isLive = true;
+      live.lastMessageId = message.id;
+    }
+  }
+
+  async _fetchChannelInfo(platform, url) {
+    let info = { displayName: null, profilePictureUrl: null };
+    try {
+      if (platform === 'twitch') {
+        const token = await this.getTwitchToken();
+        const clientID = process.env.TWITCH_CLIENT_ID;
+        if (!token || !clientID) return info;
+        const username = url.split('/').pop();
+        const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
+            headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
+        });
+        const userData = await userRes.json();
+        if (userData.data?.[0]) {
+            info.displayName = userData.data[0].display_name;
+            info.profilePictureUrl = userData.data[0].profile_image_url;
+        }
+      } else if (platform === 'youtube') {
+        const apiKey = process.env.YOUTUBE_API_KEY;
+        if (!apiKey) return info;
+        const channelId = url.split('/').pop();
+        const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${apiKey}`);
+        const channelData = await channelRes.json();
+        if (channelData.items?.[0]) {
+            info.displayName = channelData.items[0].snippet.title;
+            info.profilePictureUrl = channelData.items[0].snippet.thumbnails.high.url;
+        }
+      } else if (platform === 'tiktok') {
+        const match = url.match(/@([^/?#]+)/);
+        const username = match ? match[1] : url.split('/').pop();
+        const res = await fetch(`https://www.tiktok.com/@${username}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' }
+        });
+        if (res.ok) {
+          const html = await res.text();
+          const stateMatch = html.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">([\s\S]*?)<\/script>/);
+          if (stateMatch) {
+            const jsonData = JSON.parse(stateMatch[1]);
+            const userData = jsonData?.__DEFAULT_SCOPE__?.['webapp.user-detail']?.userInfo?.user;
+            if (userData) {
+              info.profilePictureUrl = userData.avatarLarger || userData.avatarMedium;
+              info.displayName = userData.nickname || username;
+            }
+          }
+        }
+      }
+    } catch (e) { console.error("❌ Info fetch error:", e.message); }
+    return info;
+  }
+
   async cleanupLiveNotification(guild, live) {
     const channel = await guild.channels.fetch(live.channelId).catch(() => null);
     if (channel && channel.isTextBased() && live.lastMessageId) {
