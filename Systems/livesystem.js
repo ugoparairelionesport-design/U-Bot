@@ -218,7 +218,7 @@ class LiveSystem {
     if (message) {
       live.isLive = true;
       live.lastMessageId = message.id;
-      console.log(`✅ [LIVE] Notification envoyée avec succès dans #${channel.name}`);
+      console.log(`✅ [LIVE] Notification envoyée pour ${live.url} dans #${channel.name}`);
     }
   }
 
