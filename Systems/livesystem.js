@@ -1,6 +1,6 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const configSystem = require('./configsystem');
-const fs = require('fs'); // Garder fs et path pour d'autres usages si besoin, mais pas pour config.json directement
+const fs = require('fs');
 const path = require('path');
 const { fetch } = require('undici'); // Utilisation de undici (déjà dans package.json)
 
@@ -14,14 +14,15 @@ class LiveSystem {
   }
 
   init() {
+    // La vérification initiale est maintenant gérée par index.js au moment du Ready
     setInterval(() => this.checkAllLives().catch(err => console.error("❌ LiveSystem Loop Error:", err)), this.checkInterval); // Catch pour éviter les plantages globaux
     console.log('📡 Système de détection Live initialisé');
   }
 
   async checkAllLives() {
-    console.log(`🔍 [LIVE] Vérification en cours pour ${this.client.guilds.cache.size} serveur(s) connectés...`);
+    console.log(`🔍 [LIVE] Vérification en cours pour ${this.client.guilds.cache.size} serveur(s)...`);
 
-    for (const [guildId, guild] of this.client.guilds.cache) { // Itérer sur les guildes connectées
+    for (const [guildId, guild] of this.client.guilds.cache) {
       const guildConfig = configSystem.getGuildConfig(guildId);
       if (!guildConfig.liveConfigs || guildConfig.liveConfigs.length === 0) continue;
 
@@ -55,7 +56,7 @@ class LiveSystem {
     }
 
     if (liveTitle && !live.isLive) {
-        console.log(`🚀 [LIVE] Tentative d'envoi de notification pour ${live.url} dans #${live.channelId}...`);
+        console.log(`🚀 [LIVE] Tentative d'envoi de notification pour ${live.url}...`);
         await this.sendLiveNotification(guild, live, liveTitle);
     } else if (liveTitle && live.isLive) {
         console.log(`ℹ️ [LIVE] Notification déjà active pour ${live.url} (isLive: true).`);
@@ -63,9 +64,6 @@ class LiveSystem {
       console.log(`🧹 [LIVE] Fin de live détectée pour ${live.url}.`);
       await this.cleanupLiveNotification(guild, live);
     }
-
-    // Sauvegarder la configuration après tout changement de statut live
-    configSystem.saveConfig(configSystem.getFullConfig());
   }
 
   async getTwitchToken() {
@@ -282,6 +280,7 @@ class LiveSystem {
     
     live.isLive = false;
     live.lastMessageId = null;
+    // La sauvegarde est maintenant gérée par processLiveCheck
   }
 }
 
