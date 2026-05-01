@@ -257,13 +257,25 @@ class LiveSystem {
 
         try {
           const res = await fetch(`https://www.tiktok.com/@${username}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+            headers: { 
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+              'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7'
+            }
           });
           if (res.ok) {
             const html = await res.text();
-            // Extraction de l'image de profil via les balises OpenGraph
-            const avatarMatch = html.match(/<meta property="og:image" content="([^"]+)"/);
-            if (avatarMatch) info.profilePictureUrl = avatarMatch[1];
+            
+            // Tentative 1: Extraction via l'objet JSON interne (avatarLarger)
+            const jsonAvatar = html.match(/"avatarLarger":"([^"]+)"/) || html.match(/"avatarThumb":"([^"]+)"/);
+            if (jsonAvatar) {
+              // Nettoyage des caractères unicode (\u002F -> /)
+              info.profilePictureUrl = jsonAvatar[1].replace(/\\u002F/g, '/');
+            } else {
+              // Tentative 2: Balise OpenGraph classique
+              const ogMatch = html.match(/<meta property="og:image" content="([^"]+)"/);
+              if (ogMatch) info.profilePictureUrl = ogMatch[1];
+            }
             
             // Extraction du nom d'affichage via le titre de la page
             const titleMatch = html.match(/<title>([^<]+)<\/title>/);
