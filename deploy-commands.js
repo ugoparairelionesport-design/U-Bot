@@ -1,4 +1,4 @@
-const { REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { REST, Routes, SlashCommandBuilder, ChannelType } = require('discord.js');
 require('dotenv').config();
 
 const commands = [
@@ -49,7 +49,8 @@ const commands = [
     .addChannelOption(opt => 
       opt.setName('salon')
         .setDescription('Salon où envoyer la notification')
-        .setRequired(true))
+        .setRequired(true)
+        .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
     .addStringOption(opt => 
       opt.setName('message')
         .setDescription('Message personnalisé pour le test')
