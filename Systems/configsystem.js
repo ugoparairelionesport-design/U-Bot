@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 1.7.2...');
+console.log('🚀 [configsystem.js] Loading version 1.7.6...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -37,7 +37,7 @@ const defaultGuildSettings = {
   staffStats: {},
   pendingClosures: {},
   pendingDeletions: {},
-  liveConfigs: [] // Liste des chaînes à surveiller : { platform, url, text, roleId, channelId, lastMessageId, isLive }
+  securityHashtag: null // Ajout du hashtag de sécurité par défaut
 };
 
 function loadConfig() {
@@ -697,7 +697,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.7.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.7.6] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1835,102 +1835,7 @@ async function handleSetBotNicknameModal(interaction) {
   }
 }
 
-/* ========================= */
-// CONFIGURATION LIVE
-
-async function sendLiveConfigPanel(interaction) {
-  const embed = new EmbedBuilder()
-    .setTitle("📡 Configuration des Alertes Live")
-    .setDescription(
-      "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
-      "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
-    )
-    .setColor("#5865F2")
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('live_config_twitch').setLabel('Twitch').setStyle(ButtonStyle.Primary).setEmoji('1499576322869956668'),
-    new ButtonBuilder().setCustomId('live_config_youtube').setLabel('YouTube').setStyle(ButtonStyle.Danger).setEmoji('1499576375911383110'),
-    new ButtonBuilder().setCustomId('live_config_tiktok').setLabel('TikTok').setStyle(ButtonStyle.Secondary).setEmoji('1499576285951823902')
-  );
-
-  return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
-}
-
-function buildLiveConfigModal(platform) {
-  const colors = { twitch: 'Violet', youtube: 'Rouge', tiktok: 'Noir' };
-  
-  return new ModalBuilder()
-    .setCustomId(`modal_live_config_${platform}`)
-    .setTitle(`Alerte ${platform.charAt(0).toUpperCase() + platform.slice(1)}`)
-    .addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('channel_url')
-          .setLabel('Lien de la chaîne / Pseudo')
-          .setPlaceholder('https://twitch.tv/nom_du_streamer')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('notif_channel_id')
-          .setLabel('ID du salon de notification')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('role_id')
-          .setLabel('ID du rôle à mentionner (Optionnel)')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('security_hashtag')
-          .setLabel('Hashtag de sécurité (Ex: #live)')
-          .setPlaceholder('Optionnel: Le live doit contenir ce hashtag pour être notifié')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-      )
-    );
-}
-
-async function saveLiveConfig(interaction, platform) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  const url = interaction.fields.getTextInputValue('channel_url').trim();
-  const channelId = interaction.fields.getTextInputValue('notif_channel_id').trim();
-  const roleId = interaction.fields.getTextInputValue('role_id').trim();
-  const securityHashtag = interaction.fields.getTextInputValue('security_hashtag').trim();
-
-  // Vérification basique du salon
-  const targetChannel = await interaction.guild.channels.fetch(channelId).catch(() => null);
-  if (!targetChannel) return interaction.reply({ content: "❌ ID de salon invalide.", flags: 64 });
-
-  const newConfig = {
-    platform,
-    url,
-    channelId,
-    roleId: roleId || null,
-    securityHashtag: securityHashtag || null,
-    lastMessageId: null,
-    isLive: false
-  };
-
-  // On remplace si la plateforme existe déjà pour ce lien, sinon on ajoute
-  const index = guildConfig.liveConfigs.findIndex(c => c.url === url);
-  if (index !== -1) guildConfig.liveConfigs[index] = newConfig;
-  else guildConfig.liveConfigs.push(newConfig);
-
-  guildConfig.securityHashtag = securityHashtag || null; // Sauvegarde le hashtag de sécurité au niveau du serveur
-
-  saveConfig(configData);
-  return interaction.reply({ content: `✅ Configuration live enregistrée pour **${platform}** (${url}) !`, flags: 64 });
-}
-
 module.exports = {
-  getGuildConfig, // <-- C'est cette ligne qui manquait !
   sendConfigPanel,
   sendEditConfigPanel,
   handleButtons,
@@ -1941,8 +1846,13 @@ module.exports = {
   showStaffStats,
   resumeTicketState,
   sendBotNamePanel,
-  startVisualTimer,
-  sendLiveConfigPanel,
-  buildLiveConfigModal,
-  saveLiveConfig
+  startVisualTimer
 };
+
+// Exportation des fonctions du LiveSystem
+module.exports.sendLiveConfigPanel = sendLiveConfigPanel;
+module.exports.buildLiveConfigModal = buildLiveConfigModal;
+module.exports.saveLiveConfig = saveLiveConfig;
+module.exports.sendLiveEditList = sendLiveEditList;
+module.exports.handleLiveEditSelect = handleLiveEditSelect;
+module.exports.handleLiveDelete = handleLiveDelete;

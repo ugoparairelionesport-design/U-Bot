@@ -31,6 +31,10 @@ const commands = [
     .setDescription('Configurer les alertes lives (Twitch, YT, TikTok)'),
 
   new SlashCommandBuilder()
+    .setName('modif_config_live')
+    .setDescription('Modifier ou supprimer des configurations de live existantes'),
+
+  new SlashCommandBuilder()
     .setName('test_live')
     .setDescription('Forcer l\'envoi d\'une notification de live (Test)')
     .addStringOption(opt => 

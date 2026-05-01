@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const configSystem = require('./configsystem');
 const fs = require('fs');
-const path = require('path');
+const path = require('path'); // Ajout de path pour fs.readFileSync
 const { fetch } = require('undici'); // Utilisation de undici (déjà dans package.json)
 
 class LiveSystem {
@@ -14,6 +14,9 @@ class LiveSystem {
   }
 
   init() {
+    // Vérification immédiate au lancement pour ne pas attendre 4 minutes
+    this.checkAllLives().catch(err => console.error("❌ LiveSystem Initial Check Error:", err));
+    
     setInterval(() => this.checkAllLives().catch(err => console.error("❌ LiveSystem Loop Error:", err)), this.checkInterval); // Catch pour éviter les plantages globaux
     console.log('📡 Système de détection Live initialisé');
   }
@@ -53,12 +56,18 @@ class LiveSystem {
 
   async processLiveCheck(guild, live) {
     let liveTitle = await this.fetchLiveStatus(live.platform, live.url);
-
-    // Vérification du hashtag de sécurité si configuré
     const guildConfig = configSystem.getGuildConfig(guild.id);
-    if (liveTitle && guildConfig.securityHashtag) {
-      if (!liveTitle.includes(guildConfig.securityHashtag)) {
-        liveTitle = null; // Le live est ignoré car le hashtag n'est pas présent
+    
+    // On utilise le hashtag spécifique à ce live ou le global du serveur
+    const hashtag = live.securityHashtag || guildConfig.securityHashtag;
+
+    if (liveTitle && hashtag) {
+      const cleanTitle = liveTitle.toLowerCase();
+      const cleanHashtag = hashtag.toLowerCase().trim();
+      
+      if (!cleanTitle.includes(cleanHashtag)) {
+        console.log(`ℹ️ [LIVE] Live de ${live.url} ignoré : Hashtag "${cleanHashtag}" non trouvé dans le titre.`);
+        liveTitle = null; 
       }
     }
 

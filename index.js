@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 1.7.2...');
+console.log('🚀 [index.js] Loading version 1.7.6...');
 const {
   Client,
   GatewayIntentBits,
@@ -99,7 +99,7 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 1.7.2] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
+    console.log(`⚡ [VER: 1.7.6] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }
@@ -107,7 +107,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live', 'test_live', 'staff_stats'];
+      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live', 'modif_config_live', 'test_live', 'staff_stats'];
       
       if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -169,6 +169,10 @@ client.on('interactionCreate', async interaction => {
         return client.configSystem.sendLiveConfigPanel(interaction);
       }
 
+      if (interaction.commandName === 'modif_config_live') {
+        return client.configSystem.sendLiveEditList(interaction);
+      }
+
       if (interaction.commandName === 'test_live') {
         const platform = interaction.options.getString('plateforme');
         const url = interaction.options.getString('url');
@@ -197,7 +201,6 @@ client.on('interactionCreate', async interaction => {
 
     /* ===== BUTTON / SELECT ===== */
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
-      // On vérifie d'abord si c'est un bouton du système de maintenance
       if (interaction.customId.startsWith('maintenance_') && client.maintenance) {
         return await client.maintenance.handleButton(interaction);
       }
@@ -205,6 +208,24 @@ client.on('interactionCreate', async interaction => {
       if (interaction.customId.startsWith('live_config_')) {
         const platform = interaction.customId.replace('live_config_', '');
         return interaction.showModal(client.configSystem.buildLiveConfigModal(platform));
+      }
+
+      if (interaction.customId === 'live_edit_select') {
+        const url = interaction.values[0];
+        return client.configSystem.handleLiveEditSelect(interaction, url);
+      }
+
+      if (interaction.customId.startsWith('live_btn_edit_')) {
+        const url = interaction.customId.replace('live_btn_edit_', '');
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        const live = guildConfig.liveConfigs.find(l => l.url === url);
+        if (!live) return interaction.reply({ content: "❌ Configuration introuvable.", flags: 64 });
+        return interaction.showModal(client.configSystem.buildLiveConfigModal(live.platform, live));
+      }
+
+      if (interaction.customId.startsWith('live_btn_del_')) {
+        const url = interaction.customId.replace('live_btn_del_', '');
+        return client.configSystem.handleLiveDelete(interaction, url);
       }
 
       return await client.configSystem.handleButtons(interaction);
