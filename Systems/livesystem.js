@@ -1,8 +1,8 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const configSystem = require('./configsystem');
-const fs = require('fs'); // Garder fs et path pour d'autres usages si besoin, mais pas pour config.json directement
+const fs = require('fs');
 const path = require('path');
-const { fetch } = require('undici');
+const { fetch } = require('undici'); // Utilisation de undici (déjà dans package.json)
 
 class LiveSystem {
   constructor(client) {
@@ -56,7 +56,7 @@ class LiveSystem {
     }
 
     if (liveTitle && !live.isLive) {
-        console.log(`🚀 [LIVE] Tentative d'envoi de notification pour ${live.url} dans #${live.channelId}...`);
+        console.log(`🚀 [LIVE] Tentative d'envoi de notification pour ${live.url}...`);
         await this.sendLiveNotification(guild, live, liveTitle);
     } else if (liveTitle && live.isLive) {
         console.log(`ℹ️ [LIVE] Notification déjà active pour ${live.url} (isLive: true).`);
@@ -64,10 +64,6 @@ class LiveSystem {
       console.log(`🧹 [LIVE] Fin de live détectée pour ${live.url}.`);
       await this.cleanupLiveNotification(guild, live);
     }
-
-    // Sauvegarder la configuration après tout changement de statut live
-    // Cette sauvegarde est maintenant gérée une seule fois à la fin de checkAllLives
-    // configSystem.saveConfig(configSystem.getFullConfig()); 
   }
 
   async getTwitchToken() {
