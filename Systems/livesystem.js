@@ -154,7 +154,13 @@ class LiveSystem {
       if (!isLive) return null;
 
       const titleMatch = html.match(/"title":"([^"]+)"/) || html.match(/"share_title":"([^"]+)"/);
-      return titleMatch ? titleMatch[1] : "En direct sur TikTok";
+      if (titleMatch) {
+        // Décodage des caractères Unicode (\u0023 -> #, etc.) pour la détection du hashtag
+        return titleMatch[1].replace(/\\u([0-9a-fA-F]{4})/g, (match, grp) => {
+          return String.fromCharCode(parseInt(grp, 16));
+        }).replace(/\\u002F/g, '/');
+      }
+      return "En direct sur TikTok";
     } catch (e) {
       return null;
     }
