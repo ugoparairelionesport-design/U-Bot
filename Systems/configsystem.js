@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.0.5...');
+console.log('🚀 [configsystem.js] Loading version 2.0.6...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -65,10 +65,6 @@ function loadConfig() {
 
 function saveConfig(data) {
   fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
-}
-
-function getFullConfig() {
-  return configData;
 }
 
 let configData = loadConfig();
@@ -228,6 +224,14 @@ async function safeInteractionReply(interaction, payload, deferred = false) {
       return null;
     }
   }
+}
+
+async function replyAndAutoDelete(interaction, payload, durationMs = 300000) {
+  const message = await safeInteractionReply(interaction, payload);
+  if (message && durationMs > 0 && (!payload.flags || payload.flags !== 64)) {
+    setTimeout(() => message.delete().catch(() => {}), durationMs);
+  }
+  return message;
 }
 
 async function resetSelectMenuToPlaceholder(interaction) {
@@ -702,7 +706,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.0.5] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.0.6] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -2031,41 +2035,4 @@ module.exports = {
   handleLiveEditSelect,
   handleLiveDelete,
   replyAndAutoDelete
-};
-module.exports = {
-  getGuildConfig,
-  getFullConfig,
-  saveConfig,
-  sendConfigPanel,
-  sendEditConfigPanel,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState,
-  sendBotNamePanel,
-  startVisualTimer,
-  sendLiveConfigPanel,
-  buildLiveConfigModal,
-  saveLiveConfig,
-  sendLiveEditList,
-  handleLiveEditSelect,
-  handleLiveDelete,
-  replyAndAutoDelete
-};
-module.exports = {
-  getGuildConfig,
-  sendConfigPanel,
-  sendEditConfigPanel,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState,
-  sendBotNamePanel,
-  startVisualTimer
 };
