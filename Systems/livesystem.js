@@ -52,11 +52,19 @@ class LiveSystem {
   }
 
   async processLiveCheck(guild, live) {
-    const isCurrentlyLive = await this.fetchLiveStatus(live.platform, live.url);
+    let liveTitle = await this.fetchLiveStatus(live.platform, live.url);
 
-    if (isCurrentlyLive && !live.isLive) {
-      await this.sendLiveNotification(guild, live);
-    } else if (!isCurrentlyLive && live.isLive) {
+    // Vérification du hashtag de sécurité si configuré
+    const guildConfig = configSystem.getGuildConfig(guild.id);
+    if (liveTitle && guildConfig.securityHashtag) {
+      if (!liveTitle.includes(guildConfig.securityHashtag)) {
+        liveTitle = null; // Le live est ignoré car le hashtag n'est pas présent
+      }
+    }
+
+    if (liveTitle && !live.isLive) {
+      await this.sendLiveNotification(guild, live, liveTitle);
+    } else if (!liveTitle && live.isLive) {
       await this.cleanupLiveNotification(guild, live);
     }
   }
@@ -86,7 +94,7 @@ class LiveSystem {
       headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
-    return data.data && data.data.length > 0;
+    return data.data && data.data.length > 0 ? data.data[0].title : null;
   }
 
   async checkYouTube(url) {
@@ -130,10 +138,13 @@ class LiveSystem {
       if (!res.ok) return false;
       const html = await res.text();
       
-      // Si la page contient "room_id" et n'est pas une redirection vers le profil, c'est probablement live
-      return html.includes('"room_id":') && !html.includes('"live_status":0');
+      const isLive = html.includes('"room_id":') && !html.includes('"live_status":0');
+      if (!isLive) return null;
+
+      const titleMatch = html.match(/"title":"([^"]+)"/) || html.match(/"share_title":"([^"]+)"/);
+      return titleMatch ? titleMatch[1] : "En direct sur TikTok";
     } catch (e) {
-      return false;
+      return null;
     }
   }
 
@@ -149,7 +160,7 @@ class LiveSystem {
     }
   }
 
-  async sendLiveNotification(guild, live) {
+  async sendLiveNotification(guild, live, liveTitle) {
     const channel = await guild.channels.fetch(live.channelId).catch(() => null);
     if (!channel || !channel.isTextBased()) return;
 
@@ -169,8 +180,9 @@ class LiveSystem {
         name: `${displayName} est en LIVE maintenant !`, 
         iconURL: profilePic
       })
-      .setTitle(`${data.emoji} ${live.text || 'Rejoignez le stream !'}`)
-      .setURL(live.url)
+      .setTitle(`${data.emoji} ${liveTitle}`)
+      // Nettoyage de l'URL pour éviter les erreurs de validation Discord (supprime < et >)
+      .setURL(live.url.replace(/<|>/g, ''))
       .addFields(
         { name: '🎮 Plateforme', value: `\`${data.name}\``, inline: true },
         { name: '👥 Audience', value: `\`En direct\``, inline: true },
@@ -184,7 +196,7 @@ class LiveSystem {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setLabel(`Visualiser le live sur ${data.name}`)
-        .setURL(live.url)
+        .setURL(live.url.replace(/<|>/g, '')) // Nettoyage aussi pour le bouton
         .setStyle(ButtonStyle.Link)
     );
 

@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 1.6.3...');
+console.log('🚀 [configsystem.js] Loading version 1.6.6...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -697,7 +697,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.6.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.6.6] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1893,6 +1893,14 @@ function buildLiveConfigModal(platform) {
           .setLabel('ID du rôle à mentionner (Optionnel)')
           .setStyle(TextInputStyle.Short)
           .setRequired(false)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('security_hashtag')
+          .setLabel('Hashtag de sécurité (Ex: #live)')
+          .setPlaceholder('Optionnel: Le live doit contenir ce hashtag pour être notifié')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
       )
     );
 }
@@ -1903,6 +1911,7 @@ async function saveLiveConfig(interaction, platform) {
   const text = interaction.fields.getTextInputValue('notif_text').trim();
   const channelId = interaction.fields.getTextInputValue('notif_channel_id').trim();
   const roleId = interaction.fields.getTextInputValue('role_id').trim();
+  const securityHashtag = interaction.fields.getTextInputValue('security_hashtag').trim();
 
   // Vérification basique du salon
   const targetChannel = await interaction.guild.channels.fetch(channelId).catch(() => null);
@@ -1914,6 +1923,7 @@ async function saveLiveConfig(interaction, platform) {
     text,
     channelId,
     roleId: roleId || null,
+    securityHashtag: securityHashtag || null,
     lastMessageId: null,
     isLive: false
   };
@@ -1922,6 +1932,8 @@ async function saveLiveConfig(interaction, platform) {
   const index = guildConfig.liveConfigs.findIndex(c => c.url === url);
   if (index !== -1) guildConfig.liveConfigs[index] = newConfig;
   else guildConfig.liveConfigs.push(newConfig);
+
+  guildConfig.securityHashtag = securityHashtag || null; // Sauvegarde le hashtag de sécurité au niveau du serveur
 
   saveConfig(configData);
   return interaction.reply({ content: `✅ Configuration live enregistrée pour **${platform}** (${url}) !`, flags: 64 });
