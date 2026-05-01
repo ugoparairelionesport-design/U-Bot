@@ -28,7 +28,36 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('config_live')
-    .setDescription('Configurer les alertes lives (Twitch, YT, TikTok)')
+    .setDescription('Configurer les alertes lives (Twitch, YT, TikTok)'),
+
+  new SlashCommandBuilder()
+    .setName('test_live')
+    .setDescription('Forcer l\'envoi d\'une notification de live (Test)')
+    .addStringOption(opt => 
+      opt.setName('plateforme')
+        .setDescription('La plateforme à tester')
+        .setRequired(true)
+        .addChoices(
+          { name: 'Twitch', value: 'twitch' },
+          { name: 'YouTube', value: 'youtube' },
+          { name: 'TikTok', value: 'tiktok' }
+        ))
+    .addStringOption(opt => 
+      opt.setName('url')
+        .setDescription('Lien de la chaîne pour le test')
+        .setRequired(true))
+    .addChannelOption(opt => 
+      opt.setName('salon')
+        .setDescription('Salon où envoyer la notification')
+        .setRequired(true))
+    .addStringOption(opt => 
+      opt.setName('message')
+        .setDescription('Message personnalisé pour le test')
+        .setRequired(false))
+    .addRoleOption(opt => 
+      opt.setName('role')
+        .setDescription('Rôle à mentionner dans le test')
+        .setRequired(false))
 ].map(cmd => cmd.toJSON());
 
 async function deployCommands() {

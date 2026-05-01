@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 1.4.8...');
+console.log('🚀 [index.js] Loading version 1.5.5...');
 const {
   Client,
   GatewayIntentBits,
@@ -99,7 +99,7 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 1.4.8] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
+    console.log(`⚡ [VER: 1.5.5] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }
@@ -107,7 +107,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live'];
+      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live', 'test_live'];
       
       if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -167,6 +167,31 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'config_live') {
         return client.configSystem.sendLiveConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'test_live') {
+        const platform = interaction.options.getString('plateforme');
+        const url = interaction.options.getString('url');
+        const salon = interaction.options.getChannel('salon');
+        const text = interaction.options.getString('message') || "Ceci est un test de notification live !";
+        const role = interaction.options.getRole('role');
+
+        const testLiveObj = {
+          platform,
+          url,
+          text,
+          channelId: salon.id,
+          roleId: role ? role.id : null,
+          isLive: false,
+          lastMessageId: null
+        };
+
+        if (client.liveSystem) {
+          await client.liveSystem.sendLiveNotification(interaction.guild, testLiveObj);
+          return await interaction.reply({ content: `✅ Notification de test envoyée dans <#${salon.id}> !`, flags: 64 });
+        } else {
+          return await interaction.reply({ content: "❌ Système Live non initialisé.", flags: 64 });
+        }
       }
     }
 
