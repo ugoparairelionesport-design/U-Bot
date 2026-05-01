@@ -58,6 +58,10 @@ class LiveSystem {
     let liveTitle = await this.fetchLiveStatus(live.platform, live.url, guild);
     const guildConfig = configSystem.getGuildConfig(guild.id);
     
+    if (liveTitle) {
+        console.log(`📡 [LIVE] Détecté pour ${live.url} | Titre: "${liveTitle}"`);
+    }
+
     // On utilise le hashtag spécifique à ce live ou le global du serveur
     const hashtag = live.securityHashtag || guildConfig.securityHashtag;
 
@@ -66,7 +70,7 @@ class LiveSystem {
       const cleanHashtag = hashtag.toLowerCase().trim();
       
       if (!cleanTitle.includes(cleanHashtag)) {
-        console.log(`ℹ️ [LIVE] Live de ${live.url} ignoré : Hashtag "${cleanHashtag}" non trouvé dans le titre.`);
+        console.log(`ℹ️ [LIVE] Live de ${live.url} ignoré : Hashtag "${cleanHashtag}" absent du titre.`);
         liveTitle = null; 
       }
     }
@@ -147,11 +151,15 @@ class LiveSystem {
         }
       });
       
-      if (!res.ok) return false;
+      if (!res.ok) {
+        console.error(`❌ [TIKTOK] Erreur HTTP ${res.status} pour ${username}`);
+        return false;
+      }
+
       const html = await res.text();
       
       const isLive = html.includes('"room_id":') && !html.includes('"live_status":0');
-      if (!isLive) return null;
+      if (!isLive) return null; // Retourne null si pas de live détecté dans le HTML
 
       const titleMatch = html.match(/"title":"([^"]+)"/) || html.match(/"share_title":"([^"]+)"/);
       if (titleMatch) {
