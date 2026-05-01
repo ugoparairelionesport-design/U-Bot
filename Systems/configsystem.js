@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 1.9.0...');
+console.log('🚀 [configsystem.js] Loading version 1.9.1...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -130,6 +130,14 @@ function startVisualTimer(message, deleteAt) {
     }
     await updateFooter();
   }, 100);
+}
+
+async function replyAndAutoDelete(interaction, payload, durationMs = 300000) {
+  const message = await safeInteractionReply(interaction, payload);
+  if (message && durationMs > 0 && payload.flags !== 64) {
+    setTimeout(() => message.delete().catch(() => {}), durationMs);
+  }
+  return message;
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
@@ -698,7 +706,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.9.0] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.9.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
