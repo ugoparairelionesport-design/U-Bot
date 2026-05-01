@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 1.8.9...');
+console.log('🚀 [configsystem.js] Loading version 1.9.0...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -224,14 +224,6 @@ async function safeInteractionReply(interaction, payload, deferred = false) {
       return null;
     }
   }
-}
-
-async function replyAndAutoDelete(interaction, payload, durationMs = 300000) {
-  const message = await safeInteractionReply(interaction, payload);
-  if (message && durationMs > 0 && payload.flags !== 64) {
-    setTimeout(() => message.delete().catch(() => {}), durationMs);
-  }
-  return message;
 }
 
 async function resetSelectMenuToPlaceholder(interaction) {
@@ -706,7 +698,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.8.9] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.9.0] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
