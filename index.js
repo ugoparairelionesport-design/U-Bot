@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 1.9.8...');
+console.log('🚀 [index.js] Loading version 1.9.9...');
 const {
   Client,
   GatewayIntentBits,
