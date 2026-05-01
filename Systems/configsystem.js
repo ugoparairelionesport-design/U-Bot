@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 1.9.4...');
+console.log('🚀 [configsystem.js] Loading version 1.9.6...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -67,6 +67,10 @@ function saveConfig(data) {
   fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
 }
 
+function getFullConfig() {
+  return configData;
+}
+
 let configData = loadConfig();
 
 function getGuildConfig(guildId) {
@@ -130,14 +134,6 @@ function startVisualTimer(message, deleteAt) {
     }
     await updateFooter();
   }, 100);
-}
-
-async function replyAndAutoDelete(interaction, payload, durationMs = 300000) {
-  const message = await safeInteractionReply(interaction, payload);
-  if (message && durationMs > 0 && payload.flags !== 64) {
-    setTimeout(() => message.delete().catch(() => {}), durationMs);
-  }
-  return message;
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
@@ -706,7 +702,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.9.4] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.9.6] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1541,8 +1537,7 @@ module.exports = {
   saveLiveConfig,
   sendLiveEditList,
   handleLiveEditSelect,
-  handleLiveDelete,
-  replyAndAutoDelete // Ajout de la fonction manquante
+  handleLiveDelete
 };
 /* ========================= */
 async function handleModal(interaction) {
@@ -2016,6 +2011,8 @@ async function handleSetBotNicknameModal(interaction) {
 
 module.exports = {
   getGuildConfig,
+  getFullConfig,
+  saveConfig,
   sendConfigPanel,
   sendEditConfigPanel,
   handleButtons,

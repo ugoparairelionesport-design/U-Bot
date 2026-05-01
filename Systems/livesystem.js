@@ -22,39 +22,18 @@ class LiveSystem {
   }
 
   async checkAllLives() {
-    // On lit le fichier de config à chaque fois pour éviter le cache require
-    let config;
-    try {
-      const configPath = path.join(__dirname, '../Data/config.json');
-      config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    } catch (e) { return; }
-    
-    if (!config || !config.guilds) return;
+    console.log(`🔍 [LIVE] Vérification en cours pour ${this.client.guilds.cache.size} serveur(s)...`);
 
-    console.log(`🔍 [LIVE] Vérification en cours pour ${Object.keys(config.guilds).length} serveur(s)...`);
-
-    let modified = false;
-    for (const guildId of Object.keys(config.guilds)) {
-      const guildConfig = config.guilds[guildId];
+    for (const [guildId, guild] of this.client.guilds.cache) {
+      const guildConfig = configSystem.getGuildConfig(guildId);
       if (!guildConfig.liveConfigs || guildConfig.liveConfigs.length === 0) continue;
 
       console.log(`📡 [LIVE] ${guildConfig.liveConfigs.length} config(s) trouvée(s) pour le serveur ${guildId}`);
-      const guild = this.client.guilds.cache.get(guildId);
-      if (!guild) continue;
 
       for (const live of guildConfig.liveConfigs) {
-        const wasLive = live.isLive;
-        const msgId = live.lastMessageId;
-
         await this.processLiveCheck(guild, live);
-        
-        if (wasLive !== live.isLive || msgId !== live.lastMessageId) {
-          modified = true;
-        }
       }
     }
-
-    if (modified) this.saveUpdate(config);
   }
 
   async processLiveCheck(guild, live) {
@@ -79,8 +58,12 @@ class LiveSystem {
     }
 
     if (liveTitle && !live.isLive) {
-      await this.sendLiveNotification(guild, live, liveTitle);
+        console.log(`🚀 [LIVE] Tentative d'envoi de notification pour ${live.url}...`);
+        await this.sendLiveNotification(guild, live, liveTitle);
+    } else if (liveTitle && live.isLive) {
+        console.log(`ℹ️ [LIVE] Notification déjà active pour ${live.url} (isLive: true).`);
     } else if (!liveTitle && live.isLive) {
+      console.log(`🧹 [LIVE] Fin de live détectée pour ${live.url}.`);
       await this.cleanupLiveNotification(guild, live);
     }
   }
@@ -105,7 +88,7 @@ class LiveSystem {
     const clientID = process.env.TWITCH_CLIENT_ID;
     if (!token || !clientID) return false;
 
-    const username = url.split('/').pop();
+    const username = url.replace(/<|>/g, '').split('/').pop();
     const res = await fetch(`https://api.twitch.tv/helix/streams?user_login=${username}`, {
       headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
     });
@@ -118,14 +101,15 @@ class LiveSystem {
     if (!apiKey) return null;
 
     // Extraction propre de l'ID ou du handle
-    const handleMatch = url.match(/@([^/?]+)/);
+    const cleanUrl = url.replace(/<|>/g, '');
+    const handleMatch = cleanUrl.match(/@([^/?]+)/);
     let queryUrl;
 
     if (handleMatch) {
       // Si c'est un @pseudo, on cherche via search (nécessite que la chaîne soit indexée)
-      queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${handleMatch[1]}&type=video&eventType=live&key=${apiKey}`;
+      queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${handleMatch[1]}&type=video&eventType=live&maxResults=1&key=${apiKey}`;
     } else {
-      const channelId = url.split('/').pop();
+      const channelId = cleanUrl.split('/').pop();
       queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&eventType=live&key=${apiKey}`;
     }
 
@@ -143,8 +127,9 @@ class LiveSystem {
 
     try {
       // Extraction plus robuste du pseudo (gère @pseudo ou juste le lien)
-      const match = url.match(/@([^/?#]+)/);
-      const username = match ? match[1] : url.split('/').pop();
+      const cleanUrl = url.replace(/<|>/g, '');
+      const match = cleanUrl.match(/@([^/?#]+)/);
+      const username = match ? match[1] : cleanUrl.split('/').pop();
       if (!username) return false;
 
       // On tente d'accéder à la page de live directement
@@ -190,8 +175,28 @@ class LiveSystem {
   }
 
   async sendLiveNotification(guild, live, liveTitle) {
+    try {
+      if (platform === 'twitch') return await this.checkTwitch(url);
+      if (platform === 'youtube') return await this.checkYouTube(url);
+      if (platform === 'tiktok') return await this.checkTikTok(url, guild);
+      return null;
+    } catch (err) {
+      console.error(`❌ Erreur check ${platform}:`, err.message);
+      return null;
+    }
+  }
+
+  async sendLiveNotification(guild, live, liveTitle) {
+    if (!live.channelId) {
+        console.error(`❌ [LIVE] Aucun salon de destination (channelId) configuré pour ${live.url}`);
+        return;
+    }
+
     const channel = await guild.channels.fetch(live.channelId).catch(() => null);
-    if (!channel || !channel.isTextBased()) return;
+    if (!channel || !channel.isTextBased()) {
+        console.error(`❌ [LIVE] Salon ${live.channelId} introuvable ou inaccessible pour ${live.url}`);
+        return;
+    }
 
     const platformData = {
       twitch: { color: "#9146FF", name: 'Twitch', emoji: '💜', favicon: 'https://www.twitch.tv/favicon.ico' },
@@ -232,17 +237,22 @@ class LiveSystem {
     if (message) {
       live.isLive = true;
       live.lastMessageId = message.id;
+      configSystem.saveConfig(configSystem.getFullConfig());
+      console.log(`✅ [LIVE] Notification envoyée avec succès dans #${channel.name}`);
+    } else {
+      console.error(`❌ [LIVE] Échec de l'envoi du message dans #${channel.name}. Vérifiez mes permissions (Envoyer des messages, Intégrer des liens).`);
     }
   }
 
   async _fetchChannelInfo(platform, url) {
     let info = { displayName: null, profilePictureUrl: null };
     try {
+      const cleanUrl = url.replace(/<|>/g, '');
       if (platform === 'twitch') {
         const token = await this.getTwitchToken();
         const clientID = process.env.TWITCH_CLIENT_ID;
         if (!token || !clientID) return info;
-        const username = url.split('/').pop();
+        const username = cleanUrl.split('/').pop();
         const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
             headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
         });
@@ -254,7 +264,7 @@ class LiveSystem {
       } else if (platform === 'youtube') {
         const apiKey = process.env.YOUTUBE_API_KEY;
         if (!apiKey) return info;
-        const channelId = url.split('/').pop();
+        const channelId = cleanUrl.split('/').pop();
         const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${apiKey}`);
         const channelData = await channelRes.json();
         if (channelData.items?.[0]) {
@@ -262,8 +272,8 @@ class LiveSystem {
             info.profilePictureUrl = channelData.items[0].snippet.thumbnails.high.url;
         }
       } else if (platform === 'tiktok') {
-        const match = url.match(/@([^/?#]+)/);
-        const username = match ? match[1] : url.split('/').pop();
+        const match = cleanUrl.match(/@([^/?#]+)/);
+        const username = match ? match[1] : cleanUrl.split('/').pop();
         const res = await fetch(`https://www.tiktok.com/@${username}`, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' }
         });
@@ -293,19 +303,7 @@ class LiveSystem {
     
     live.isLive = false;
     live.lastMessageId = null;
-  }
-
-  saveUpdate(config) {
-    // On utilise une lecture/écriture synchrone fraîche pour éviter les conflits de cache
-    // et s'assurer que les modifications du LiveSystem sont persistantes.
-    try {
-      const configPath = path.join(__dirname, '../Data/config.json');
-      // On ne lit pas le fichier à nouveau ici, on utilise l'objet 'config' passé en paramètre
-      // qui a été mis à jour dans checkAllLives.
-      fs.writeFileSync(configPath, JSON.stringify(config, null, 2)); 
-    } catch (err) {
-      console.error("❌ Erreur sauvegarde LiveSystem:", err);
-    }
+    configSystem.saveConfig(configSystem.getFullConfig());
   }
 }
 
