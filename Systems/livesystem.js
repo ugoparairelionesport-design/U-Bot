@@ -251,10 +251,27 @@ class LiveSystem {
             info.profilePictureUrl = channelData.items[0].snippet.thumbnails.high.url;
         }
       } else if (platform === 'tiktok') {
-        // Pas d'API fiable pour la photo de profil. On utilise un générique.
         const usernameMatch = url.match(/@([^/?#]+)/);
-        info.displayName = usernameMatch ? usernameMatch[1] : url.split('/').pop();
-        info.profilePictureUrl = `https://www.tiktok.com/favicon.ico`; // Favicon TikTok générique
+        const username = usernameMatch ? usernameMatch[1] : url.split('/').pop();
+        info.displayName = username;
+
+        try {
+          const res = await fetch(`https://www.tiktok.com/@${username}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' }
+          });
+          if (res.ok) {
+            const html = await res.text();
+            // Extraction de l'image de profil via les balises OpenGraph
+            const avatarMatch = html.match(/<meta property="og:image" content="([^"]+)"/);
+            if (avatarMatch) info.profilePictureUrl = avatarMatch[1];
+            
+            // Extraction du nom d'affichage via le titre de la page
+            const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+            if (titleMatch) info.displayName = titleMatch[1].split(' | ')[0].trim();
+          }
+        } catch (e) {}
+        
+        if (!info.profilePictureUrl) info.profilePictureUrl = `https://www.tiktok.com/favicon.ico`;
       }
     } catch (err) {
       console.error(`❌ Erreur _fetchChannelInfo pour ${platform} (${url}):`, err.message);
