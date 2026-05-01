@@ -1,7 +1,7 @@
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const configSystem = require('./configsystem');
 const fs = require('fs');
-const path = require('path'); // Ajout de path pour fs.readFileSync
+const path = require('path');
 const { fetch } = require('undici'); // Utilisation de undici (déjà dans package.json)
 
 class LiveSystem {
@@ -15,7 +15,6 @@ class LiveSystem {
 
   init() {
     // La vérification initiale est maintenant gérée par index.js au moment du Ready
-    
     setInterval(() => this.checkAllLives().catch(err => console.error("❌ LiveSystem Loop Error:", err)), this.checkInterval); // Catch pour éviter les plantages globaux
     console.log('📡 Système de détection Live initialisé');
   }
@@ -51,7 +50,7 @@ class LiveSystem {
       const cleanHashtag = hashtag.toLowerCase().trim();
       
       if (!cleanTitle.includes(cleanHashtag)) {
-        console.log(`ℹ️ [LIVE] Live de ${live.url} ignoré : Hashtag "${cleanHashtag}" absent du titre.`);
+        console.log(`ℹ️ [LIVE] Live de ${live.url} ignoré : Hashtag "${cleanHashtag}" non trouvé dans le titre.`);
         liveTitle = null; 
       }
     }
@@ -138,15 +137,11 @@ class LiveSystem {
         }
       });
       
-      if (!res.ok) {
-        console.error(`❌ [TIKTOK] Erreur HTTP ${res.status} pour ${username}`);
-        return false;
-      }
-
+      if (!res.ok) return false;
       const html = await res.text();
       
       const isLive = html.includes('"room_id":') && !html.includes('"live_status":0');
-      if (!isLive) return null; // Retourne null si pas de live détecté dans le HTML
+      if (!isLive) return null;
 
       const titleMatch = html.match(/"title":"([^"]+)"/) || html.match(/"share_title":"([^"]+)"/);
       if (titleMatch) {
@@ -174,16 +169,8 @@ class LiveSystem {
   }
 
   async sendLiveNotification(guild, live, liveTitle) {
-    if (!live.channelId) {
-        console.error(`❌ [LIVE] Aucun salon de destination (channelId) configuré pour ${live.url}`);
-        return;
-    }
-
     const channel = await guild.channels.fetch(live.channelId).catch(() => null);
-    if (!channel || !channel.isTextBased()) {
-        console.error(`❌ [LIVE] Salon ${live.channelId} introuvable ou inaccessible pour ${live.url}`);
-        return;
-    }
+    if (!channel || !channel.isTextBased()) return;
 
     const platformData = {
       twitch: { color: "#9146FF", name: 'Twitch', emoji: '💜', favicon: 'https://www.twitch.tv/favicon.ico' },
@@ -224,22 +211,17 @@ class LiveSystem {
     if (message) {
       live.isLive = true;
       live.lastMessageId = message.id;
-      configSystem.saveConfig(configSystem.getFullConfig());
-      console.log(`✅ [LIVE] Notification envoyée avec succès dans #${channel.name}`);
-    } else {
-      console.error(`❌ [LIVE] Échec de l'envoi du message dans #${channel.name}. Vérifiez mes permissions (Envoyer des messages, Intégrer des liens).`);
     }
   }
 
   async _fetchChannelInfo(platform, url) {
     let info = { displayName: null, profilePictureUrl: null };
     try {
-      const cleanUrl = url.replace(/<|>/g, '');
       if (platform === 'twitch') {
         const token = await this.getTwitchToken();
         const clientID = process.env.TWITCH_CLIENT_ID;
         if (!token || !clientID) return info;
-        const username = cleanUrl.split('/').pop();
+        const username = url.split('/').pop();
         const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
             headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
         });
@@ -251,7 +233,7 @@ class LiveSystem {
       } else if (platform === 'youtube') {
         const apiKey = process.env.YOUTUBE_API_KEY;
         if (!apiKey) return info;
-        const channelId = cleanUrl.split('/').pop();
+        const channelId = url.split('/').pop();
         const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${apiKey}`);
         const channelData = await channelRes.json();
         if (channelData.items?.[0]) {
@@ -259,8 +241,8 @@ class LiveSystem {
             info.profilePictureUrl = channelData.items[0].snippet.thumbnails.high.url;
         }
       } else if (platform === 'tiktok') {
-        const match = cleanUrl.match(/@([^/?#]+)/);
-        const username = match ? match[1] : cleanUrl.split('/').pop();
+        const match = url.match(/@([^/?#]+)/);
+        const username = match ? match[1] : url.split('/').pop();
         const res = await fetch(`https://www.tiktok.com/@${username}`, {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' }
         });
@@ -290,7 +272,19 @@ class LiveSystem {
     
     live.isLive = false;
     live.lastMessageId = null;
-    configSystem.saveConfig(configSystem.getFullConfig());
+  }
+
+  saveUpdate(config) {
+    // On utilise une lecture/écriture synchrone fraîche pour éviter les conflits de cache
+    // et s'assurer que les modifications du LiveSystem sont persistantes.
+    try {
+      const configPath = path.join(__dirname, '../Data/config.json');
+      // On ne lit pas le fichier à nouveau ici, on utilise l'objet 'config' passé en paramètre
+      // qui a été mis à jour dans checkAllLives.
+      fs.writeFileSync(configPath, JSON.stringify(config, null, 2)); 
+    } catch (err) {
+      console.error("❌ Erreur sauvegarde LiveSystem:", err);
+    }
   }
 }
 

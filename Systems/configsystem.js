@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 1.9.7...');
+console.log('🚀 [configsystem.js] Loading version 1.9.8...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -67,10 +67,6 @@ function saveConfig(data) {
   fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
 }
 
-function getFullConfig() {
-  return configData;
-}
-
 let configData = loadConfig();
 
 function getGuildConfig(guildId) {
@@ -134,6 +130,15 @@ function startVisualTimer(message, deleteAt) {
     }
     await updateFooter();
   }, 100);
+}
+
+console.log('DEBUG: Defining replyAndAutoDelete function in configsystem.js');
+async function replyAndAutoDelete(interaction, payload, durationMs = 300000) {
+  const message = await safeInteractionReply(interaction, payload);
+  if (message && durationMs > 0 && payload.flags !== 64) {
+    setTimeout(() => message.delete().catch(() => {}), durationMs);
+  }
+  return message;
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
@@ -702,7 +707,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.9.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.9.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1521,8 +1526,6 @@ async function handleLiveDelete(interaction, url) {
 
 module.exports = {
   getGuildConfig,
-  getFullConfig,
-  saveConfig,
   sendConfigPanel,
   sendEditConfigPanel,
   handleButtons,
@@ -1539,7 +1542,8 @@ module.exports = {
   saveLiveConfig,
   sendLiveEditList,
   handleLiveEditSelect,
-  handleLiveDelete
+  handleLiveDelete,
+  replyAndAutoDelete // Ajout de la fonction manquante
 };
 /* ========================= */
 async function handleModal(interaction) {
@@ -2013,8 +2017,6 @@ async function handleSetBotNicknameModal(interaction) {
 
 module.exports = {
   getGuildConfig,
-  getFullConfig,
-  saveConfig,
   sendConfigPanel,
   sendEditConfigPanel,
   handleButtons,
@@ -2031,6 +2033,5 @@ module.exports = {
   saveLiveConfig,
   sendLiveEditList,
   handleLiveEditSelect,
-  handleLiveDelete,
-  replyAndAutoDelete
+  handleLiveDelete
 };
