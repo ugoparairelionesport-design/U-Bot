@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 1.6.8...');
+console.log('🚀 [index.js] Loading version 1.6.9...');
 const {
   Client,
   GatewayIntentBits,
@@ -99,7 +99,7 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 1.6.8] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
+    console.log(`⚡ [VER: 1.6.9] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }
@@ -187,7 +187,7 @@ client.on('interactionCreate', async interaction => {
         };
 
         if (client.liveSystem) {
-          await client.liveSystem.sendLiveNotification(interaction.guild, testLiveObj, "Ceci est un titre de live automatique !");
+          await client.liveSystem.sendLiveNotification(interaction.guild, testLiveObj, "🔴 TITRE DE LIVE AUTOMATIQUE (TEST)");
           return await interaction.reply({ content: `✅ Notification de test envoyée dans <#${salon.id}> !`, flags: 64 });
         } else {
           return await interaction.reply({ content: "❌ Système Live non initialisé.", flags: 64 });

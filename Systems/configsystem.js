@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 1.6.8...');
+console.log('🚀 [configsystem.js] Loading version 1.6.9...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -697,7 +697,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 1.6.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 1.6.9] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1874,14 +1874,6 @@ function buildLiveConfigModal(platform) {
       ),
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
-          .setCustomId('notif_text')
-          .setLabel('Message de notification')
-          .setPlaceholder('Oh ! Regardez qui est en live !')
-          .setStyle(TextInputStyle.Paragraph)
-          .setRequired(true)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
           .setCustomId('notif_channel_id')
           .setLabel('ID du salon de notification')
           .setStyle(TextInputStyle.Short)
@@ -1908,7 +1900,6 @@ function buildLiveConfigModal(platform) {
 async function saveLiveConfig(interaction, platform) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const url = interaction.fields.getTextInputValue('channel_url').trim();
-  const text = interaction.fields.getTextInputValue('notif_text').trim();
   const channelId = interaction.fields.getTextInputValue('notif_channel_id').trim();
   const roleId = interaction.fields.getTextInputValue('role_id').trim();
   const securityHashtag = interaction.fields.getTextInputValue('security_hashtag').trim();
@@ -1920,7 +1911,6 @@ async function saveLiveConfig(interaction, platform) {
   const newConfig = {
     platform,
     url,
-    text,
     channelId,
     roleId: roleId || null,
     securityHashtag: securityHashtag || null,

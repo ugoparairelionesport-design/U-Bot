@@ -99,7 +99,7 @@ class LiveSystem {
 
   async checkYouTube(url) {
     const apiKey = process.env.YOUTUBE_API_KEY;
-    if (!apiKey) return false;
+    if (!apiKey) return null;
 
     // Extraction propre de l'ID ou du handle
     const handleMatch = url.match(/@([^/?]+)/);
@@ -115,12 +115,12 @@ class LiveSystem {
 
     const res = await fetch(queryUrl);
     const data = await res.json();
-    return data.items && data.items.length > 0;
+    return data.items && data.items.length > 0 ? data.items[0].snippet.title : null;
   }
 
   async checkTikTok(url) {
     // Bypass pour tes tests
-    if (url.includes('test-live')) return true;
+    if (url.includes('test-live')) return "🔴 LIVE DE TEST - Rejoignez l'aventure !";
 
     try {
       // Extraction plus robuste du pseudo (gère @pseudo ou juste le lien)
