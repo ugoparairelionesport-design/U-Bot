@@ -1,6 +1,8 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 2.4.0...');
+const fs = require('fs');
+const path = require('path');
+console.log('🚀 [index.js] Loading version 2.4.2...');
 const {
   Client,
   GatewayIntentBits,
@@ -28,6 +30,17 @@ console.log('🚀 Lancement du bot en cours...');
 
 // Serveur de maintien en vie pour Replit (24/7)
 const server = http.createServer((req, res) => {
+  // Route pour servir les images (assets)
+  if (req.url.startsWith('/assets/')) {
+    const filePath = path.join(__dirname, 'Data', req.url.split('?')[0]); // On retire le paramètre de version ?v=...
+    if (fs.existsSync(filePath)) {
+      const ext = path.extname(filePath).toLowerCase();
+      const contentType = ext === '.png' ? 'image/png' : (ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream');
+      res.writeHead(200, { 'Content-Type': contentType });
+      return res.end(fs.readFileSync(filePath));
+    }
+  }
+
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   // Petit log pour confirmer le ping d'UptimeRobot dans la console
   console.log(`📶 Ping reçu d'UptimeRobot à ${new Date().toLocaleTimeString()}`);

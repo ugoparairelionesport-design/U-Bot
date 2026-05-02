@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.4.1...');
+console.log('🚀 [configsystem.js] Loading version 2.4.2...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -14,6 +14,7 @@ const {
   ChannelType,
   PermissionsBitField,
 } = require('discord.js');
+const { fetch } = require('undici');
 
 const configPath = path.join(__dirname, '../Data/config.json');
 let lastSavedContent = ""; // Déclaration unique (World Class Optimization)
@@ -739,7 +740,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.4.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.4.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1592,11 +1593,52 @@ async function handleModal(interaction) {
     }
 
     if (interaction.customId === 'modal_set_global_banner') {
+      await interaction.deferReply({ flags: 64 });
       const url = interaction.fields.getTextInputValue('banner_url').trim();
       const guildConfig = getGuildConfig(interaction.guildId);
-      guildConfig.globalEmbedBanner = url || null;
-      saveConfig(configData);
-      return interaction.reply({ content: "✅ L'image de fond a été appliquée à TOUS les embeds du bot !", flags: 64 });
+
+      if (!url) {
+        guildConfig.globalEmbedBanner = null;
+        saveConfig(configData);
+        return interaction.editReply({ content: "🗑️ L'image d'embed a été supprimée." });
+      }
+
+      try {
+        // Téléchargement de l'image
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("Impossible de télécharger l'image");
+        
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Création du dossier assets pour le serveur
+        const assetsDir = path.join(__dirname, '../Data/assets', interaction.guildId);
+        if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+
+        // Sauvegarde locale (on utilise l'extension d'origine ou .png par défaut)
+        const filePath = path.join(assetsDir, 'banner.png');
+        fs.writeFileSync(filePath, buffer);
+
+        // Construction de l'URL publique hébergée par le bot
+        // Replit fournit l'URL via les variables d'environnement
+        const replName = process.env.REPL_SLUG;
+        const replOwner = process.env.REPL_OWNER;
+        
+        if (replName && replOwner) {
+          const publicUrl = `https://${replName}.${replOwner}.repl.co/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
+          guildConfig.globalEmbedBanner = publicUrl;
+          saveConfig(configData);
+          return interaction.editReply({ content: "✅ Image téléchargée et sauvegardée localement ! Elle ne disparaîtra plus, même si vous supprimez le message d'origine." });
+        } else {
+          // Si hors Replit, on garde l'URL d'origine
+          guildConfig.globalEmbedBanner = url;
+          saveConfig(configData);
+          return interaction.editReply({ content: "✅ Image enregistrée (URL directe)." });
+        }
+      } catch (err) {
+        console.error("❌ Erreur téléchargement bannière:", err);
+        return interaction.editReply({ content: "❌ Erreur : Impossible de récupérer l'image. Assurez-vous que le lien est direct (finit par .png, .jpg...)." });
+      }
     }
 
     const guildConfig = getGuildConfig(interaction.guildId);
