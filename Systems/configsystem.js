@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.2.6...');
+console.log('🚀 [configsystem.js] Loading version 2.2.7...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -734,7 +734,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.5] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1551,40 +1551,6 @@ async function handleLiveDelete(interaction, url) {
   return interaction.reply({ content: "❌ Erreur lors de la suppression.", flags: 64 });
 }
 
-module.exports = {
-  getGuildConfig,
-  sendConfigPanel,
-  sendEditConfigPanel,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState,
-  sendBotNamePanel,
-  startVisualTimer,
-  sendLiveConfigPanel,
-  buildLiveConfigModal,
-  saveLiveConfig,
-  sendLiveEditList,
-  handleLiveEditSelect,
-  handleLiveDelete,
-  replyAndAutoDelete,
-  sendProtectionConfigPanel,
-  sendAntiRaidConfigPanel,
-  sendAntiSpamConfigPanel,
-  sendVerificationConfigPanel,
-  sendDmLockConfigPanel,
-  buildAntiRaidModal,
-  saveAntiRaidConfig,
-  buildVerificationModal,
-  saveVerificationConfig,
-  sendUserVerificationPanel,
-  sendUserDmSafetyPanel
-};
-
-module.exports = exportedFunctions;
 /* ========================= */
 async function handleModal(interaction) {
   try {
@@ -2005,6 +1971,15 @@ async function saveAntiRaidConfig(interaction) {
   guildConfig.antiRaid.minAge = parseInt(interaction.fields.getTextInputValue('min_age'));
   saveConfig(configData);
   return interaction.reply({ content: "✅ Configuration Anti-Raid sauvegardée !", flags: 64 });
+}
+
+async function saveAntiSpamConfig(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.antiSpam.maxMessages = parseInt(interaction.fields.getTextInputValue('max_messages'));
+  guildConfig.antiSpam.maxDuplicates = parseInt(interaction.fields.getTextInputValue('max_duplicates'));
+  guildConfig.antiSpam.timeoutDuration = parseInt(interaction.fields.getTextInputValue('timeout_duration'));
+  saveConfig(configData);
+  return interaction.reply({ content: "✅ Configuration Anti-Spam sauvegardée !", flags: 64 });
 }
 
 function buildVerificationModal(settings) {
