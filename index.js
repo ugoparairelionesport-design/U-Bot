@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.6.5...');
+console.log('🚀 [index.js] Loading version 2.6.6...');
 const {
   Client,
   GatewayIntentBits,
