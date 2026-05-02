@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.3...');
+console.log('🚀 [configsystem.js] Loading version 2.3.5...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -62,7 +62,8 @@ const defaultGuildSettings = {
   },
   dmLock: {
     enabled: false
-  }
+  },
+  globalEmbedBanner: null
 };
 
 function loadConfig() {
@@ -738,7 +739,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.5] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -869,6 +870,26 @@ async function handleButtons(interaction) {
     // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
     if (interaction.customId === 'bot_name_set_btn') {
       return await handleBotNameButtonClick(interaction);
+    }
+
+    if (interaction.customId === 'global_banner_set_btn') {
+      const guildConfig = getGuildConfig(interaction.guildId);
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_set_global_banner')
+          .setTitle('Image de fond des Embeds')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('banner_url')
+                .setLabel('URL de l\'image (Bannière large)')
+                .setPlaceholder('Collez le lien direct de votre image ici')
+                .setValue(guildConfig.globalEmbedBanner || '')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+            )
+          )
+      );
     }
 
     const guildConfig = getGuildConfig(interaction.guildId);
@@ -1563,6 +1584,14 @@ async function handleModal(interaction) {
       return await handleSetBotNicknameModal(interaction);
     }
 
+    if (interaction.customId === 'modal_set_global_banner') {
+      const url = interaction.fields.getTextInputValue('banner_url').trim();
+      const guildConfig = getGuildConfig(interaction.guildId);
+      guildConfig.globalEmbedBanner = url || null;
+      saveConfig(configData);
+      return interaction.reply({ content: "✅ L'image de fond a été appliquée à TOUS les embeds du bot !", flags: 64 });
+    }
+
     const guildConfig = getGuildConfig(interaction.guildId);
     if (interaction.customId === 'modal_logs') {
       const channelId = interaction.fields.getTextInputValue('channel_id');
@@ -1887,6 +1916,8 @@ async function handleMessage(message) {
 
 async function sendProtectionConfigPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
+  const banner = guildConfig.globalEmbedBanner || "https://i.imgur.com/5uX5K1z.png";
+
   const embed = new EmbedBuilder()
     .setTitle("🛡️ U-BOT | Shield Protocol")
     .setDescription(
@@ -1904,7 +1935,7 @@ async function sendProtectionConfigPanel(interaction) {
       { name: "Systèmes Actifs", value: `🤖 Captcha: ${guildConfig.verification.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n📩 DM Lock: ${guildConfig.dmLock.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true }
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setImage("https://i.imgur.com/5uX5K1z.png") // Nouvelle bannière Shield Protocol (Lien mis à jour)
+    .setImage(banner)
     .setColor(guildConfig.antiRaid.lockdown ? "#FF0000" : "#2f3136")
     .setFooter({ text: "U-Bot Security • Protection en temps réel", iconURL: interaction.client.user.displayAvatarURL() })
     .setTimestamp();
@@ -1932,6 +1963,7 @@ async function sendAntiRaidConfigPanel(interaction) {
       `┣ 👥 Seuil : \`${settings.threshold} membres\` / \`${settings.window}s\`\n` +
       `┗ ⏳ Âge mini : \`${settings.minAge} heures\``
     )
+    .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
     .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor(settings.lockdown ? "#FF0000" : "#5865F2");
   const row = new ActionRowBuilder().addComponents(
@@ -2146,8 +2178,15 @@ async function sendBotNamePanel(interaction) {
     new ButtonBuilder()
       .setCustomId('bot_name_set_btn')
       .setLabel('Modifier le nom')
+      .setLabel('Changer le Nom')
       .setEmoji('✏️')
       .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('prot_banner_set_btn')
+      .setLabel('Changer l\'Image Hub')
+      .setEmoji('🖼️')
+      .setStyle(ButtonStyle.Secondary)
   );
 
   await interaction.reply({ 

@@ -242,6 +242,8 @@ class LiveSystem {
     // On passe directement les infos récupérées lors du check pour éviter un second appel API
     const displayName = live.tempInfo?.displayName || live.url.split('/').pop().replace('@', '');
     const profilePic = live.tempInfo?.avatar || data.favicon;
+    const guildConfig = configSystem.getGuildConfig(guild.id);
+    const banner = guildConfig.globalEmbedBanner || profilePic;
 
     const embed = new EmbedBuilder()
       .setAuthor({ name: `${displayName} est en LIVE maintenant !`, iconURL: profilePic })
@@ -253,7 +255,7 @@ class LiveSystem {
         { name: '🔗 Lien direct', value: `Cliquez ici`, inline: true }
       )
       .setColor(data.color || "#5865F2")
-      .setImage(profilePic)
+      .setImage(banner)
       .setFooter({ text: `U-Bot System • ${data.name} Notification`, iconURL: data.favicon })
       .setTimestamp();
 
