@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.2.5...');
+console.log('🚀 [configsystem.js] Loading version 2.2.6...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -2203,6 +2203,7 @@ async function handleSetBotNicknameModal(interaction) {
 }
 
 module.exports = {
+  // Core & Tickets
   getGuildConfig,
   getFullConfig,
   saveConfig,
@@ -2217,11 +2218,25 @@ module.exports = {
   resumeTicketState,
   sendBotNamePanel,
   startVisualTimer,
+  replyAndAutoDelete,
+  // Live System
   sendLiveConfigPanel,
   buildLiveConfigModal,
   saveLiveConfig,
   sendLiveEditList,
   handleLiveEditSelect,
   handleLiveDelete,
-  replyAndAutoDelete
+  // Protection Hub
+  sendProtectionConfigPanel,
+  sendAntiRaidConfigPanel,
+  sendAntiSpamConfigPanel,
+  sendVerificationConfigPanel,
+  sendDmLockConfigPanel,
+  buildAntiRaidModal,
+  saveAntiRaidConfig,
+  saveAntiSpamConfig,
+  buildVerificationModal,
+  saveVerificationConfig,
+  sendUserVerificationPanel,
+  sendUserDmSafetyPanel
 };
