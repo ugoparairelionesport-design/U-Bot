@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.2...');
+console.log('🚀 [configsystem.js] Loading version 2.3.3...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -738,7 +738,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1534,7 +1534,6 @@ async function handleLiveEditSelect(interaction, url) {
       { name: "Salon", value: `<#${live.channelId}>`, inline: true },
       { name: "Rôle", value: live.roleId ? `<@&${live.roleId}>` : "`Aucun`", inline: true }
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2");
 
   const row = new ActionRowBuilder().addComponents(
@@ -1905,7 +1904,7 @@ async function sendProtectionConfigPanel(interaction) {
       { name: "Systèmes Actifs", value: `🤖 Captcha: ${guildConfig.verification.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n📩 DM Lock: ${guildConfig.dmLock.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true }
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setImage("https://i.imgur.com/8QZ9N0Z.png") // Bannière esthétique
+    .setImage("https://i.imgur.com/5uX5K1z.png") // Nouvelle bannière Shield Protocol (Lien mis à jour)
     .setColor(guildConfig.antiRaid.lockdown ? "#FF0000" : "#2f3136")
     .setFooter({ text: "U-Bot Security • Protection en temps réel", iconURL: interaction.client.user.displayAvatarURL() })
     .setTimestamp();
@@ -1923,9 +1922,18 @@ async function sendProtectionConfigPanel(interaction) {
 
 async function sendAntiRaidConfigPanel(interaction) {
   const settings = getGuildConfig(interaction.guildId).antiRaid;
-  const embed = new EmbedBuilder().setTitle("🛡️ Configuration Anti-Raid").setColor(settings.lockdown ? "#FF0000" : "#5865F2")
-    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true },
-               { name: "Lockdown", value: settings.lockdown ? "🔒 Actif" : "🔓 Inactif", inline: true });
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ Module Anti-Raid Pro")
+    .setDescription(
+      "Ce module surveille la fréquence des arrivées et l'ADN des nouveaux comptes. Si une attaque est détectée, le serveur passe en **Lockdown** pour bloquer les intrus.\n\n" +
+      "**⚙️ Paramètres Actuels**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ 🔒 Lockdown : ${settings.lockdown ? '`🔴 ACTIF`' : '`🟢 Inactif`'}\n` +
+      `┣ 👥 Seuil : \`${settings.threshold} membres\` / \`${settings.window}s\`\n` +
+      `┗ ⏳ Âge mini : \`${settings.minAge} heures\``
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setColor(settings.lockdown ? "#FF0000" : "#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('antiraid_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('antiraid_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
@@ -1936,9 +1944,17 @@ async function sendAntiRaidConfigPanel(interaction) {
 
 async function sendAntiSpamConfigPanel(interaction) {
   const settings = getGuildConfig(interaction.guildId).antiSpam;
-  const embed = new EmbedBuilder().setTitle("🚫 Configuration Anti-Spam").setColor("#5865F2")
-    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true })
-    .setThumbnail(interaction.client.user.displayAvatarURL());
+  const embed = new EmbedBuilder()
+    .setTitle("🚫 Module Anti-Spam")
+    .setDescription(
+      "Analyse les messages en temps réel pour filtrer les comportements abusifs. Il protège contre le flood (messages massifs), les liens excessifs et les doublons.\n\n" +
+      "**⚙️ Paramètres Actuels**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ 🔨 Sanction : \`${settings.action.toUpperCase()}\`\n` +
+      `┣ ⏳ Fenêtre : \`${settings.window}s\`\n` +
+      `┗ 📝 Doublons max : \`${settings.maxDuplicates}\``
+    )
+    .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
@@ -1948,9 +1964,16 @@ async function sendAntiSpamConfigPanel(interaction) {
 
 async function sendVerificationConfigPanel(interaction) {
   const settings = getGuildConfig(interaction.guildId).verification;
-  const embed = new EmbedBuilder().setTitle("🤖 Configuration Captcha").setColor("#5865F2")
-    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true })
-    .setThumbnail(interaction.client.user.displayAvatarURL());
+  const embed = new EmbedBuilder()
+    .setTitle("🤖 Module de Vérification Humaine")
+    .setDescription(
+      "Force les nouveaux membres à résoudre un captcha textuel unique avant d'accéder au serveur. C'est l'arme ultime contre les raids de robots automatisés.\n\n" +
+      "**⚙️ Paramètres Actuels**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ 🛡️ Rôle attribué : ${settings.roleId ? `<@&${settings.roleId}>` : '`❌ Non configuré`'}\n` +
+      `┗ 📍 Salon Captcha : ${settings.channelId ? `<#${settings.channelId}>` : '`❌ Non configuré`'}`
+    )
+    .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('verify_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('verify_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
@@ -1962,9 +1985,14 @@ async function sendVerificationConfigPanel(interaction) {
 
 async function sendDmLockConfigPanel(interaction) {
   const settings = getGuildConfig(interaction.guildId).dmLock;
-  const embed = new EmbedBuilder().setTitle("📩 Configuration DM Lock").setColor("#5865F2")
-    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true })
-    .setThumbnail(interaction.client.user.displayAvatarURL());
+  const embed = new EmbedBuilder()
+    .setTitle("📩 Module DM Lock & Prévention")
+    .setDescription(
+      "Alerte automatiquement les nouveaux membres en message privé pour les conseiller de désactiver leurs MPs, réduisant ainsi les risques de phishing et scams.\n\n" +
+      "**⚙️ Paramètres Actuels**\n" +
+      `┗ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}`
+    )
+    .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dmlock_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('dmlock_send_panel').setLabel('📤 Envoyer Infos').setStyle(ButtonStyle.Secondary),
