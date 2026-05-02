@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.0...');
+console.log('🚀 [configsystem.js] Loading version 2.3.1...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -17,6 +17,11 @@ const {
 
 const configPath = path.join(__dirname, '../Data/config.json');
 let lastSavedContent = ""; 
+
+const defaultConfig = {
+  guilds: {}
+};
+
 const defaultGuildSettings = {
   categories: {},
   roles: {},
@@ -833,6 +838,7 @@ function sendConfigPanel(interaction) {
       "📊 **Stats** → Configurer les statistiques\n\n" +
       "_Assure-toi que les IDs sont corrects pour éviter les erreurs._"
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -1412,6 +1418,7 @@ async function sendLiveConfigPanel(interaction) {
       "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
       "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setTimestamp();
 
@@ -2097,6 +2104,7 @@ async function sendEditConfigPanel(interaction) {
       "🎫 **Options** → Ajouter ou supprimer des options de tickets\n\n" +
       "_Choisis l’élément que tu souhaites mettre à jour._"
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -2128,6 +2136,7 @@ async function sendBotNamePanel(interaction) {
       `**Nom actuel** : \`${currentNickname}\`\n\n` +
       "Cliquez sur le bouton ci-dessous pour définir un nouveau surnom."
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Cette modification n'affecte pas les autres serveurs." })
     .setTimestamp();
