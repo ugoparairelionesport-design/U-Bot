@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.5...');
+console.log('🚀 [configsystem.js] Loading version 2.3.6...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -739,7 +739,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.5] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.6] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1916,8 +1916,6 @@ async function handleMessage(message) {
 
 async function sendProtectionConfigPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
-  const banner = guildConfig.globalEmbedBanner || "https://i.imgur.com/5uX5K1z.png";
-
   const embed = new EmbedBuilder()
     .setTitle("🛡️ U-BOT | Shield Protocol")
     .setDescription(
@@ -1935,7 +1933,7 @@ async function sendProtectionConfigPanel(interaction) {
       { name: "Systèmes Actifs", value: `🤖 Captcha: ${guildConfig.verification.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n📩 DM Lock: ${guildConfig.dmLock.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true }
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setImage(banner)
+    .setImage(guildConfig.globalEmbedBanner)
     .setColor(guildConfig.antiRaid.lockdown ? "#FF0000" : "#2f3136")
     .setFooter({ text: "U-Bot Security • Protection en temps réel", iconURL: interaction.client.user.displayAvatarURL() })
     .setTimestamp();
