@@ -34,7 +34,7 @@ const server = http.createServer((req, res) => {
   res.write(`U-Bot System
 -------------------
 Statut : Connecte (OK)
-Sync : Bot synchronise et a jour
+Sync : Bot synchronise
 Uptime : ${hours}h ${minutes % 60}m ${uptime % 60}s`);
   res.end();
 });
@@ -96,6 +96,11 @@ client.once(Events.ClientReady, async () => {
   if (client.liveSystem) {
     client.liveSystem.checkAllLives().catch(err => console.error("❌ Erreur check live initial:", err));
   }
+
+  // Déploiement automatique des commandes au démarrage si nécessaire
+  if (process.env.AUTO_DEPLOY === 'true') {
+    await deployCommands().catch(console.error);
+  }
 });
 
 /* ========================= */
@@ -104,7 +109,6 @@ client.once(Events.ClientReady, async () => {
 client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
-    console.log(`⚡ [VER: 2.1.6] Interaction: ${interaction.type} | Nom: ${isCommand ? interaction.commandName : 'non-command'} | ID: ${interaction.customId || 'N/A'}`);
     if (interaction.isButton()) {
         console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
     }
@@ -113,10 +117,11 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
       const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live', 'modif_config_live', 'test_live', 'staff_stats'];
+      console.log(`⚡ Command: /${interaction.commandName} by ${interaction.user.tag}`);
       
       if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-          return await interaction.reply({
+          return interaction.reply({
             content: "❌ Vous n'avez pas les permissions (Administrateur) pour utiliser cette commande.",
             flags: 64
           });
@@ -139,10 +144,10 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'stats') {
+        await interaction.deferReply({ flags: 64 });
         await client.configSystem.updateStatsMessage(interaction.guild);
-        return interaction.reply({
+        return interaction.editReply({
           content: "📊 Stats mises à jour",
-          flags: 64
         });
       }
 
@@ -179,6 +184,7 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'test_live') {
+        await interaction.deferReply({ flags: 64 });
         const platform = interaction.options.getString('plateforme');
         const url = interaction.options.getString('url');
         const salon = interaction.options.getChannel('salon');
@@ -197,9 +203,9 @@ client.on('interactionCreate', async interaction => {
 
         if (client.liveSystem) {
           await client.liveSystem.sendLiveNotification(interaction.guild, testLiveObj, "🔴 TITRE DE LIVE AUTOMATIQUE (TEST)");
-          return await interaction.reply({ content: `✅ Notification de test envoyée dans <#${salon.id}> !`, flags: 64 });
+          return await interaction.editReply({ content: `✅ Notification de test envoyée dans <#${salon.id}> !` });
         } else {
-          return await interaction.reply({ content: "❌ Système Live non initialisé.", flags: 64 });
+          return await interaction.editReply({ content: "❌ Système Live non initialisé." });
         }
       }
     }

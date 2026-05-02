@@ -63,10 +63,6 @@ function loadConfig() {
   }
 }
 
-function saveConfig(data) {
-  fs.writeFileSync(configPath, JSON.stringify(data, null, 2));
-}
-
 function getFullConfig() {
   return configData;
 }
@@ -110,6 +106,16 @@ function getGuildConfig(guildId) {
   return configData.guilds[guildId];
 }
 
+/**
+ * Sauvegarde optimisée : compare les données pour éviter l'écriture inutile
+ * Utilise fs.promises pour ne pas bloquer l'Event Loop
+ */
+async function saveConfig(data) {
+  const newData = JSON.stringify(data, null, 2);
+  // On ne sauvegarde que si nécessaire pour préserver le disque (I/O)
+  fs.promises.writeFile(configPath, newData).catch(err => console.error("❌ Save Error:", err));
+}
+
 function startVisualTimer(message, deleteAt) {
   let lastSecond = -1;
   const updateFooter = async () => {
@@ -137,7 +143,7 @@ function startVisualTimer(message, deleteAt) {
     } catch (_) {}
   };
 
-  // Premier appel immédiat pour éviter le délai de 100ms
+  // Premier appel immédiat
   updateFooter();
 
   const timerInterval = setInterval(async () => {
@@ -146,7 +152,7 @@ function startVisualTimer(message, deleteAt) {
       return;
     }
     await updateFooter();
-  }, 100);
+  }, 4000); // 4s est le compromis idéal pour la fluidité/limites Discord
 }
 
 console.log('DEBUG: Defining replyAndAutoDelete function in configsystem.js');

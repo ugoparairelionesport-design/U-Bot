@@ -2,14 +2,14 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('
 const configSystem = require('./configsystem');
 const fs = require('fs');
 const path = require('path');
-const { fetch } = require('undici'); // Utilisation de undici (déjà dans package.json)
+const { fetch } = require('undici');
 
 class LiveSystem {
   constructor(client) {
     this.client = client;
-    this.checkInterval = 4 * 60 * 1000; // Vérification toutes les 4 minutes
-    this.twitchToken = null;
+    this.checkInterval = 30 * 1000; // Vérification toutes les 30 secondes
     this.twitchTokenExpires = 0;
+    this.cache = new Map(); // Cache pour avatars et résolutions d'ID
     this.init();
   }
 
@@ -21,23 +21,34 @@ class LiveSystem {
 
   async checkAllLives() {
     console.log(`🔍 [LIVE] Vérification en cours pour ${this.client.guilds.cache.size} serveur(s)...`);
-
+    const checkPromises = [];
+    let hasChanged = false;
+    
     for (const [guildId, guild] of this.client.guilds.cache) {
       const guildConfig = configSystem.getGuildConfig(guildId);
       if (!guildConfig.liveConfigs || guildConfig.liveConfigs.length === 0) continue;
 
-      console.log(`📡 [LIVE] ${guildConfig.liveConfigs.length} config(s) trouvée(s) pour le serveur ${guildId}`);
-
       for (const live of guildConfig.liveConfigs) {
-        await this.processLiveCheck(guild, live);
+        // On lance toutes les vérifications en parallèle pour une latence minimale
+        checkPromises.push(this.processLiveCheck(guild, live).then(changed => {
+          if (changed) hasChanged = true;
+        }));
       }
     }
-    // Sauvegarder l'état (isLive, lastMessageId) pour persistance au redémarrage
-    configSystem.saveConfig(configSystem.getFullConfig());
+    
+    await Promise.allSettled(checkPromises);
+
+    // Sauvegarder l'état seulement si nécessaire
+    if (hasChanged) {
+      configSystem.saveConfig(configSystem.getFullConfig());
+    }
   }
 
   async processLiveCheck(guild, live) {
-    let liveTitle = await this.fetchLiveStatus(live.platform, live.url, guild);
+    const status = await this.fetchLiveStatus(live.platform, live.url, guild).catch(() => null);
+    let liveTitle = status?.title || null;
+    let wasLive = live.isLive;
+
     const guildConfig = configSystem.getGuildConfig(guild.id);
     
     if (liveTitle) {
@@ -58,14 +69,18 @@ class LiveSystem {
     }
 
     if (liveTitle && !live.isLive) {
+        live.tempInfo = status; // Stockage temporaire des metadata
         console.log(`🚀 [LIVE] Tentative d'envoi de notification pour ${live.url}...`);
         await this.sendLiveNotification(guild, live, liveTitle);
+        return true;
     } else if (liveTitle && live.isLive) {
-        console.log(`ℹ️ [LIVE] Notification déjà active pour ${live.url} (isLive: true).`);
+        return false;
     } else if (!liveTitle && live.isLive) {
       console.log(`🧹 [LIVE] Fin de live détectée pour ${live.url}.`);
       await this.cleanupLiveNotification(guild, live);
+      return true;
     }
+    return false;
   }
 
   async getTwitchToken() {
@@ -89,11 +104,23 @@ class LiveSystem {
     if (!token || !clientID) return false;
 
     const username = url.replace(/<|>/g, '').split('/').pop();
+    
+    // Récupération avatar en cache ou API
+    if (!this.cache.has(`twitch_avatar_${username}`)) {
+      const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
+        headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
+      });
+      const userData = await userRes.json();
+      if (userData && userData.data && userData.data[0]) {
+        this.cache.set(`twitch_avatar_${username}`, userData.data[0].profile_image_url);
+      }
+    }
+
     const res = await fetch(`https://api.twitch.tv/helix/streams?user_login=${username}`, {
       headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
     });
     const data = await res.json();
-    return data.data && data.data.length > 0 ? data.data[0].title : null;
+    return data.data && data.data.length > 0 ? { title: data.data[0].title, displayName: data.data[0].user_name, avatar: this.cache.get(`twitch_avatar_${username}`) } : null;
   }
 
   async checkYouTube(url) {
@@ -106,8 +133,15 @@ class LiveSystem {
     let queryUrl;
 
     if (handleMatch) {
-      // Si c'est un @pseudo, on cherche via search (nécessite que la chaîne soit indexée)
-      queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${handleMatch[1]}&type=video&eventType=live&maxResults=1&key=${apiKey}`;
+      const handle = handleMatch[1];
+      if (!this.cache.has(`yt_id_${handle}`)) {
+        // Résolution du handle en ID (opération coûteuse, mise en cache)
+        const resolve = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&q=${handle}&type=channel&maxResults=1&key=${apiKey}`);
+        const res = await resolve.json();
+        if (res.items?.[0]) this.cache.set(`yt_id_${handle}`, res.items[0].id.channelId);
+      }
+      const channelId = this.cache.get(`yt_id_${handle}`);
+      queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&eventType=live&key=${apiKey}`;
     } else {
       const channelId = cleanUrl.split('/').pop();
       queryUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&type=video&eventType=live&key=${apiKey}`;
@@ -115,14 +149,25 @@ class LiveSystem {
 
     const res = await fetch(queryUrl);
     const data = await res.json();
-    return data.items && data.items.length > 0 ? data.items[0].snippet.title : null;
+    if (data.items && data.items.length > 0) {
+      return {
+        title: data.items[0].snippet.title,
+        displayName: data.items[0].snippet.channelTitle,
+        avatar: data.items[0].snippet.thumbnails.high.url
+      };
+    }
+    return null;
   }
 
   async checkTikTok(url, guild) {
     // Bypass pour tes tests
     if (url.includes('test-live')) {
         const guildConfig = configSystem.getGuildConfig(guild.id);
-        return `🔴 LIVE DE TEST ${guildConfig?.securityHashtag || ''} - Rejoignez l'aventure !`;
+        return { 
+            title: `🔴 LIVE DE TEST ${guildConfig?.securityHashtag || ''} - Rejoignez l'aventure !`, 
+            displayName: "Test Live Account", 
+            avatar: null 
+        };
     }
 
     try {
@@ -145,14 +190,20 @@ class LiveSystem {
       const isLive = html.includes('"room_id":') && !html.includes('"live_status":0');
       if (!isLive) return null;
 
-      const titleMatch = html.match(/"title":"([^"]+)"/) || html.match(/"share_title":"([^"]+)"/);
-      if (titleMatch) {
-        // Décodage des caractères Unicode (\u0023 -> #, etc.) pour la détection du hashtag
-        return titleMatch[1].replace(/\\u([0-9a-fA-F]{4})/g, (match, grp) => {
-          return String.fromCharCode(parseInt(grp, 16));
-        }).replace(/\\u002F/g, '/');
+      const stateMatch = html.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">([\s\S]*?)<\/script>/);
+      if (stateMatch) {
+        const jsonData = JSON.parse(stateMatch[1]);
+        const liveData = jsonData?.__DEFAULT_SCOPE__?.['webapp.user-detail']?.liveRoom;
+        const userData = jsonData?.__DEFAULT_SCOPE__?.['webapp.user-detail']?.userInfo?.user;
+        
+        return {
+          title: liveData?.title || "En direct sur TikTok",
+          displayName: userData?.nickname || username,
+          avatar: userData?.avatarLarger || userData?.avatarMedium
+        };
       }
-      return "En direct sur TikTok";
+
+      return { title: "En direct sur TikTok", displayName: username, avatar: null };
     } catch (e) {
       return null;
     }
@@ -188,9 +239,9 @@ class LiveSystem {
     };
 
     const data = platformData[live.platform];
-    const channelInfo = await this._fetchChannelInfo(live.platform, live.url);
-    const displayName = channelInfo.displayName || live.url.split('/').pop().replace('@', '');
-    const profilePic = channelInfo.profilePictureUrl || data.favicon;
+    // On passe directement les infos récupérées lors du check pour éviter un second appel API
+    const displayName = live.tempInfo?.displayName || live.url.split('/').pop().replace('@', '');
+    const profilePic = live.tempInfo?.avatar || data.favicon;
 
     const embed = new EmbedBuilder()
       .setAuthor({ name: `${displayName} est en LIVE maintenant !`, iconURL: profilePic })
@@ -222,55 +273,6 @@ class LiveSystem {
       live.lastMessageId = message.id;
       console.log(`✅ [LIVE] Notification envoyée pour ${live.url} dans #${channel.name}`);
     }
-  }
-
-  async _fetchChannelInfo(platform, url) {
-    let info = { displayName: null, profilePictureUrl: null };
-    try {
-      if (platform === 'twitch') {
-        const token = await this.getTwitchToken();
-        const clientID = process.env.TWITCH_CLIENT_ID;
-        if (!token || !clientID) return info;
-        const username = url.split('/').pop();
-        const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
-            headers: { 'Client-ID': clientID, 'Authorization': `Bearer ${token}` }
-        });
-        const userData = await userRes.json();
-        if (userData.data?.[0]) {
-            info.displayName = userData.data[0].display_name;
-            info.profilePictureUrl = userData.data[0].profile_image_url;
-        }
-      } else if (platform === 'youtube') {
-        const apiKey = process.env.YOUTUBE_API_KEY;
-        if (!apiKey) return info;
-        const channelId = url.split('/').pop();
-        const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelId}&key=${apiKey}`);
-        const channelData = await channelRes.json();
-        if (channelData.items?.[0]) {
-            info.displayName = channelData.items[0].snippet.title;
-            info.profilePictureUrl = channelData.items[0].snippet.thumbnails.high.url;
-        }
-      } else if (platform === 'tiktok') {
-        const match = url.match(/@([^/?#]+)/);
-        const username = match ? match[1] : url.split('/').pop();
-        const res = await fetch(`https://www.tiktok.com/@${username}`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36' }
-        });
-        if (res.ok) {
-          const html = await res.text();
-          const stateMatch = html.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">([\s\S]*?)<\/script>/);
-          if (stateMatch) {
-            const jsonData = JSON.parse(stateMatch[1]);
-            const userData = jsonData?.__DEFAULT_SCOPE__?.['webapp.user-detail']?.userInfo?.user;
-            if (userData) {
-              info.profilePictureUrl = userData.avatarLarger || userData.avatarMedium;
-              info.displayName = userData.nickname || username;
-            }
-          }
-        }
-      }
-    } catch (e) { console.error("❌ Info fetch error:", e.message); }
-    return info;
   }
 
   async cleanupLiveNotification(guild, live) {
