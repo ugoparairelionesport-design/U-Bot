@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.8.8...');
+console.log('🚀 [index.js] Loading version 2.8.9...');
 
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = require('discord.js');
 const configSystem = require('./Systems/configsystem');
@@ -41,6 +41,8 @@ const server = http.createServer((req, res) => {
   // Petit log pour confirmer le ping d'UptimeRobot dans la console
   console.log(`📶 Ping reçu d'UptimeRobot à ${new Date().toLocaleTimeString()}`);
   const uptime = Math.floor(process.uptime());
+  console.log(`DEBUG: REPL_SLUG = ${process.env.REPL_SLUG}`);
+  console.log(`DEBUG: REPL_OWNER = ${process.env.REPL_OWNER}`);
   const minutes = Math.floor(uptime / 60);
   const hours = Math.floor(minutes / 60);
   
