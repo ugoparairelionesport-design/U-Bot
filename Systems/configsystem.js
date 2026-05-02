@@ -837,6 +837,7 @@ function sendConfigPanel(interaction) {
       "📊 **Stats** → Configurer les statistiques\n\n" +
       "_Assure-toi que les IDs sont corrects pour éviter les erreurs._"
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -1416,6 +1417,7 @@ async function sendLiveConfigPanel(interaction) {
       "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
       "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setTimestamp();
 
@@ -1902,6 +1904,7 @@ async function sendProtectionConfigPanel(interaction) {
       { name: "Systèmes Passifs", value: `🛡️ Anti-Raid: ${guildConfig.antiRaid.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n🚫 Anti-Spam: ${guildConfig.antiSpam.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true },
       { name: "Systèmes Actifs", value: `🤖 Captcha: ${guildConfig.verification.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n📩 DM Lock: ${guildConfig.dmLock.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true }
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor(guildConfig.antiRaid.lockdown ? "#FF0000" : "#2f3136")
     .setFooter({ text: "Cliquez sur un module pour accéder aux réglages avancés.", iconURL: interaction.client.user.displayAvatarURL() })
     .setTimestamp();
@@ -1929,6 +1932,7 @@ async function sendAntiRaidConfigPanel(interaction) {
       `┣ 👥 Seuil : \`${settings.threshold} membres\` / \`${settings.window}s\`\n` +
       `┗ ⏳ Âge mini : \`${settings.minAge} heures\``
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor(settings.lockdown ? "#FF0000" : "#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('antiraid_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
@@ -1950,6 +1954,7 @@ async function sendAntiSpamConfigPanel(interaction) {
       `┣ ⏳ Fenêtre : \`${settings.window}s\`\n` +
       `┗ 📝 Doublons max : \`${settings.maxDuplicates}\``
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
@@ -1969,6 +1974,7 @@ async function sendVerificationConfigPanel(interaction) {
       `┣ 🛡️ Rôle attribué : ${settings.roleId ? `<@&${settings.roleId}>` : '`❌ Non configuré`'}\n` +
       `┗ 📍 Salon Captcha : ${settings.channelId ? `<#${settings.channelId}>` : '`❌ Non configuré`'}`
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('verify_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
@@ -1988,6 +1994,7 @@ async function sendDmLockConfigPanel(interaction) {
       "**⚙️ Paramètres Actuels**\n" +
       `┗ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}`
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dmlock_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
@@ -2103,6 +2110,7 @@ async function sendEditConfigPanel(interaction) {
       "🎫 **Options** → Ajouter ou supprimer des options de tickets\n\n" +
       "_Choisis l’élément que tu souhaites mettre à jour._"
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -2134,6 +2142,7 @@ async function sendBotNamePanel(interaction) {
       `**Nom actuel** : \`${currentNickname}\`\n\n` +
       "Cliquez sur le bouton ci-dessous pour définir un nouveau surnom."
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Cette modification n'affecte pas les autres serveurs." })
     .setTimestamp();
