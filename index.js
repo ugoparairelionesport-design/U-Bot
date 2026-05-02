@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.5.2...');
+console.log('🚀 [index.js] Loading version 2.5.6...');
 const {
   Client,
   GatewayIntentBits,
@@ -151,11 +151,6 @@ client.on('interactionCreate', async interaction => {
           });
           return setTimeout(() => interaction.deleteReply().catch(() => {}), 300000);
         }
-      }
-
-      // Gestion du timeout pour les messages d'erreur de permission
-      if (interaction.commandName === 'set_config' && interaction.user.id !== ownerId) {
-        return setTimeout(() => interaction.deleteReply().catch(() => {}), client.configSystem.CONFIG_MESSAGE_DELETE_DELAY_MS);
       }
 
       if (interaction.commandName === 'maintenance') {
