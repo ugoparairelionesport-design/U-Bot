@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.8.5...');
+console.log('🚀 [index.js] Loading version 2.8.7...');
 
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = require('discord.js');
 const configSystem = require('./Systems/configsystem');
@@ -23,7 +23,8 @@ console.log('🚀 Lancement du bot en cours...');
 const server = http.createServer((req, res) => {
   // Route pour servir les images (assets)
   if (req.url.startsWith('/assets/')) {
-    const filePath = path.join(__dirname, 'Data', req.url.split('?')[0]); // On retire le paramètre de version ?v=...
+    const urlPath = req.url.split('?')[0];
+    const filePath = path.join(__dirname, 'Data', urlPath.substring(1)); // On retire le '/' pour path.join
     if (fs.existsSync(filePath)) {
       const ext = path.extname(filePath).toLowerCase();
       const contentType = ext === '.png' ? 'image/png' : (ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream');
