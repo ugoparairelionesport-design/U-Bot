@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.6...');
+console.log('🚀 [configsystem.js] Loading version 2.3.7...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -739,7 +739,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.6] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -838,6 +838,7 @@ function sendConfigPanel(interaction) {
       "📊 **Stats** → Configurer les statistiques\n\n" +
       "_Assure-toi que les IDs sont corrects pour éviter les erreurs._"
     )
+    .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -872,7 +873,7 @@ async function handleButtons(interaction) {
       return await handleBotNameButtonClick(interaction);
     }
 
-    if (interaction.customId === 'global_banner_set_btn') {
+    if (interaction.customId === 'global_banner_set_btn' || interaction.customId === 'prot_banner_set_btn') {
       const guildConfig = getGuildConfig(interaction.guildId);
       return interaction.showModal(
         new ModalBuilder()
@@ -2137,6 +2138,7 @@ async function sendEditConfigPanel(interaction) {
       "🎫 **Options** → Ajouter ou supprimer des options de tickets\n\n" +
       "_Choisis l’élément que tu souhaites mettre à jour._"
     )
+    .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -2176,13 +2178,11 @@ async function sendBotNamePanel(interaction) {
     new ButtonBuilder()
       .setCustomId('bot_name_set_btn')
       .setLabel('Modifier le nom')
-      .setLabel('Changer le Nom')
       .setEmoji('✏️')
-      .setStyle(ButtonStyle.Primary)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId('prot_banner_set_btn')
-      .setLabel('Changer l\'Image Hub')
+      .setCustomId('global_banner_set_btn')
+      .setLabel("image d'embed")
       .setEmoji('🖼️')
       .setStyle(ButtonStyle.Secondary)
   );
