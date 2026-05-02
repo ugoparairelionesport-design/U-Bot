@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.7.2...');
+console.log('🚀 [configsystem.js] Loading version 2.7.3...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1118,7 +1118,7 @@ async function handleButtons(interaction) {
           )
       );
 
-      case 'claim_ticket':
+      case 'claim_ticket': {
         if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
         if (guildConfig.claims[interaction.channel.id]) return replyAndAutoDelete(interaction, { content: "❌ Ce ticket est déjà pris en charge.", flags: 64 });
         guildConfig.claims[interaction.channel.id] = interaction.user.id;
@@ -1131,8 +1131,9 @@ async function handleButtons(interaction) {
           embeds: [new EmbedBuilder().setTitle("🛠️ Claim").setDescription(`${interaction.user} a pris en charge ce ticket.\n\nUn membre de l'équipe est désormais assigné à votre demande.`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor).setFooter({ text: "Merci de patienter pendant le traitement." }).setTimestamp()],
           flags: 64
         });
+      }
 
-      case 'unclaim_ticket':
+      case 'unclaim_ticket': {
         if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
         const previousClaim = guildConfig.claims[interaction.channel.id];
         delete guildConfig.claims[interaction.channel.id];
@@ -1142,6 +1143,7 @@ async function handleButtons(interaction) {
           embeds: [new EmbedBuilder().setTitle("♻️ Libéré").setDescription(`${interaction.user}`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor)],
           flags: 64
         });
+      }
 
       case 'save_close_archive':
         if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
@@ -1197,7 +1199,7 @@ async function handleButtons(interaction) {
           )
       );
 
-      case 'confirm_close_ticket':
+      case 'confirm_close_ticket': {
         if (!canManageTicket(interaction)) {
           return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
         }
