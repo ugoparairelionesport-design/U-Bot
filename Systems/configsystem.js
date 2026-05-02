@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.7.0...');
+console.log('🚀 [configsystem.js] Loading version 2.7.1...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.0] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -875,18 +875,16 @@ async function handleButtons(interaction) {
       );
     }
 
-    const guildConfig = getGuildConfig(interaction.guildId);
-    if (interaction.isStringSelectMenu()) {
-      await resetSelectMenuToPlaceholder(interaction);
-    }
-
-    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
+    // Gestion des boutons et menus de sélection spécifiques
+    switch (interaction.customId) {
+      case 'ticket_select': {
+        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const choice = interaction.values[0];
       const categoryId = guildConfig.categories[choice];
       const roleIds = getRoleIds(guildConfig.roles[choice]);
 
       if (!categoryId) {
-        return replyAndAutoDelete(interaction, { content: "❌ Catégorie introuvable", flags: 64 });
+        return replyAndAutoDelete(interaction, { content: "❌ Catégorie introuvable.", flags: 64 });
       }
 
       if (getTicketCount(interaction.guildId, interaction.user.id) >= 3) {
@@ -923,11 +921,12 @@ async function handleButtons(interaction) {
             )
           )
       );
-    }
+      }
 
-    if (interaction.customId === 'modif_select') {
+      case 'modif_select': {
+        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const selected = interaction.values[0];
-      if (selected === 'logs') {
+      if (selected === 'logs') { // Modifier logs
         return interaction.showModal(
           buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs')
         );
@@ -937,7 +936,7 @@ async function handleButtons(interaction) {
           buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats')
         );
       }
-      if (selected === 'options_panel') {
+      if (selected === 'options_panel') { // Gérer les options du panel
         const embed = new EmbedBuilder()
           .setTitle("🎫 Gestion des options du panel")
           .setDescription(
@@ -1006,17 +1005,37 @@ async function handleButtons(interaction) {
       }
 
       return replyAndAutoDelete(interaction, {
-        content: "❌ Option de modification invalide",
+        content: "❌ Option de modification invalide.",
         flags: 64
       });
-    }
+      }
 
-    if (interaction.customId === 'refresh_stats') {
+      case 'bot_name_set_btn':
+        return await handleBotNameButtonClick(interaction);
+      
+      case 'prot_hub_back':
+        return await sendProtectionConfigPanel(interaction);
+      case 'prot_hub_antiraid':
+        return await sendAntiRaidConfigPanel(interaction);
+      case 'prot_hub_antispam':
+        return await sendAntiSpamConfigPanel(interaction);
+      case 'prot_hub_captcha':
+        return await sendVerificationConfigPanel(interaction);
+      case 'prot_hub_dmlock':
+        return await sendDmLockConfigPanel(interaction);
+
+      case 'global_banner_set_btn':
+      case 'prot_banner_set_btn': // Ancien ID pour compatibilité
+        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image (Bannière large)').setPlaceholder('Collez le lien direct de votre image ici').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
+
+      case 'global_color_set_btn':
+        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code couleur HEX (ex: #FF0000)').setPlaceholder('Ex: #5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
+
+      case 'refresh_stats':
       await interaction.deferUpdate();
       return updateStatsMessage(interaction.guild);
-    }
 
-    if (interaction.customId === 'panel_opt_add') {
+      case 'panel_opt_add':
       return interaction.showModal(
         new ModalBuilder()
           .setCustomId('modal_panel_add_option')
@@ -1033,9 +1052,8 @@ async function handleButtons(interaction) {
             )
           )
       );
-    }
 
-    if (interaction.customId === 'panel_opt_remove') {
+      case 'panel_opt_remove':
       const options = Object.keys(guildConfig.categories);
       if (options.length === 0) return replyAndAutoDelete(interaction, { content: "❌ Aucune option à supprimer.", flags: 64 });
       const menu = new StringSelectMenuBuilder()
@@ -1043,29 +1061,27 @@ async function handleButtons(interaction) {
         .setPlaceholder('Sélectionnez l\'option à supprimer')
         .addOptions(options.map(opt => ({ label: opt, value: opt })));
       return replyAndAutoDelete(interaction, { content: "Sélectionnez l'option à supprimer définitivement :", components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
-    }
 
-    if (interaction.isStringSelectMenu() && interaction.customId === 'panel_opt_remove_select') {
+      case 'panel_opt_remove_select': {
+        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const optionToRemove = interaction.values[0];
       delete guildConfig.categories[optionToRemove];
       delete guildConfig.roles[optionToRemove];
       saveConfig(configData);
       return replyAndAutoDelete(interaction, { content: `✅ L'option **${optionToRemove}** a été supprimée du système.`, flags: 64 });
-    }
+      }
 
-    if (interaction.customId === 'config_logs') {
+      case 'config_logs':
       return interaction.showModal(
         buildChannelIdModal('modal_logs', 'Configurer logs', 'ID salon logs')
       );
-    }
 
-    if (interaction.customId === 'config_stats') {
+      case 'config_stats':
       return interaction.showModal(
         buildChannelIdModal('modal_stats', 'Configurer stats', 'ID salon stats')
       );
-    }
 
-    if (interaction.customId === 'create_panel') {
+      case 'create_panel':
       return interaction.showModal(
         new ModalBuilder()
           .setCustomId('modal_panel')
@@ -1101,12 +1117,12 @@ async function handleButtons(interaction) {
             )
           )
       );
-    }
 
-    if (interaction.customId === 'claim_ticket') {
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      if (guildConfig.claims[interaction.channel.id]) return replyAndAutoDelete(interaction, { content: "❌ Déjà pris", flags: 64 });
+      case 'claim_ticket':
+      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
+      if (guildConfig.claims[interaction.channel.id]) return replyAndAutoDelete(interaction, { content: "❌ Ce ticket est déjà pris en charge.", flags: 64 });
       guildConfig.claims[interaction.channel.id] = interaction.user.id;
+      guildConfig.ticketOpenTime[interaction.channel.id] = Date.now(); // Début du claim
       incrementStaffStat(interaction.guildId, interaction.user.id, 'claimed');
       saveConfig(configData);
       const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
@@ -1127,10 +1143,9 @@ async function handleButtons(interaction) {
         embeds: [new EmbedBuilder().setTitle("♻️ Libéré").setDescription(`${interaction.user}`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor)],
         flags: 64
       });
-    }
 
-    if (interaction.customId === 'save_close_archive') {
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      case 'save_close_archive':
+      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
       const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
       if (!pendingClose) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
@@ -1142,12 +1157,12 @@ async function handleButtons(interaction) {
       const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
       if (!archiveResult.ok) return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
       pendingClose.archiveSavedAt = Date.now();
+      pendingClose.archivedBy = interaction.user.id;
       saveConfig(configData);
       return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée", flags: 64 });
-    }
 
-    if (interaction.customId === 'add_user') {
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      case 'add_user':
+      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
       return interaction.showModal(
         new ModalBuilder()
           .setCustomId('modal_add_user')
@@ -1162,9 +1177,8 @@ async function handleButtons(interaction) {
             )
           )
       );
-    }
 
-    if (interaction.customId === 'close_ticket') {
+      case 'close_ticket':
       if (!canManageTicket(interaction)) {
         return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
@@ -1183,9 +1197,8 @@ async function handleButtons(interaction) {
             )
           )
       );
-    }
 
-    if (interaction.customId === 'confirm_close_ticket') {
+      case 'confirm_close_ticket':
       if (!canManageTicket(interaction)) {
         return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
@@ -1198,7 +1211,7 @@ async function handleButtons(interaction) {
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
         delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
+        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré.", flags: 64 });
       }
 
       if (pendingClose.userId !== interaction.user.id) {
@@ -1208,7 +1221,6 @@ async function handleButtons(interaction) {
       await interaction.reply({ content: "🔒 Fermeture...", flags: 64 });
       await interaction.channel.setName(getClosingChannelName(interaction.channel.name)).catch(() => {});
 
-      const ownerId = guildConfig.ticketOwners[interaction.channel.id];
       const claimedBy = guildConfig.claims[interaction.channel.id];
       const openedAt = guildConfig.ticketOpenTime[interaction.channel.id];
       const deleteAt = Date.now() + TICKET_DELETE_DELAY_MS;
@@ -1216,9 +1228,7 @@ async function handleButtons(interaction) {
 
       guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
       
-      if (!guildConfig.pendingDeletions) guildConfig.pendingDeletions = {};
       guildConfig.pendingDeletions[interaction.channel.id] = deleteAt;
-
       if (ownerId) {
         setTicketCount(interaction.guildId, ownerId, getTicketCount(interaction.guildId, ownerId) - 1);
       }
@@ -1601,6 +1611,352 @@ async function handleModal(interaction) {
         return replyAndAutoDelete(interaction, { content: "❌ Salon invalide", flags: 64 });
       }
 
+/* ========================= */
+// PROTECTION HUB UI
+
+async function sendProtectionConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const banner = guildConfig.globalEmbedBanner;
+
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ U-BOT | Shield Protocol")
+    .setDescription(
+      "### 🛰️ Centre de Commandement\n" +
+      "> *Gérez l'ensemble des modules de protection avancée pour garantir la sécurité de votre communauté.*\n\n" +
+      "**✨ Modules de Protection**\n" +
+      "┣ 🛡️ **Anti-Raid** : Bloque les vagues de bots et comptes suspects.\n" +
+      "┣ 🚫 **Anti-Spam** : Filtre le flood, les liens et les répétitions.\n" +
+      "┣ 🤖 **Captcha** : Vérification humaine pour les nouveaux membres.\n" +
+      "┗ 📩 **DM Lock** : Prévention contre les scams en messages privés.\n\n" +
+      "**📊 État actuel du serveur**"
+    )
+    .addFields(
+      { name: "Systèmes Passifs", value: `🛡️ Anti-Raid: ${guildConfig.antiRaid.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n🚫 Anti-Spam: ${guildConfig.antiSpam.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true },
+      { name: "Systèmes Actifs", value: `🤖 Captcha: ${guildConfig.verification.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n📩 DM Lock: ${guildConfig.dmLock.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true }
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(banner)
+    .setColor(guildConfig.antiRaid.lockdown ? "#FF0000" : guildConfig.globalEmbedColor)
+    .setFooter({ text: "U-Bot Security • Protection en temps réel", iconURL: interaction.client.user.displayAvatarURL() })
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('🛡️ Anti-Raid').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('🚫 Anti-Spam').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('🤖 Captcha').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('📩 DM Lock').setStyle(ButtonStyle.Secondary)
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+}
+
+async function sendAntiRaidConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.antiRaid;
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ Module Anti-Raid Pro")
+    .setDescription(
+      "Ce module surveille la fréquence des arrivées et l'ADN des nouveaux comptes.\n\n" +
+      "**⚙️ Paramètres Actuels**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ 🔒 Lockdown : ${settings.lockdown ? '`🔴 ACTIF`' : '`🟢 Inactif`'}\n` +
+      `┣ 👥 Seuil : \`${settings.threshold} membres\` / \`${settings.window}s\`\n` +
+      `┗ ⏳ Âge mini : \`${settings.minAge} heures\``
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(settings.lockdown ? "#FF0000" : guildConfig.globalEmbedColor);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('antiraid_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('antiraid_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendAntiSpamConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.antiSpam;
+  const embed = new EmbedBuilder()
+    .setTitle("🚫 Module Anti-Spam")
+    .setDescription("Analyse les messages en temps réel pour filtrer les comportements abusifs.\n\n" +
+      "**⚙️ Paramètres Actuels**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ 🔨 Sanction : \`${settings.action.toUpperCase()}\`\n` +
+      `┗ 📝 Doublons max : \`${settings.maxDuplicates}\``
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendVerificationConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.verification;
+  const embed = new EmbedBuilder()
+    .setTitle("🤖 Module de Vérification Humaine")
+    .setDescription("Force les nouveaux membres à résoudre un captcha avant d'accéder au serveur.\n\n" +
+      "**⚙️ Paramètres Actuels**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ 🛡️ Rôle attribué : ${settings.roleId ? `<@&${settings.roleId}>` : '`❌ Non configuré`'}\n` +
+      `┗ 📍 Salon Captcha : ${settings.channelId ? `<#${settings.channelId}>` : '`❌ Non configuré`'}`
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('verify_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('verify_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('verify_send_panel').setLabel('📤 Envoyer Panel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendDmLockConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.dmLock;
+  const embed = new EmbedBuilder()
+    .setTitle("📩 Module DM Lock & Prévention")
+    .setDescription("Alerte les nouveaux membres en message privé pour conseiller de désactiver leurs MPs.\n\n" +
+      "**⚙️ Paramètres Actuels**\n" +
+      `┗ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}`
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('dmlock_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('dmlock_send_panel').setLabel('📤 Envoyer Infos').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+function buildAntiRaidModal(settings) {
+  return new ModalBuilder().setCustomId('modal_antiraid_settings').setTitle('Anti-Raid').addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('threshold').setLabel('Seuil membres').setValue(String(settings.threshold)).setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('window').setLabel('Fenêtre (sec)').setValue(String(settings.window)).setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('min_age').setLabel('Âge mini (h)').setValue(String(settings.minAge)).setStyle(TextInputStyle.Short))
+  );
+}
+
+async function saveAntiRaidConfig(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.antiRaid.threshold = parseInt(interaction.fields.getTextInputValue('threshold'));
+  guildConfig.antiRaid.window = parseInt(interaction.fields.getTextInputValue('window'));
+  guildConfig.antiRaid.minAge = parseInt(interaction.fields.getTextInputValue('min_age'));
+  saveConfig(configData);
+  return replyAndAutoDelete(interaction, { content: "✅ Configuration Anti-Raid sauvegardée !", flags: 64 });
+}
+
+function buildAntiSpamModal(settings) {
+  return new ModalBuilder().setCustomId('modal_antispam_settings').setTitle('Anti-Spam').addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('max_messages').setLabel('Max Messages').setValue(String(settings.maxMessages)).setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('max_duplicates').setLabel('Max Doublons').setValue(String(settings.maxDuplicates)).setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('timeout_duration').setLabel('Durée Sourdine (min)').setValue(String(settings.timeoutDuration)).setStyle(TextInputStyle.Short))
+  );
+}
+
+async function saveAntiSpamConfig(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.antiSpam.maxMessages = parseInt(interaction.fields.getTextInputValue('max_messages'));
+  guildConfig.antiSpam.maxDuplicates = parseInt(interaction.fields.getTextInputValue('max_duplicates'));
+  guildConfig.antiSpam.timeoutDuration = parseInt(interaction.fields.getTextInputValue('timeout_duration'));
+  saveConfig(configData);
+  return replyAndAutoDelete(interaction, { content: "✅ Configuration Anti-Spam sauvegardée !", flags: 64 });
+}
+
+function buildVerificationModal(settings) {
+  return new ModalBuilder().setCustomId('modal_verification_settings').setTitle('Captcha').addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID Rôle Membre').setValue(settings.roleId || '').setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('ID Salon Captcha').setValue(settings.channelId || '').setStyle(TextInputStyle.Short))
+  );
+}
+
+async function saveVerificationConfig(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.verification.roleId = interaction.fields.getTextInputValue('role_id');
+  guildConfig.verification.channelId = interaction.fields.getTextInputValue('channel_id');
+  saveConfig(configData);
+  return replyAndAutoDelete(interaction, { content: "✅ Configuration Captcha sauvegardée !", flags: 64 });
+}
+
+async function sendUserVerificationPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const channel = await interaction.guild.channels.fetch(guildConfig.verification.channelId).catch(() => null);
+  const banner = guildConfig.globalEmbedBanner;
+  if (!channel || !channel.isTextBased()) return replyAndAutoDelete(interaction, { content: "❌ Salon introuvable ou invalide.", flags: 64 });
+  const embed = new EmbedBuilder().setTitle("🛡️ Vérification").setDescription("Cliquez ci-dessous pour accéder au serveur.").setColor(guildConfig.globalEmbedColor).setImage(banner);
+  const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_start').setLabel('Vérification').setStyle(ButtonStyle.Success));
+  await channel.send({ embeds: [embed], components: [row] });
+  return replyAndAutoDelete(interaction, { content: "✅ Panel envoyé.", flags: 64 });
+}
+
+async function sendUserDmSafetyPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const banner = guildConfig.globalEmbedBanner;
+  const embed = new EmbedBuilder().setTitle("📩 Sécurité DM").setDescription("Ne cliquez sur aucun lien reçu en MP.").setColor("#2B2D31").setImage(banner);
+  await interaction.channel.send({ embeds: [embed] });
+  return replyAndAutoDelete(interaction, { content: "✅ Infos envoyées.", flags: 64 });
+}
+
+function buildGlobalColorModal(currentColor) {
+  return new ModalBuilder()
+    .setCustomId('modal_set_global_color')
+    .setTitle('Couleur des Embeds')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('color_hex')
+          .setLabel('Code couleur HEX (ex: #FF0000)')
+          .setPlaceholder('Ex: #5865F2')
+          .setValue(currentColor || '#5865F2')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      )
+    );
+}
+
+async function saveGlobalColorConfig(interaction) {
+  const color = interaction.fields.getTextInputValue('color_hex').trim();
+  const guildConfig = getGuildConfig(interaction.guildId);
+  if (!/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
+    return replyAndAutoDelete(interaction, { content: "❌ Code couleur HEX invalide.", flags: 64 });
+  }
+  guildConfig.globalEmbedColor = color;
+  saveConfig(configData);
+  return replyAndAutoDelete(interaction, { content: `✅ Couleur mise à jour : \`${color}\``, flags: 64 });
+}
+
+async function sendHelpPanel(interaction) {
+  const { commands } = require('../deploy-commands');
+  const guildConfig = getGuildConfig(interaction.guildId);
+
+  const categories = {
+    "🛡️ Protection": ['config_protection'],
+    "🎫 Tickets": ['config_ticket', 'modif_config_ticket', 'stats', 'staff_stats'],
+    "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
+    "🛠️ Maintenance": ['maintenance'],
+    "🤖 Configuration": ['set_config', 'help']
+  };
+
+  const embed = new EmbedBuilder()
+    .setTitle("📚 Centre d'Aide & Commandes")
+    .setDescription(
+      `### 🛰️ Guide Opérationnel\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.7.1\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setFooter({ text: "U-Bot System • Support & Sécurité", iconURL: interaction.client.user.displayAvatarURL() })
+    .setTimestamp();
+
+  // Parcours des catégories pour remplir l'embed dynamiquement
+  for (const [catName, cmdList] of Object.entries(categories)) {
+    let categoryContent = "";
+    
+    commands.forEach(cmd => {
+      const data = cmd.toJSON();
+      if (cmdList.includes(data.name)) {
+        // Résumé concis basé sur le nom de la commande
+        const summaries = {
+          'maintenance': 'Gérer les MAJ et le status du bot.',
+          'config_protection': 'Hub central Anti-Raid/Spam/Captcha.',
+          'config_ticket': 'Initialiser le système de support.',
+          'modif_config_ticket': 'Editer les salons et rôles support.',
+          'stats': 'Voir les volumes de tickets.',
+          'staff_stats': 'Classement d\'activité des modérateurs.',
+          'config_live': 'Ajouter des alertes Twitch/YT/TikTok.',
+          'modif_config_live': 'Gérer les chaînes surveillées.',
+          'test_live': 'Simuler une alerte en direct.',
+          'set_config': 'Changer le nom et l\'image/couleur du bot.',
+          'help': 'Afficher ce menu d\'assistance.'
+        };
+        
+        categoryContent += `┣ \`/${data.name}\` : ${summaries[data.name] || data.description}\n`;
+      }
+    });
+
+    if (categoryContent) {
+      embed.addFields({ 
+        name: catName, 
+        value: categoryContent.replace(/┣(?=[^┣]*$)/, "┗"), // Remplace le dernier symbole pour le design
+        inline: false 
+      });
+    }
+  }
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel('Support Officiel')
+      .setURL('https://discord.gg/example') // Remplace par ton lien
+      .setStyle(ButtonStyle.Link),
+    new ButtonBuilder()
+      .setCustomId('prot_hub_back')
+      .setLabel('Dashboard Sécurité')
+      .setEmoji('🛡️')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+}
+
+module.exports = {
+  // Core & Tickets
+  getGuildConfig,
+  getFullConfig,
+  saveConfig,
+  sendConfigPanel,
+  sendEditConfigPanel,
+  handleButtons,
+  handleModal,
+  handleMessage,
+  handleMessageDelete,
+  updateStatsMessage,
+  showStaffStats,
+  resumeTicketState,
+  sendBotNamePanel,
+  startVisualTimer,
+  replyAndAutoDelete,
+  // Live System
+  sendLiveConfigPanel,
+  buildLiveConfigModal,
+  saveLiveConfig,
+  sendLiveEditList,
+  handleLiveEditSelect,
+  handleLiveDelete,
+  // Protection Hub
+  sendProtectionConfigPanel,
+  sendAntiRaidConfigPanel,
+  sendAntiSpamConfigPanel,
+  sendVerificationConfigPanel,
+  sendDmLockConfigPanel,
+  buildAntiRaidModal,
+  saveAntiRaidConfig,
+  buildAntiSpamModal,
+  saveAntiSpamConfig,
+  buildVerificationModal,
+  saveVerificationConfig,
+  sendUserVerificationPanel,
+  sendUserDmSafetyPanel,
+  // Help System
+  sendHelpPanel,
+  buildGlobalColorModal,
+  saveGlobalColorConfig,
+  CONFIG_MESSAGE_DELETE_DELAY_MS
+};
       guildConfig.logsChannel = channelId;
       saveConfig(configData);
       return replyAndAutoDelete(interaction, { content: "✅ Logs configurés", flags: 64 });

@@ -99,7 +99,7 @@ class MaintenanceSystem {
       const remoteHash = results[1];
 
       if (remoteHash && localHash !== remoteHash && remoteHash.length >= 40) {
-        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (v2.4.9)`);
+        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (v2.7.1)`);
         
         const updateCmd = 'git fetch origin main && git reset --hard origin/main && git clean -fd -e Data/';
         exec(updateCmd, () => {
@@ -108,7 +108,7 @@ class MaintenanceSystem {
             
             // On stoppe la surveillance pour éviter les rechargements inutiles pendant le shutdown
             this.maintenanceMode = true;
-            this.watchers.forEach(w => w.close());
+            this.watchers.forEach(w => w.close()); // Ferme tous les watchers
             
             setTimeout(() => {
               try { this.cleanup(); } catch(e) {}
