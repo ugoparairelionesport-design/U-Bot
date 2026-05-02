@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.6.0...');
+console.log('🚀 [configsystem.js] Loading version 2.6.2...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.6.0] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.6.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -2181,7 +2181,7 @@ async function sendHelpPanel(interaction) {
     .setTitle("📚 Centre d'Aide & Commandes")
     .setDescription(
       `### 🛰️ Guide Opérationnel\n` +
-      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.6.0\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.4.9\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
       `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
@@ -2280,8 +2280,661 @@ module.exports = {
   sendUserDmSafetyPanel,
   // Help System
   sendHelpPanel,
+  buildGlobalColorModal,
+  saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS
 };
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'modif_select') {
+      const selected = interaction.values[0];
+
+      if (selected === 'logs') {
+        return interaction.showModal(
+          buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs')
+        );
+      }
+
+      if (selected === 'stats') {
+        return interaction.showModal(
+          buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats')
+        );
+      }
+
+      if (selected === 'options_panel') {
+        const embed = new EmbedBuilder()
+          .setTitle("🎫 Gestion des options du panel")
+          .setDescription(
+            "Choisissez l'action à effectuer sur les options de vos tickets.\n\n" +
+            "➕ **Ajouter** : Créer une nouvelle option dans le système\n" +
+            "➖ **Supprimer** : Supprimer définitivement une option"
+          )
+          .setColor("#5865F2");
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('panel_opt_add').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'),
+          new ButtonBuilder().setCustomId('panel_opt_remove').setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('➖')
+        );
+
+        return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+      }
+
+      if (selected === 'category') {
+        return interaction.showModal(
+          new ModalBuilder()
+            .setCustomId('modal_edit_category')
+            .setTitle('Modifier catégorie')
+            .addComponents(
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('option_name')
+                  .setLabel('Nom exact de l’option')
+                  .setStyle(TextInputStyle.Short)
+                  .setRequired(true)
+              ),
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('category_id')
+                  .setLabel('Nouvel ID catégorie')
+                  .setStyle(TextInputStyle.Short)
+                  .setRequired(true)
+              )
+            )
+        );
+      }
+
+      if (selected === 'role') {
+        return interaction.showModal(
+          new ModalBuilder()
+            .setCustomId('modal_edit_role')
+            .setTitle('Modifier rôle')
+            .addComponents(
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('option_name')
+                  .setLabel('Nom exact de l’option')
+                  .setStyle(TextInputStyle.Short)
+                  .setRequired(true)
+              ),
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('roles')
+                  .setLabel('Nouveaux rôles (@role ou IDs)')
+                  .setStyle(TextInputStyle.Short)
+                  .setRequired(false)
+              )
+            )
+        );
+      }
+
+      return replyAndAutoDelete(interaction, {
+        content: "❌ Option de modification invalide",
+        flags: 64
+      });
+    }
+
+    if (interaction.customId === 'refresh_stats') {
+      await interaction.deferUpdate();
+      return updateStatsMessage(interaction.guild);
+    }
+
+    if (interaction.customId === 'panel_opt_add') {
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_panel_add_option')
+          .setTitle('Ajouter une option')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('opt_name').setLabel('Nom de l\'option').setStyle(TextInputStyle.Short).setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('cat_id').setLabel('ID de la catégorie').setStyle(TextInputStyle.Short).setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder().setCustomId('role_ids').setLabel('ID(s) Rôle(s) (séparés par des virgules)').setStyle(TextInputStyle.Short).setRequired(false)
+            )
+          )
+      );
+    }
+
+    if (interaction.customId === 'panel_opt_remove') {
+      const options = Object.keys(guildConfig.categories);
+      if (options.length === 0) return interaction.reply({ content: "❌ Aucune option à supprimer.", flags: 64 });
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId('panel_opt_remove_select')
+        .setPlaceholder('Sélectionnez l\'option à supprimer')
+        .addOptions(options.map(opt => ({ label: opt, value: opt })));
+      return interaction.reply({ content: "Sélectionnez l'option à supprimer définitivement :", components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
+    }
+
+    if (interaction.isStringSelectMenu() && interaction.customId === 'panel_opt_remove_select') {
+      const optionToRemove = interaction.values[0];
+      delete guildConfig.categories[optionToRemove];
+      delete guildConfig.roles[optionToRemove];
+      saveConfig(configData);
+      return interaction.reply({ content: `✅ L'option **${optionToRemove}** a été supprimée du système.`, flags: 64 });
+    }
+
+    if (interaction.customId === 'config_logs') {
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_logs')
+          .setTitle('Configurer logs')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('channel_id')
+                .setLabel('ID salon logs')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+            )
+          )
+      );
+    }
+
+    if (interaction.customId === 'config_stats') {
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_stats')
+          .setTitle('Configurer stats')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('channel_id')
+                .setLabel('ID salon stats')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+            )
+          )
+      );
+    }
+
+    if (interaction.customId === 'create_panel') {
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_panel')
+          .setTitle('Créer panel')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('channel_id')
+                .setLabel('ID salon')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('options')
+                .setLabel('Options (1 par ligne)')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('roles')
+                .setLabel('Rôles autorisés (@role ou IDs)')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('categories_input')
+                .setLabel('IDs catégories (1 par ligne)')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true)
+            )
+          )
+      );
+    }
+
+    if (interaction.customId === 'claim_ticket') {
+      if (!canManageTicket(interaction)) {
+        return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
+      if (guildConfig.claims[interaction.channel.id]) {
+        return interaction.reply({ content: "❌ Déjà pris", flags: 64 });
+      }
+
+      guildConfig.claims[interaction.channel.id] = interaction.user.id;
+      incrementStaffStat(interaction.guildId, interaction.user.id, 'claimed');
+      saveConfig(configData);
+
+      const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
+
+      await sendLog(
+        interaction.guild,
+        new EmbedBuilder()
+          .setTitle("🛠️ Ticket claim")
+          .addFields(
+            buildTicketContextFields(interaction, [
+              { name: "Claims staff", value: `${staffStats.claimed}`, inline: true },
+              { name: "Tickets fermés staff", value: `${staffStats.closed}`, inline: true }
+            ])
+          )
+          .setColor("Green")
+          .setTimestamp()
+      );
+
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("🛠️ Claim")
+            .setDescription(
+              `${interaction.user} a pris en charge ce ticket.\n\n` +
+              "Un membre de l'équipe est désormais assigné à votre demande et reviendra vers vous dans les meilleurs délais."
+            )
+            .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+            .setColor("Green")
+            .setFooter({ text: "Merci de patienter pendant le traitement de votre demande." })
+            .setTimestamp()
+        ]
+      });
+    }
+
+    if (interaction.customId === 'unclaim_ticket') {
+      if (!canManageTicket(interaction)) {
+        return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
+      const previousClaim = guildConfig.claims[interaction.channel.id];
+      delete guildConfig.claims[interaction.channel.id];
+      saveConfig(configData);
+
+      await sendLog(
+        interaction.guild,
+        new EmbedBuilder()
+          .setTitle("♻️ Ticket libéré")
+          .addFields(
+            buildTicketContextFields(interaction, [
+              { name: "Claim précédent", value: previousClaim ? `<@${previousClaim}>` : "Aucun", inline: true }
+            ])
+          )
+          .setColor("Orange")
+          .setTimestamp()
+      );
+
+      return interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("♻️ Libéré")
+            .setDescription(`${interaction.user}`)
+            .setColor("Orange")
+        ]
+      });
+    }
+
+    if (interaction.customId === 'add_user') {
+      if (!canManageTicket(interaction)) {
+        return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_add_user')
+          .setTitle('Ajouter membre')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('user_id')
+                .setLabel('ID utilisateur')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+            )
+          )
+      );
+    }
+
+    if (interaction.customId === 'close_ticket') {
+      if (!canManageTicket(interaction)) {
+        return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_close_ticket')
+          .setTitle('Fermer ticket')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('close_reason')
+                .setLabel('Raison de fermeture (optionnelle)')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false)
+            )
+          )
+      );
+    }
+
+    if (interaction.customId === 'confirm_close_ticket') {
+      if (!canManageTicket(interaction)) {
+        return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
+      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
+      if (!pendingClose) {
+        return interaction.reply({ content: "❌ Aucune fermeture en attente", flags: 64 });
+      }
+
+      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
+        delete guildConfig.pendingClosures[interaction.channel.id];
+        saveConfig(configData);
+        return interaction.reply({ content: "❌ La demande de fermeture a expiré", flags: 64 });
+      }
+
+      if (pendingClose.userId !== interaction.user.id) {
+        return interaction.reply({ content: "❌ Seul le modérateur ayant lancé la fermeture peut la confirmer", flags: 64 });
+      }
+
+      await interaction.reply({ content: "🔒 Fermeture...", flags: 64 });
+      await interaction.channel.setName(getClosingChannelName(interaction.channel.name)).catch(() => {});
+
+      const ownerId = guildConfig.ticketOwners[interaction.channel.id];
+      const claimedBy = guildConfig.claims[interaction.channel.id];
+      const openedAt = guildConfig.ticketOpenTime[interaction.channel.id];
+      const deleteAt = Date.now() + TICKET_DELETE_DELAY_MS;
+      const durationMinutes = openedAt ? Math.max(1, Math.round((Date.now() - openedAt) / 60000)) : null;
+
+      guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
+      
+      if (!guildConfig.pendingDeletions) guildConfig.pendingDeletions = {};
+      guildConfig.pendingDeletions[interaction.channel.id] = deleteAt;
+
+      if (ownerId) {
+        setTicketCount(interaction.guildId, ownerId, getTicketCount(interaction.guildId, ownerId) - 1);
+      }
+
+      incrementStaffStat(interaction.guildId, interaction.user.id, 'closed');
+      delete guildConfig.claims[interaction.channel.id];
+      delete guildConfig.ticketOwners[interaction.channel.id];
+      delete guildConfig.ticketOpenTime[interaction.channel.id];
+      delete guildConfig.pendingClosures[interaction.channel.id];
+      saveConfig(configData);
+      await updateStatsMessage(interaction.guild);
+
+      const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
+
+      await sendMessageWithTimer(
+        interaction.channel,
+        {
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("🔒 Ticket fermé")
+              .setDescription(
+                "Ce ticket va maintenant être fermé.\n\n" +
+                "Merci d'avoir utilisé le support. Nous espérons que votre demande a été traitée dans les meilleures conditions."
+              )
+              .setColor("Red")
+              .setFooter({ text: "⏱️ Suppression dans 30:00" })
+              .setTimestamp()
+          ]
+        },
+        TICKET_DELETE_DELAY_MS
+      );
+
+      await sendLog(
+        interaction.guild,
+        new EmbedBuilder()
+          .setTitle("🔒 Ticket fermé")
+          .addFields(
+            { name: "Salon", value: `${interaction.channel.name}`, inline: true },
+            { name: "Fermé par", value: `${interaction.user}`, inline: true },
+            { name: "Claim", value: claimedBy ? `<@${claimedBy}>` : "Aucun", inline: true },
+            { name: "Créateur", value: ownerId ? `<@${ownerId}>` : "Inconnu", inline: true },
+            { name: "Durée", value: durationMinutes ? `${durationMinutes} min` : "Inconnue", inline: true },
+            { name: "Raison", value: pendingClose.reason || "Aucune", inline: false },
+            { name: "Archive", value: pendingClose.archiveSavedAt ? `Oui par <@${pendingClose.archivedBy}>` : "Non", inline: true },
+            { name: "Claims staff", value: `${staffStats.claimed}`, inline: true },
+            { name: "Tickets fermés staff", value: `${staffStats.closed}`, inline: true }
+          )
+          .setColor("Red")
+          .setTimestamp()
+      );
+
+      setTimeout(() => {
+        delete guildConfig.pendingDeletions[interaction.channel.id];
+        saveConfig(configData);
+        interaction.channel.delete().catch(() => {});
+      }, TICKET_DELETE_DELAY_MS);
+
+      return;
+    }
+
+    if (interaction.customId === 'save_close_archive') {
+      if (!canManageTicket(interaction)) {
+        return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
+      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
+      if (!pendingClose) {
+        return interaction.reply({ content: "❌ Aucune fermeture en attente", flags: 64 });
+      }
+
+      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
+        delete guildConfig.pendingClosures[interaction.channel.id];
+        saveConfig(configData);
+        return interaction.reply({ content: "❌ La demande de fermeture a expiré", flags: 64 });
+      }
+
+      if (pendingClose.archiveSavedAt) {
+        return interaction.reply({ content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
+      }
+
+      const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
+
+      if (!archiveResult.ok) {
+        return interaction.reply({ content: archiveResult.reason, flags: 64 });
+      }
+
+      pendingClose.archiveSavedAt = Date.now();
+      pendingClose.archivedBy = interaction.user.id;
+      saveConfig(configData);
+
+      return interaction.reply({ content: "✅ Archive sauvegardée", flags: 64 });
+    }
+
+    if (interaction.customId === 'cancel_close_ticket') {
+      if (!canManageTicket(interaction)) {
+        return interaction.reply({ content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
+      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
+      if (!pendingClose) {
+        return interaction.reply({ content: "❌ Aucune fermeture en attente", flags: 64 });
+      }
+
+      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
+        delete guildConfig.pendingClosures[interaction.channel.id];
+        saveConfig(configData);
+        return interaction.reply({ content: "❌ La demande de fermeture a expiré", flags: 64 });
+      }
+
+      delete guildConfig.pendingClosures[interaction.channel.id];
+      saveConfig(configData);
+
+      return interaction.reply({ content: '❌ Fermeture annulée', flags: 64 });
+    }
+
+    // Si aucune condition n'est remplie, on ne laisse pas l'interaction expirer
+    if (!interaction.replied && !interaction.deferred && interaction.isButton()) {
+        return interaction.reply({ content: "⚠️ Bouton non reconnu ou en cours de déploiement.", flags: 64 });
+    }
+  } catch (err) {
+    console.error("BUTTON ERROR:", err);
+
+    if (!interaction.replied && !interaction.deferred) {
+      interaction.reply({
+        content: "❌ Une erreur est survenue",
+        flags: 64
+      }).catch(() => {});
+    }
+  }
+}
+
+/* ========================= */
+// CONFIGURATION LIVE
+
+async function sendLiveConfigPanel(interaction) {
+  const embed = new EmbedBuilder()
+    .setTitle("📡 Configuration des Alertes Live")
+    .setDescription(
+      "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
+      "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
+    )
+    .setColor("#5865F2")
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('live_config_twitch').setLabel('Twitch').setStyle(ButtonStyle.Primary).setEmoji('1499576322869956668'),
+    new ButtonBuilder().setCustomId('live_config_youtube').setLabel('YouTube').setStyle(ButtonStyle.Danger).setEmoji('1499576375911383110'),
+    new ButtonBuilder().setCustomId('live_config_tiktok').setLabel('TikTok').setStyle(ButtonStyle.Secondary).setEmoji('1499576285951823902')
+  );
+
+  return interaction.reply({ embeds: [embed], components: [row], flags: 64 });
+}
+
+function buildLiveConfigModal(platform, existingData = null) {
+  return new ModalBuilder()
+    .setCustomId(`modal_live_config_${platform}`)
+    .setTitle(`Alerte ${platform.charAt(0).toUpperCase() + platform.slice(1)}`)
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('channel_url')
+          .setLabel('Lien de la chaîne / Pseudo')
+          .setPlaceholder('https://twitch.tv/nom_du_streamer')
+          .setValue(existingData?.url || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('notif_channel_id')
+          .setLabel('ID du salon de notification')
+          .setValue(existingData?.channelId || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('role_id')
+          .setLabel('ID du rôle à mentionner (Optionnel)')
+          .setValue(existingData?.roleId || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('security_hashtag')
+          .setLabel('Hashtag de sécurité (Ex: #live)')
+          .setPlaceholder('Le live doit contenir ce hashtag pour être notifié')
+          .setValue(existingData?.securityHashtag || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+      )
+    );
+}
+
+async function saveLiveConfig(interaction, platform) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  let url = interaction.fields.getTextInputValue('channel_url').trim();
+  const channelId = interaction.fields.getTextInputValue('notif_channel_id').trim();
+  const roleId = interaction.fields.getTextInputValue('role_id').trim();
+  const securityHashtag = interaction.fields.getTextInputValue('security_hashtag').trim();
+
+  // Nettoyage de l'URL pour respecter la limite de 100 caractères des IDs Discord
+  url = url.replace(/<|>/g, '');
+  try {
+    if (url.startsWith('http')) {
+      const urlObj = new URL(url);
+      urlObj.search = ''; // Supprime les paramètres ?...
+      urlObj.hash = '';   // Supprime les ancres #...
+      url = urlObj.toString().replace(/\/$/, ''); // Uniformisation sans slash final
+    }
+  } catch (e) {
+    // On garde la valeur brute si ce n'est pas une URL complète
+  }
+
+  const targetChannel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+  if (!targetChannel) return interaction.reply({ content: "❌ ID de salon invalide.", flags: 64 });
+
+  const newConfig = {
+    platform,
+    url,
+    channelId,
+    roleId: roleId || null,
+    securityHashtag: securityHashtag || null,
+    lastMessageId: null,
+    isLive: false
+  };
+
+  if (!guildConfig.liveConfigs) guildConfig.liveConfigs = [];
+  const index = guildConfig.liveConfigs.findIndex(c => c.url === url);
+  if (index !== -1) guildConfig.liveConfigs[index] = newConfig;
+  else guildConfig.liveConfigs.push(newConfig);
+
+  saveConfig(configData);
+  return interaction.reply({ content: `✅ Configuration live enregistrée pour **${platform}** (${url}) !`, flags: 64 });
+}
+
+async function sendLiveEditList(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const lives = guildConfig.liveConfigs || [];
+
+  if (lives.length === 0) return interaction.reply({ content: "❌ Aucune configuration trouvée.", flags: 64 });
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('live_edit_select')
+    .setPlaceholder('Choisir une chaîne à gérer...')
+    .addOptions(lives.map(l => ({
+      label: l.url.split('/').pop().replace('@', ''),
+      description: `${l.platform.toUpperCase()} - Salon: ${l.channelId}`,
+      value: l.url,
+      emoji: l.platform === 'twitch' ? '1499576322869956668' : (l.platform === 'youtube' ? '1499576375911383110' : '1499576285951823902')
+    })));
+
+  return interaction.reply({ 
+    content: "📝 **Gestion des lives**\nSélectionnez une chaîne pour la modifier ou la supprimer.", 
+    components: [new ActionRowBuilder().addComponents(select)], 
+    flags: 64 
+  });
+}
+
+async function handleLiveEditSelect(interaction, url) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const live = guildConfig.liveConfigs.find(l => l.url === url);
+  if (!live) return interaction.reply({ content: "❌ Config introuvable.", flags: 64 });
+
+  const embed = new EmbedBuilder()
+    .setTitle(`⚙️ Gestion : ${url.split('/').pop()}`)
+    .addFields(
+      { name: "Hashtag", value: `\`${live.securityHashtag || 'Aucun'}\``, inline: true },
+      { name: "Salon", value: `<#${live.channelId}>`, inline: true },
+      { name: "Rôle", value: live.roleId ? `<@&${live.roleId}>` : "`Aucun`", inline: true }
+    )
+    .setColor("#5865F2");
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`live_btn_edit_${url}`).setLabel('Modifier').setStyle(ButtonStyle.Primary).setEmoji('✏️'),
+    new ButtonBuilder().setCustomId(`live_btn_del_${url}`).setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
+  );
+
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function handleLiveDelete(interaction, url) {
+  try {
+    const guildConfig = getGuildConfig(interaction.guildId);
+    const index = guildConfig.liveConfigs.findIndex(l => l.url === url);
+    if (index !== -1) {
+      guildConfig.liveConfigs.splice(index, 1);
+      saveConfig(configData);
+      return await interaction.update({ content: `✅ Configuration supprimée pour **${url}**.`, embeds: [], components: [], flags: 64 });
+    }
+    return await interaction.reply({ content: "❌ Erreur lors de la suppression.", flags: 64 });
+  } catch (err) {
+    console.error("❌ Erreur suppression live:", err);
+  }
+}
 
 /* ========================= */
 async function handleModal(interaction) {
