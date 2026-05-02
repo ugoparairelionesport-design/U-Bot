@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.2...');
+console.log('🚀 [configsystem.js] Loading version 2.8.5...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -619,6 +619,7 @@ async function saveTicketArchive(guild, channel, requestedBy) {
   return { ok: true };
 }
 
+// ÉTAPE 1 : Afficher le formulaire (Modal)
 async function createTicketFromChoice(interaction, choice, openingReason = '') {
   const guildConfig = getGuildConfig(interaction.guildId);
   const categoryId = guildConfig.categories[choice];
@@ -672,9 +673,64 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
   );
 }
 
+// ÉTAPE 2 : Création réelle du salon (après validation du formulaire)
+async function executeTicketCreation(interaction, choice, openingReason) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const categoryId = guildConfig.categories[choice];
+  const roleIds = getRoleIds(guildConfig.roles[choice]);
+
+  // Calcul du numéro de ticket
+  guildConfig.stats.opened = (guildConfig.stats.opened || 0) + 1;
+  const ticketId = String(guildConfig.stats.opened).padStart(4, '0');
+  const channelName = `${choice}-${ticketId}`;
+
+  const channel = await interaction.guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: categoryId,
+    permissionOverwrites: [
+      { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+      { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+      ...roleIds.map(id => ({ id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }))
+    ]
+  });
+
+  guildConfig.ticketOwners[channel.id] = interaction.user.id;
+  guildConfig.ticketOpenTime[channel.id] = Date.now();
+  setTicketCount(interaction.guildId, interaction.user.id, getTicketCount(interaction.guildId, interaction.user.id) + 1);
+  saveConfig(configData);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🎫 Ticket - ${choice}`)
+    .setDescription(`Bienvenue ${interaction.user},\n\nLe staff a été notifié de votre demande.\n\n**Raison :** ${openingReason || "Aucune raison fournie"}`)
+    .addFields(
+      { name: "Utilisateur", value: `${interaction.user}`, inline: true },
+      { name: "Numéro", value: `#${ticketId}`, inline: true }
+    )
+    .setImage(guildConfig.globalEmbedBanner) // Affichage de l'image paramétrée
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('claim_ticket').setLabel('Prendre en charge').setStyle(ButtonStyle.Primary).setEmoji('🛠️'),
+    new ButtonBuilder().setCustomId('close_ticket').setLabel('Fermer').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+  );
+
+  await channel.send({ content: `${interaction.user} | ${roleIds.map(id => `<@&${id}>`).join(' ')}`, embeds: [embed], components: [row] });
+  
+  await sendLog(interaction.guild, new EmbedBuilder()
+    .setTitle("📩 Nouveau ticket")
+    .addFields(buildTicketContextFields(interaction, [{ name: "Raison", value: openingReason || "Aucune", inline: false }]))
+    .setColor(guildConfig.globalEmbedColor).setTimestamp());
+
+  await updateStatsMessage(interaction.guild);
+
+  return interaction.editReply({ content: `✅ Votre ticket a été créé : ${channel}`, flags: 64 });
+}
+
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.5] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1226,7 +1282,8 @@ async function handleModal(interaction) {
         const replOwner = process.env.REPL_OWNER;
         
         if (replName && replOwner) {
-          const publicUrl = `https://${replName}.replit.app/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
+          // Correction de l'URL Replit : slug.owner.replit.app
+          const publicUrl = `https://${replName}.${replOwner}.replit.app/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
           guildConfig.globalEmbedBanner = publicUrl;
           saveConfig(configData);
           return interaction.editReply({ content: "✅ Image téléchargée et sauvegardée localement ! Elle ne disparaîtra plus, même si vous supprimez le message d'origine." });
@@ -1439,7 +1496,9 @@ async function handleModal(interaction) {
       pendingTicketCreations.delete(interaction.user.id);
       const openingReason = interaction.fields.getTextInputValue('opening_reason').trim();
 
-      return createTicketFromChoice(interaction, pendingCreation.choice, openingReason);
+      // On utilise maintenant executeTicketCreation pour éviter la boucle infinie
+      await interaction.deferReply({ flags: 64 });
+      return executeTicketCreation(interaction, pendingCreation.choice, openingReason);
       }
 
       case 'modal_add_user': {
