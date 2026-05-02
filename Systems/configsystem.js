@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.2.9...');
+console.log('🚀 [configsystem.js] Loading version 2.3.0...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -17,10 +17,6 @@ const {
 
 const configPath = path.join(__dirname, '../Data/config.json');
 let lastSavedContent = ""; 
-const defaultConfig = {
-  guilds: {} // Structure: { "guildId": { categories: {}, roles: {}, ... } }
-};
-
 const defaultGuildSettings = {
   categories: {},
   roles: {},
@@ -738,7 +734,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.9] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.0] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -837,7 +833,6 @@ function sendConfigPanel(interaction) {
       "📊 **Stats** → Configurer les statistiques\n\n" +
       "_Assure-toi que les IDs sont corrects pour éviter les erreurs._"
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -1417,7 +1412,6 @@ async function sendLiveConfigPanel(interaction) {
       "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
       "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setTimestamp();
 
@@ -1890,30 +1884,23 @@ async function handleMessage(message) {
 async function sendProtectionConfigPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const embed = new EmbedBuilder()
-    .setTitle("🛡️ Shield Protocol | Dashboard de Sécurité")
-    .setDescription(
-      "> *Bienvenue dans le centre de commandement. Gérez ici l'ensemble des modules de protection avancée pour garantir la sécurité de votre communauté.*\n\n" +
-      "**✨ Modules de Protection**\n" +
-      "┣ 🛡️ **Anti-Raid** : Bloque les vagues de bots et comptes suspects.\n" +
-      "┣ 🚫 **Anti-Spam** : Filtre le flood, les liens et les répétitions.\n" +
-      "┣ 🤖 **Captcha** : Vérification humaine pour les nouveaux membres.\n" +
-      "┗ 📩 **DM Lock** : Prévention contre les scams en messages privés.\n\n" +
-      "**📊 État actuel du serveur**"
-    )
+    .setTitle("🛡️ Shield Protocol | Centre de Sécurité")
+    .setDescription("Gérez la protection de votre serveur en temps réel.")
     .addFields(
-      { name: "Systèmes Passifs", value: `🛡️ Anti-Raid: ${guildConfig.antiRaid.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n🚫 Anti-Spam: ${guildConfig.antiSpam.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true },
-      { name: "Systèmes Actifs", value: `🤖 Captcha: ${guildConfig.verification.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n📩 DM Lock: ${guildConfig.dmLock.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true }
+      { name: "🛡️ Anti-Raid", value: guildConfig.antiRaid.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "🚫 Anti-Spam", value: guildConfig.antiSpam.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "\u200b", value: "\u200b", inline: true },
+      { name: "🤖 Captcha", value: guildConfig.verification.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "📩 DM Lock", value: guildConfig.dmLock.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true }
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setColor(guildConfig.antiRaid.lockdown ? "#FF0000" : "#2f3136")
-    .setFooter({ text: "Cliquez sur un module pour accéder aux réglages avancés.", iconURL: interaction.client.user.displayAvatarURL() })
+    .setColor("#2f3136")
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('🛡️ Anti-Raid').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('🚫 Anti-Spam').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('🤖 Captcha').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('📩 DM Lock').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('Anti-Raid').setStyle(ButtonStyle.Primary).setEmoji('🛡️'),
+    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('Anti-Spam').setStyle(ButtonStyle.Primary).setEmoji('🚫'),
+    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('Captcha').setStyle(ButtonStyle.Primary).setEmoji('🤖'),
+    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('DM Lock').setStyle(ButtonStyle.Primary).setEmoji('📩')
   );
 
   const payload = { embeds: [embed], components: [row], flags: 64 };
@@ -2110,7 +2097,6 @@ async function sendEditConfigPanel(interaction) {
       "🎫 **Options** → Ajouter ou supprimer des options de tickets\n\n" +
       "_Choisis l’élément que tu souhaites mettre à jour._"
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -2142,7 +2128,6 @@ async function sendBotNamePanel(interaction) {
       `**Nom actuel** : \`${currentNickname}\`\n\n` +
       "Cliquez sur le bouton ci-dessous pour définir un nouveau surnom."
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Cette modification n'affecte pas les autres serveurs." })
     .setTimestamp();

@@ -99,7 +99,7 @@ class MaintenanceSystem {
       const remoteHash = results[1];
 
       if (remoteHash && localHash !== remoteHash && remoteHash.length >= 40) {
-        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (v2.2.9)`);
+        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (v2.3.0)`);
         
         const updateCmd = 'git fetch origin main && git reset --hard origin/main && git clean -fd -e Data/';
         exec(updateCmd, () => {
