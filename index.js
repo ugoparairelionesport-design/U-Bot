@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 2.1.6...');
+console.log('🚀 [index.js] Loading version 2.1.7...');
 const {
   Client,
   GatewayIntentBits,
@@ -9,12 +9,16 @@ const {
   StringSelectMenuBuilder,
   EmbedBuilder,
   PermissionsBitField,
-  Events,
+  Events
 } = require('discord.js');
 
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
+const AntiRaidSystem = require('./Systems/antiraid');
+const AntiSpamSystem = require('./Systems/antispam');
+const VerificationSystem = require('./Systems/verificationsystem');
+const DmLockSystem = require('./Systems/dmlock');
 
 const { deployCommands } = require('./deploy-commands');
 
@@ -59,7 +63,8 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildInvites // Nécessaire pour l'Anti-Raid Pro
   ],
   partials: [Partials.Channel, Partials.Message]
 });
@@ -71,6 +76,10 @@ client.configSystem = configSystem;
 try {
   client.maintenance = new MaintenanceSystem(client);
   client.liveSystem = new LiveSystem(client);
+  client.antiRaid = new AntiRaidSystem(client);
+  client.antiSpam = new AntiSpamSystem(client);
+  client.verification = new VerificationSystem(client);
+  client.dmLock = new DmLockSystem(client);
 } catch (err) {
   console.error('❌ Erreur lors de l\'initialisation de la maintenance:', err);
 }
@@ -116,7 +125,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live', 'modif_config_live', 'test_live', 'staff_stats'];
+      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live', 'modif_config_live', 'test_live', 'staff_stats', 'config_protection', 'set_config'];
       console.log(`⚡ Command: /${interaction.commandName} by ${interaction.user.tag}`);
       
       if (adminCommands.includes(interaction.commandName)) {
@@ -137,6 +146,10 @@ client.on('interactionCreate', async interaction => {
             flags: 64
           });
         }
+      }
+
+      if (interaction.commandName === 'config_protection') {
+        return client.configSystem.sendProtectionConfigPanel(interaction);
       }
 
       if (interaction.commandName === 'config_ticket') {
@@ -216,6 +229,22 @@ client.on('interactionCreate', async interaction => {
         return await client.maintenance.handleButton(interaction);
       }
       
+      if (interaction.customId === 'prot_hub_antiraid') {
+        return client.configSystem.sendAntiRaidConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'prot_hub_antispam') {
+        return client.configSystem.sendAntiSpamConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'prot_hub_captcha') {
+        return client.configSystem.sendVerificationConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'prot_hub_dmlock') {
+        return client.configSystem.sendDmLockConfigPanel(interaction);
+      }
+
       if (interaction.customId.startsWith('live_config_')) {
         const platform = interaction.customId.replace('live_config_', '');
         return interaction.showModal(client.configSystem.buildLiveConfigModal(platform));
@@ -239,6 +268,79 @@ client.on('interactionCreate', async interaction => {
         return client.configSystem.handleLiveDelete(interaction, url);
       }
 
+      if (interaction.customId === 'antiraid_toggle_status') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        guildConfig.antiRaid.enabled = !guildConfig.antiRaid.enabled;
+        client.configSystem.saveConfig(client.configSystem.getFullConfig());
+        return client.configSystem.sendAntiRaidConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'antiraid_setup') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        return interaction.showModal(client.configSystem.buildAntiRaidModal(guildConfig.antiRaid));
+      }
+
+      if (interaction.customId === 'antiraid_toggle_lockdown') {
+        if (client.antiRaid) {
+          await client.antiRaid.toggleLockdown(interaction);
+          return;
+        }
+      }
+
+      if (interaction.customId === 'antispam_toggle_status') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        guildConfig.antiSpam.enabled = !guildConfig.antiSpam.enabled;
+        client.configSystem.saveConfig(client.configSystem.getFullConfig());
+        return client.configSystem.sendAntiSpamConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'antispam_setup') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        return interaction.showModal(client.configSystem.buildAntiSpamModal(guildConfig.antiSpam));
+      }
+
+      if (interaction.customId === 'antispam_action_select') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        guildConfig.antiSpam.action = interaction.values[0];
+        client.configSystem.saveConfig(client.configSystem.getFullConfig());
+        return client.configSystem.sendAntiSpamConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'verify_toggle_status') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        guildConfig.verification.enabled = !guildConfig.verification.enabled;
+        client.configSystem.saveConfig(client.configSystem.getFullConfig());
+        return client.configSystem.sendVerificationConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'verify_setup') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        return interaction.showModal(client.configSystem.buildVerificationModal(guildConfig.verification));
+      }
+
+      if (interaction.customId === 'verify_send_panel') {
+        return client.configSystem.sendUserVerificationPanel(interaction);
+      }
+
+      if (interaction.customId === 'verify_start') {
+        return client.verification.handleVerifyButtonClick(interaction);
+      }
+
+      if (interaction.customId === 'verify_enter_code') {
+        return client.verification.showCodeModal(interaction);
+      }
+
+      if (interaction.customId === 'dmlock_toggle_status') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        guildConfig.dmLock.enabled = !guildConfig.dmLock.enabled;
+        client.configSystem.saveConfig(client.configSystem.getFullConfig());
+        return client.configSystem.sendDmLockConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'dmlock_send_panel') {
+        return client.configSystem.sendUserDmSafetyPanel(interaction);
+      }
+
       return await client.configSystem.handleButtons(interaction);
     }
 
@@ -247,6 +349,18 @@ client.on('interactionCreate', async interaction => {
       if (interaction.customId.startsWith('modal_live_config_')) {
         const platform = interaction.customId.replace('modal_live_config_', '');
         return client.configSystem.saveLiveConfig(interaction, platform);
+      }
+      if (interaction.customId === 'modal_antiraid_settings') {
+        return client.configSystem.saveAntiRaidConfig(interaction);
+      }
+      if (interaction.customId === 'modal_antispam_settings') {
+        return client.configSystem.saveAntiSpamConfig(interaction);
+      }
+      if (interaction.customId === 'modal_verification_settings') {
+        return client.configSystem.saveVerificationConfig(interaction);
+      }
+      if (interaction.customId === 'modal_verify_code') {
+        return client.verification.handleModalSubmit(interaction);
       }
       return await client.configSystem.handleModal(interaction);
     }
@@ -269,9 +383,40 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', async message => {
   try {
     await client.configSystem.handleMessage(message);
+    if (client.antiSpam) {
+      await client.antiSpam.handleMessage(message);
+    }
   } catch (err) {
     console.error("❌ MESSAGE ERROR:", err);
   }
+});
+
+client.on(Events.GuildMemberAdd, async member => {
+  try {
+    if (client.antiRaid) {
+      await client.antiRaid.handleMemberJoin(member);
+    }
+    if (client.dmLock) {
+      await client.dmLock.handleMemberJoin(member);
+    }
+  } catch (err) {
+    console.error("❌ GUILD MEMBER ADD ERROR:", err);
+  }
+});
+
+// Tracking des invitations pour l'Anti-Raid
+client.on(Events.InviteCreate, async invite => {
+    if (client.antiRaid) {
+        const guildInvites = client.antiRaid.invitesCache.get(invite.guild.id) || new Map();
+        guildInvites.set(invite.code, invite.uses);
+        client.antiRaid.invitesCache.set(invite.guild.id, guildInvites);
+    }
+});
+
+client.on(Events.InviteDelete, async invite => {
+    if (client.antiRaid) {
+        client.antiRaid.invitesCache.get(invite.guild.id)?.delete(invite.code);
+    }
 });
 
 client.on('messageDelete', async message => {
