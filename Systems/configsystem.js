@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.1...');
+console.log('🚀 [configsystem.js] Loading version 2.3.2...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -17,9 +17,8 @@ const {
 
 const configPath = path.join(__dirname, '../Data/config.json');
 let lastSavedContent = ""; 
-
 const defaultConfig = {
-  guilds: {}
+  guilds: {} // Structure: { "guildId": { categories: {}, roles: {}, ... } }
 };
 
 const defaultGuildSettings = {
@@ -739,7 +738,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.0] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -838,7 +837,6 @@ function sendConfigPanel(interaction) {
       "📊 **Stats** → Configurer les statistiques\n\n" +
       "_Assure-toi que les IDs sont corrects pour éviter les erreurs._"
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -1418,7 +1416,6 @@ async function sendLiveConfigPanel(interaction) {
       "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
       "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setTimestamp();
 
@@ -1537,6 +1534,7 @@ async function handleLiveEditSelect(interaction, url) {
       { name: "Salon", value: `<#${live.channelId}>`, inline: true },
       { name: "Rôle", value: live.roleId ? `<@&${live.roleId}>` : "`Aucun`", inline: true }
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2");
 
   const row = new ActionRowBuilder().addComponents(
@@ -1891,23 +1889,32 @@ async function handleMessage(message) {
 async function sendProtectionConfigPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const embed = new EmbedBuilder()
-    .setTitle("🛡️ Shield Protocol | Centre de Sécurité")
-    .setDescription("Gérez la protection de votre serveur en temps réel.")
-    .addFields(
-      { name: "🛡️ Anti-Raid", value: guildConfig.antiRaid.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
-      { name: "🚫 Anti-Spam", value: guildConfig.antiSpam.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
-      { name: "\u200b", value: "\u200b", inline: true },
-      { name: "🤖 Captcha", value: guildConfig.verification.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
-      { name: "📩 DM Lock", value: guildConfig.dmLock.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true }
+    .setTitle("🛡️ U-BOT | Shield Protocol")
+    .setDescription(
+      "### 🛰️ Centre de Commandement\n" +
+      "> *Gérez l'ensemble des modules de protection avancée pour garantir la sécurité de votre communauté.*\n\n" +
+      "**✨ Modules de Protection**\n" +
+      "┣ 🛡️ **Anti-Raid** : Bloque les vagues de bots et comptes suspects.\n" +
+      "┣ 🚫 **Anti-Spam** : Filtre le flood, les liens et les répétitions.\n" +
+      "┣ 🤖 **Captcha** : Vérification humaine pour les nouveaux membres.\n" +
+      "┗ 📩 **DM Lock** : Prévention contre les scams en messages privés.\n\n" +
+      "**📊 État actuel du serveur**"
     )
-    .setColor("#2f3136")
+    .addFields(
+      { name: "Systèmes Passifs", value: `🛡️ Anti-Raid: ${guildConfig.antiRaid.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n🚫 Anti-Spam: ${guildConfig.antiSpam.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true },
+      { name: "Systèmes Actifs", value: `🤖 Captcha: ${guildConfig.verification.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n📩 DM Lock: ${guildConfig.dmLock.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true }
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage("https://i.imgur.com/8QZ9N0Z.png") // Bannière esthétique
+    .setColor(guildConfig.antiRaid.lockdown ? "#FF0000" : "#2f3136")
+    .setFooter({ text: "U-Bot Security • Protection en temps réel", iconURL: interaction.client.user.displayAvatarURL() })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('Anti-Raid').setStyle(ButtonStyle.Primary).setEmoji('🛡️'),
-    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('Anti-Spam').setStyle(ButtonStyle.Primary).setEmoji('🚫'),
-    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('Captcha').setStyle(ButtonStyle.Primary).setEmoji('🤖'),
-    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('DM Lock').setStyle(ButtonStyle.Primary).setEmoji('📩')
+    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('🛡️ Anti-Raid').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('🚫 Anti-Spam').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('🤖 Captcha').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('📩 DM Lock').setStyle(ButtonStyle.Secondary)
   );
 
   const payload = { embeds: [embed], components: [row], flags: 64 };
@@ -1916,18 +1923,9 @@ async function sendProtectionConfigPanel(interaction) {
 
 async function sendAntiRaidConfigPanel(interaction) {
   const settings = getGuildConfig(interaction.guildId).antiRaid;
-  const embed = new EmbedBuilder()
-    .setTitle("🛡️ Module Anti-Raid Pro")
-    .setDescription(
-      "Ce module surveille la fréquence des arrivées et l'ADN des nouveaux comptes. Si une attaque est détectée, le serveur passe en **Lockdown** pour bloquer les intrus.\n\n" +
-      "**⚙️ Paramètres Actuels**\n" +
-      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
-      `┣ 🔒 Lockdown : ${settings.lockdown ? '`🔴 ACTIF`' : '`🟢 Inactif`'}\n` +
-      `┣ 👥 Seuil : \`${settings.threshold} membres\` / \`${settings.window}s\`\n` +
-      `┗ ⏳ Âge mini : \`${settings.minAge} heures\``
-    )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setColor(settings.lockdown ? "#FF0000" : "#5865F2");
+  const embed = new EmbedBuilder().setTitle("🛡️ Configuration Anti-Raid").setColor(settings.lockdown ? "#FF0000" : "#5865F2")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true },
+               { name: "Lockdown", value: settings.lockdown ? "🔒 Actif" : "🔓 Inactif", inline: true });
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('antiraid_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('antiraid_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
@@ -1938,18 +1936,9 @@ async function sendAntiRaidConfigPanel(interaction) {
 
 async function sendAntiSpamConfigPanel(interaction) {
   const settings = getGuildConfig(interaction.guildId).antiSpam;
-  const embed = new EmbedBuilder()
-    .setTitle("🚫 Module Anti-Spam")
-    .setDescription(
-      "Analyse les messages en temps réel pour filtrer les comportements abusifs. Il protège contre le flood (messages massifs), les liens excessifs et les doublons.\n\n" +
-      "**⚙️ Paramètres Actuels**\n" +
-      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
-      `┣ 🔨 Sanction : \`${settings.action.toUpperCase()}\`\n` +
-      `┣ ⏳ Fenêtre : \`${settings.window}s\`\n` +
-      `┗ 📝 Doublons max : \`${settings.maxDuplicates}\``
-    )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setColor("#5865F2");
+  const embed = new EmbedBuilder().setTitle("🚫 Configuration Anti-Spam").setColor("#5865F2")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true })
+    .setThumbnail(interaction.client.user.displayAvatarURL());
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
@@ -1959,17 +1948,9 @@ async function sendAntiSpamConfigPanel(interaction) {
 
 async function sendVerificationConfigPanel(interaction) {
   const settings = getGuildConfig(interaction.guildId).verification;
-  const embed = new EmbedBuilder()
-    .setTitle("🤖 Module de Vérification Humaine")
-    .setDescription(
-      "Force les nouveaux membres à résoudre un captcha textuel unique avant d'accéder au serveur. C'est l'arme ultime contre les raids de robots automatisés.\n\n" +
-      "**⚙️ Paramètres Actuels**\n" +
-      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
-      `┣ 🛡️ Rôle attribué : ${settings.roleId ? `<@&${settings.roleId}>` : '`❌ Non configuré`'}\n` +
-      `┗ 📍 Salon Captcha : ${settings.channelId ? `<#${settings.channelId}>` : '`❌ Non configuré`'}`
-    )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setColor("#5865F2");
+  const embed = new EmbedBuilder().setTitle("🤖 Configuration Captcha").setColor("#5865F2")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true })
+    .setThumbnail(interaction.client.user.displayAvatarURL());
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('verify_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('verify_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
@@ -1981,15 +1962,9 @@ async function sendVerificationConfigPanel(interaction) {
 
 async function sendDmLockConfigPanel(interaction) {
   const settings = getGuildConfig(interaction.guildId).dmLock;
-  const embed = new EmbedBuilder()
-    .setTitle("📩 Module DM Lock & Prévention")
-    .setDescription(
-      "Alerte automatiquement les nouveaux membres en message privé pour les conseiller de désactiver leurs MPs, réduisant ainsi les risques de phishing et scams.\n\n" +
-      "**⚙️ Paramètres Actuels**\n" +
-      `┗ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}`
-    )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setColor("#5865F2");
+  const embed = new EmbedBuilder().setTitle("📩 Configuration DM Lock").setColor("#5865F2")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true })
+    .setThumbnail(interaction.client.user.displayAvatarURL());
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dmlock_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('dmlock_send_panel').setLabel('📤 Envoyer Infos').setStyle(ButtonStyle.Secondary),
@@ -2104,7 +2079,6 @@ async function sendEditConfigPanel(interaction) {
       "🎫 **Options** → Ajouter ou supprimer des options de tickets\n\n" +
       "_Choisis l’élément que tu souhaites mettre à jour._"
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -2136,7 +2110,6 @@ async function sendBotNamePanel(interaction) {
       `**Nom actuel** : \`${currentNickname}\`\n\n` +
       "Cliquez sur le bouton ci-dessous pour définir un nouveau surnom."
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Cette modification n'affecte pas les autres serveurs." })
     .setTimestamp();
