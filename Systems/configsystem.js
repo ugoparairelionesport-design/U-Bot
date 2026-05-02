@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.7.9...');
+console.log('🚀 [configsystem.js] Loading version 2.8.0...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.9] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.0] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -811,312 +811,59 @@ function sendConfigPanel(interaction) {
 /* ========================= */
 async function handleButtons(interaction) {
   try {
-    // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
-    if (interaction.customId === 'bot_name_set_btn') {
-      return await handleBotNameButtonClick(interaction);
-    }
-
     if (interaction.customId === 'prot_hub_back') {
       return await sendProtectionConfigPanel(interaction);
     }
 
-    if (interaction.customId === 'prot_hub_antiraid') {
-      return await sendAntiRaidConfigPanel(interaction);
+    const guildConfig = getGuildConfig(interaction.guildId);
+
+    if (interaction.isStringSelectMenu()) {
+      await resetSelectMenuToPlaceholder(interaction);
     }
 
-    if (interaction.customId === 'prot_hub_antispam') {
-      return await sendAntiSpamConfigPanel(interaction);
-    }
-
-    if (interaction.customId === 'prot_hub_captcha') {
-      return await sendVerificationConfigPanel(interaction);
-    }
-
-    if (interaction.customId === 'prot_hub_dmlock') {
-      return await sendDmLockConfigPanel(interaction);
-    }
-
-    if (interaction.customId === 'global_banner_set_btn' || interaction.customId === 'prot_banner_set_btn') {
-      const guildConfig = getGuildConfig(interaction.guildId);
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_set_global_banner')
-          .setTitle('Image de fond des Embeds')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('banner_url')
-                .setLabel('URL de l\'image (Bannière large)')
-                .setPlaceholder('Collez le lien direct de votre image ici')
-                .setValue(guildConfig.globalEmbedBanner || '')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-            )
-          )
-      );
-    }
-
-    if (interaction.customId === 'global_color_set_btn') {
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_set_global_color')
-          .setTitle('Couleur des Embeds')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('color_hex')
-                .setLabel('Code couleur HEX (ex: #FF0000)')
-                .setPlaceholder('Ex: #5865F2')
-                .setValue(guildConfig.globalEmbedColor || '#5865F2')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-            )
-          )
-      );
-    }
-
-    // Gestion des boutons et menus de sélection spécifiques
     switch (interaction.customId) {
       case 'ticket_select': {
-        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
-      const choice = interaction.values[0];
-      const categoryId = guildConfig.categories[choice];
-      const roleIds = getRoleIds(guildConfig.roles[choice]);
+        const choice = interaction.values[0];
+        const categoryId = guildConfig.categories[choice];
+        const roleIds = getRoleIds(guildConfig.roles[choice]);
 
-      if (!categoryId) {
-        return replyAndAutoDelete(interaction, { content: "❌ Catégorie introuvable.", flags: 64 });
-      }
+        if (!categoryId) return replyAndAutoDelete(interaction, { content: "❌ Catégorie introuvable.", flags: 64 });
+        if (getTicketCount(interaction.guildId, interaction.user.id) >= 3) return replyAndAutoDelete(interaction, { content: "❌ Max 3 tickets", flags: 64 });
 
-      if (getTicketCount(interaction.guildId, interaction.user.id) >= 3) {
-        return replyAndAutoDelete(interaction, { content: "❌ Max 3 tickets", flags: 64 });
-      }
+        const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
+        if (!category || category.type !== ChannelType.GuildCategory) return replyAndAutoDelete(interaction, { content: `❌ Catégorie invalide pour l'option ${choice}`, flags: 64 });
 
-      const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
+        if (!(await ensureBotPermissions(interaction))) return;
 
-      if (!category || category.type !== ChannelType.GuildCategory) {
-        return replyAndAutoDelete(interaction, { content: `❌ Catégorie invalide pour l'option ${choice}`, flags: 64 });
-      }
-
-      if (roleIds.some(roleId => !interaction.guild.roles.cache.get(roleId))) {
-        return replyAndAutoDelete(interaction, { content: `❌ Rôle de modération invalide pour l'option ${choice}`, flags: 64 });
-      }
-
-      if (!(await ensureBotPermissions(interaction))) {
-        return;
-      }
-
-      pendingTicketCreations.set(interaction.user.id, { choice });
-
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_ticket_opening')
-          .setTitle('Ouvrir ticket')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('opening_reason')
-                .setLabel("Raison d'ouverture (optionnelle)")
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(false)
-            )
-          )
-      );
+        pendingTicketCreations.set(interaction.user.id, { choice });
+        return interaction.showModal(new ModalBuilder().setCustomId('modal_ticket_opening').setTitle('Ouvrir ticket').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('opening_reason').setLabel("Raison d'ouverture").setStyle(TextInputStyle.Paragraph).setRequired(false))));
       }
 
       case 'modif_select': {
-        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
-      const selected = interaction.values[0];
-      if (selected === 'logs') { // Modifier logs
-        return interaction.showModal(
-          buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs')
-        );
-      }
-      if (selected === 'stats') {
-        return interaction.showModal(
-          buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats')
-        );
-      }
-      if (selected === 'options_panel') { // Gérer les options du panel
-        const embed = new EmbedBuilder()
-          .setTitle("🎫 Gestion des options du panel")
-          .setDescription(
-            "Choisissez l'action à effectuer sur les options de vos tickets.\n\n" +
-            "➕ **Ajouter** : Créer une nouvelle option dans le système\n" +
-            "➖ **Supprimer** : Supprimer définitivement une option"
-          )
-          .setThumbnail(interaction.client.user.displayAvatarURL())
-          .setImage(guildConfig.globalEmbedBanner)
-          .setColor(guildConfig.globalEmbedColor);
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('panel_opt_add').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'),
-          new ButtonBuilder().setCustomId('panel_opt_remove').setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('➖')
-        );
-
-        return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+        const selected = interaction.values[0];
+        if (selected === 'logs') return interaction.showModal(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
+        if (selected === 'stats') return interaction.showModal(buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats'));
+        if (selected === 'options_panel') {
+          const embed = new EmbedBuilder().setTitle("🎫 Options du panel").setDescription("➕ **Ajouter** | ➖ **Supprimer**").setColor(guildConfig.globalEmbedColor);
+          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_opt_add').setLabel('Ajouter').setStyle(ButtonStyle.Success), new ButtonBuilder().setCustomId('panel_opt_remove').setLabel('Supprimer').setStyle(ButtonStyle.Danger));
+          return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+        }
+        if (selected === 'category') return interaction.showModal(new ModalBuilder().setCustomId('modal_edit_category').setTitle('Modifier catégorie').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('category_id').setLabel('Nouvel ID').setStyle(TextInputStyle.Short).setRequired(true))));
+        break;
       }
 
-      if (selected === 'category') {
-        return interaction.showModal(
-          new ModalBuilder()
-            .setCustomId('modal_edit_category')
-            .setTitle('Modifier catégorie')
-            .addComponents(
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('option_name')
-                  .setLabel('Nom exact de l’option')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(true)
-              ),
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('category_id')
-                  .setLabel('Nouvel ID catégorie')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(true)
-              )
-            )
-        );
-      }
-
-      if (selected === 'role') {
-        return interaction.showModal(
-          new ModalBuilder()
-            .setCustomId('modal_edit_role')
-            .setTitle('Modifier rôle')
-            .addComponents(
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('option_name')
-                  .setLabel('Nom exact de l’option')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(true)
-              ),
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('roles')
-                  .setLabel('Nouveaux rôles (@role ou IDs)')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(false)
-              )
-            )
-        );
-      }
-
-      return replyAndAutoDelete(interaction, {
-        content: "❌ Option de modification invalide.",
-        flags: 64
-      });
-      }
-
-      case 'bot_name_set_btn':
-        return await handleBotNameButtonClick(interaction);
-      
-      case 'prot_hub_back':
-        return await sendProtectionConfigPanel(interaction);
-      case 'prot_hub_antiraid':
-        return await sendAntiRaidConfigPanel(interaction);
+      case 'bot_name_set_btn': return await handleBotNameButtonClick(interaction);
+      case 'prot_hub_antiraid': return await sendAntiRaidConfigPanel(interaction);
       case 'prot_hub_antispam':
-        return await sendAntiSpamConfigPanel(interaction);
-      case 'prot_hub_captcha':
-        return await sendVerificationConfigPanel(interaction);
-      case 'prot_hub_dmlock':
-        return await sendDmLockConfigPanel(interaction);
-
-      case 'global_banner_set_btn':
-      case 'prot_banner_set_btn': // Ancien ID pour compatibilité
-        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image (Bannière large)').setPlaceholder('Collez le lien direct de votre image ici').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
-
-      case 'global_color_set_btn':
-        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code couleur HEX (ex: #FF0000)').setPlaceholder('Ex: #5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
-
-      case 'refresh_stats':
-      await interaction.deferUpdate();
-      return updateStatsMessage(interaction.guild);
-
-      case 'panel_opt_add':
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_panel_add_option')
-          .setTitle('Ajouter une option')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder().setCustomId('opt_name').setLabel('Nom de l\'option').setStyle(TextInputStyle.Short).setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder().setCustomId('cat_id').setLabel('ID de la catégorie').setStyle(TextInputStyle.Short).setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder().setCustomId('role_ids').setLabel('ID(s) Rôle(s) (séparés par des virgules)').setStyle(TextInputStyle.Short).setRequired(false)
-            )
-          )
-      );
-
-      case 'panel_opt_remove':
-      const options = Object.keys(guildConfig.categories);
-      if (options.length === 0) return replyAndAutoDelete(interaction, { content: "❌ Aucune option à supprimer.", flags: 64 });
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId('panel_opt_remove_select')
-        .setPlaceholder('Sélectionnez l\'option à supprimer')
-        .addOptions(options.map(opt => ({ label: opt, value: opt })));
-      return replyAndAutoDelete(interaction, { content: "Sélectionnez l'option à supprimer définitivement :", components: [new ActionRowBuilder().addComponents(menu)], flags: 64 });
-
-      case 'panel_opt_remove_select': {
-        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
-      const optionToRemove = interaction.values[0];
-      delete guildConfig.categories[optionToRemove];
-      delete guildConfig.roles[optionToRemove];
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: `✅ L'option **${optionToRemove}** a été supprimée du système.`, flags: 64 });
-      }
-
-      case 'config_logs':
-      return interaction.showModal(
-        buildChannelIdModal('modal_logs', 'Configurer logs', 'ID salon logs')
-      );
-
-      case 'config_stats':
-      return interaction.showModal(
-        buildChannelIdModal('modal_stats', 'Configurer stats', 'ID salon stats')
-      );
-
-      case 'create_panel':
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_panel')
-          .setTitle('Créer panel')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('channel_id')
-                .setLabel('ID salon')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('options')
-                .setLabel('Options (1 par ligne)')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true)
-            ),
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('roles')
-                .setLabel('Rôles autorisés (@role ou IDs)')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-            ),
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('categories_input')
-                .setLabel('IDs catégories (1 par ligne)')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true)
-            )
-          )
-      );
+      return await sendAntiSpamConfigPanel(interaction);
+      case 'prot_hub_captcha': return await sendVerificationConfigPanel(interaction);
+      case 'prot_hub_dmlock': return await sendDmLockConfigPanel(interaction);
+      case 'global_banner_set_btn': return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
+      case 'global_color_set_btn': return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code couleur HEX').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
+      case 'refresh_stats': await interaction.deferUpdate(); return updateStatsMessage(interaction.guild);
+      case 'config_logs': return interaction.showModal(buildChannelIdModal('modal_logs', 'Logs', 'ID salon logs'));
+      case 'config_stats': return interaction.showModal(buildChannelIdModal('modal_stats', 'Stats', 'ID salon stats'));
+      case 'create_panel': return interaction.showModal(new ModalBuilder().setCustomId('modal_panel').setTitle('Créer panel').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('ID salon').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('options').setLabel('Options').setStyle(TextInputStyle.Paragraph).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roles').setLabel('Rôles').setStyle(TextInputStyle.Short).setRequired(false)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('categories_input').setLabel('IDs catégories').setStyle(TextInputStyle.Paragraph).setRequired(true))));
 
       case 'claim_ticket': {
         if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
@@ -1134,70 +881,23 @@ async function handleButtons(interaction) {
       }
 
       case 'unclaim_ticket': {
-        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
-        const previousClaim = guildConfig.claims[interaction.channel.id];
-        delete guildConfig.claims[interaction.channel.id];
-        saveConfig(configData);
-        await sendLog(interaction.guild, new EmbedBuilder().setTitle("♻️ Ticket libéré").addFields(buildTicketContextFields(interaction, [{ name: "Claim précédent", value: previousClaim ? `<@${previousClaim}>` : "Aucun", inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
-        return replyAndAutoDelete(interaction, {
-          embeds: [new EmbedBuilder().setTitle("♻️ Libéré").setDescription(`${interaction.user}`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor)],
-          flags: 64
-        });
+          if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé.", flags: 64 });
+          const previousClaim = guildConfig.claims[interaction.channel.id];
+          delete guildConfig.claims[interaction.channel.id];
+          saveConfig(configData);
+          return replyAndAutoDelete(interaction, { embeds: [new EmbedBuilder().setTitle("♻️ Libéré").setColor(guildConfig.globalEmbedColor)], flags: 64 });
       }
 
-      case 'save_close_archive':
-        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
-        const pendingCloseSave = guildConfig.pendingClosures[interaction.channel.id];
-        if (!pendingCloseSave) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente.", flags: 64 });
-        if (pendingCloseSave.expiresAt && pendingCloseSave.expiresAt < Date.now()) {
-          delete guildConfig.pendingClosures[interaction.channel.id];
+      case 'save_close_archive': {
+          if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Refusé.", flags: 64 });
+          const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
+          if (!pendingClose) return replyAndAutoDelete(interaction, { content: "❌ Rien en attente.", flags: 64 });
+          const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
+          if (!archiveResult.ok) return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
+          pendingClose.archiveSavedAt = Date.now();
           saveConfig(configData);
-          return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré.", flags: 64 });
-        }
-        if (pendingCloseSave.archiveSavedAt) return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée.", flags: 64 });
-        const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
-        if (!archiveResult.ok) return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
-        pendingCloseSave.archiveSavedAt = Date.now();
-        pendingCloseSave.archivedBy = interaction.user.id;
-        saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée.", flags: 64 });
-
-      case 'add_user':
-        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
-        return interaction.showModal(
-          new ModalBuilder()
-            .setCustomId('modal_add_user')
-            .setTitle('Ajouter membre')
-            .addComponents(
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('user_id')
-                  .setLabel('ID utilisateur')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(true)
-              )
-            )
-        );
-
-      case 'close_ticket':
-        if (!canManageTicket(interaction)) {
-          return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-        }
-
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_close_ticket')
-          .setTitle('Fermer ticket')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('close_reason')
-                .setLabel('Raison de fermeture (optionnelle)')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(false)
-            )
-          )
-      );
+          return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée.", flags: 64 });
+      }
 
       case 'confirm_close_ticket': {
         if (!canManageTicket(interaction)) {
@@ -1288,64 +988,16 @@ async function handleButtons(interaction) {
       }, TICKET_DELETE_DELAY_MS);
 
       return;
+      }
+
+      case 'cancel_close_ticket': {
+          if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Refusé.", flags: 64 });
+          delete guildConfig.pendingClosures[interaction.channel.id];
+          saveConfig(configData);
+          return replyAndAutoDelete(interaction, { content: '❌ Fermeture annulée', flags: 64 });
+      }
     }
 
-    if (interaction.customId === 'save_close_archive') {
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      }
-
-      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) {
-        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
-      }
-
-      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete guildConfig.pendingClosures[interaction.channel.id];
-        saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
-      }
-
-      if (pendingClose.archiveSavedAt) {
-        return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
-      }
-
-      const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
-
-      if (!archiveResult.ok) {
-        return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
-      }
-
-      pendingClose.archiveSavedAt = Date.now();
-      pendingClose.archivedBy = interaction.user.id;
-      saveConfig(configData);
-
-      return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée", flags: 64 });
-    }
-
-    if (interaction.customId === 'cancel_close_ticket') {
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      }
-
-      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) {
-        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
-      }
-
-      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete guildConfig.pendingClosures[interaction.channel.id];
-        saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
-      }
-
-      delete guildConfig.pendingClosures[interaction.channel.id];
-      saveConfig(configData);
-
-      return replyAndAutoDelete(interaction, { content: '❌ Fermeture annulée', flags: 64 });
-    }
-
-    // Si aucune condition n'est remplie, on ne laisse pas l'interaction expirer
     if (!interaction.replied && !interaction.deferred && interaction.isButton()) {
         return replyAndAutoDelete(interaction, { content: "⚠️ Bouton non reconnu ou en cours de déploiement.", flags: 64 });
     }
