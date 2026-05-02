@@ -79,18 +79,28 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ];
 
-const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
+const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
+const clientId = process.env.CLIENT_ID;
+const guildId = process.env.GUILD_ID;
+
+const rest = new REST({ version: '10' }).setToken(token);
 
 async function deployCommands() {
+    if (!token || !clientId) {
+        console.error("❌ Erreur : TOKEN ou CLIENT_ID manquant.");
+        return;
+    }
+
     try {
-        console.log('🚀 Déploiement des commandes slash (/) en cours...');
+        console.log(`🚀 Déploiement [${guildId ? 'GUILD' : 'GLOBAL'}] des commandes slash...`);
+        if (guildId) console.log(`📍 Guild ID cible : ${guildId}`);
 
         // Déploiement global (peut prendre jusqu'à 1 heure pour apparaître)
         // Ou déploiement spécifique à un GUILD_ID pour un test rapide
         await rest.put(
-            process.env.GUILD_ID ?
-                Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID) :
-                Routes.applicationCommands(process.env.CLIENT_ID),
+            guildId ?
+                Routes.applicationGuildCommands(clientId, guildId) :
+                Routes.applicationCommands(clientId),
             { body: commands },
         );
 
