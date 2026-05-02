@@ -101,13 +101,18 @@ async function deployCommands() {
             guildId ?
                 Routes.applicationGuildCommands(clientId, guildId) :
                 Routes.applicationCommands(clientId),
-            { body: commands },
+            { body: commands.map(command => command.toJSON()) },
         );
 
         console.log(`✅ ${commands.length} commandes slash déployées avec succès !`);
     } catch (error) {
         console.error('❌ Erreur lors du déploiement des commandes slash :', error);
     }
+}
+
+// Permet de lancer le déploiement manuellement avec "node deploy-commands.js"
+if (require.main === module) {
+    deployCommands();
 }
 
 module.exports = {

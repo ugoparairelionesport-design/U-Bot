@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.2.1...');
+console.log('🚀 [configsystem.js] Loading version 2.2.2...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -16,7 +16,7 @@ const {
 } = require('discord.js');
 
 const configPath = path.join(__dirname, '../Data/config.json');
-let lastSavedContent = ""; // Cache mémoire pour optimiser les I/O
+let lastSavedContent = ""; 
 
 const defaultConfig = {
   guilds: {} // Structure: { "guildId": { categories: {}, roles: {}, ... } }
@@ -39,7 +39,31 @@ const defaultGuildSettings = {
   pendingClosures: {},
   pendingDeletions: {},
   securityHashtag: null, // Ajout du hashtag de sécurité par défaut
-  liveConfigs: [] // Ajout de la liste des configurations de live
+  liveConfigs: [], // Ajout de la liste des configurations de live
+  antiRaid: {
+    enabled: false,
+    threshold: 5,
+    window: 10,
+    minAge: 24,
+    lockdown: false,
+    logChannel: null
+  },
+  antiSpam: {
+    enabled: false,
+    maxDuplicates: 3,
+    maxMessages: 5,
+    window: 5,
+    action: 'timeout',
+    timeoutDuration: 10
+  },
+  verification: {
+    enabled: false,
+    roleId: null,
+    channelId: null
+  },
+  dmLock: {
+    enabled: false
+  }
 };
 
 function loadConfig() {
@@ -64,11 +88,15 @@ function loadConfig() {
   }
 }
 
-let configData = loadConfig();
-
-function getFullConfig() {
-  return configData;
+function saveConfig(data) {
+  const content = JSON.stringify(data, null, 2);
+  if (content !== lastSavedContent) {
+    fs.writeFileSync(configPath, content);
+    lastSavedContent = content;
+  }
 }
+
+let configData = loadConfig();
 
 function getGuildConfig(guildId) {
   if (!configData.guilds) configData.guilds = {};
@@ -89,33 +117,9 @@ function getGuildConfig(guildId) {
         modified = true;
       }
     }
-
-    // Migration/Nettoyage automatique des URLs de Live pour éviter le crash des 100 caractères
-    if (configData.guilds[guildId].liveConfigs) {
-      configData.guilds[guildId].liveConfigs.forEach(l => {
-        if (l.url && (l.url.includes('?') || l.url.includes('<') || l.url.includes('>'))) {
-          try {
-            l.url = l.url.replace(/<|>/g, '').split('?')[0].replace(/\/$/, '');
-            modified = true;
-          } catch (e) {}
-        }
-      });
-    }
-
     if (modified) saveConfig(configData);
   }
   return configData.guilds[guildId];
-}
-
-/**
- * Sauvegarde "World Class" : utilise un cache mémoire pour éviter les lectures disque
- */
-function saveConfig(data) {
-  const content = JSON.stringify(data, null, 2);
-  if (content !== lastSavedContent) {
-    fs.writeFileSync(configPath, content);
-    lastSavedContent = content;
-  }
 }
 
 function startVisualTimer(message, deleteAt) {
@@ -154,16 +158,7 @@ function startVisualTimer(message, deleteAt) {
       return;
     }
     await updateFooter();
-  }, 5000); // Optimisé : 5s pour éviter les rate limits Discord tout en restant fluide
-}
-
-console.log('DEBUG: Defining replyAndAutoDelete function in configsystem.js');
-async function replyAndAutoDelete(interaction, payload, durationMs = 300000) {
-  const message = await safeInteractionReply(interaction, payload);
-  if (message && durationMs > 0 && (!payload.flags || payload.flags !== 64)) {
-    setTimeout(() => message.delete().catch(() => {}), durationMs);
-  }
-  return message;
+  }, 100);
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
@@ -258,6 +253,14 @@ async function safeInteractionReply(interaction, payload, deferred = false) {
       return null;
     }
   }
+}
+
+async function replyAndAutoDelete(interaction, payload, durationMs = 300000) {
+  const message = await safeInteractionReply(interaction, payload);
+  if (message && durationMs > 0 && (!payload.flags || payload.flags !== 64)) {
+    setTimeout(() => message.delete().catch(() => {}), durationMs);
+  }
+  return message;
 }
 
 async function resetSelectMenuToPlaceholder(interaction) {
@@ -732,7 +735,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1466,23 +1469,10 @@ function buildLiveConfigModal(platform, existingData = null) {
 
 async function saveLiveConfig(interaction, platform) {
   const guildConfig = getGuildConfig(interaction.guildId);
-  let url = interaction.fields.getTextInputValue('channel_url').trim();
+  const url = interaction.fields.getTextInputValue('channel_url').trim();
   const channelId = interaction.fields.getTextInputValue('notif_channel_id').trim();
   const roleId = interaction.fields.getTextInputValue('role_id').trim();
   const securityHashtag = interaction.fields.getTextInputValue('security_hashtag').trim();
-
-  // Nettoyage de l'URL pour respecter la limite de 100 caractères des IDs Discord
-  url = url.replace(/<|>/g, '');
-  try {
-    if (url.startsWith('http')) {
-      const urlObj = new URL(url);
-      urlObj.search = ''; // Supprime les paramètres ?...
-      urlObj.hash = '';   // Supprime les ancres #...
-      url = urlObj.toString().replace(/\/$/, ''); // Uniformisation sans slash final
-    }
-  } catch (e) {
-    // On garde la valeur brute si ce n'est pas une URL complète
-  }
 
   const targetChannel = await interaction.guild.channels.fetch(channelId).catch(() => null);
   if (!targetChannel) return interaction.reply({ content: "❌ ID de salon invalide.", flags: 64 });
@@ -1552,20 +1542,48 @@ async function handleLiveEditSelect(interaction, url) {
 }
 
 async function handleLiveDelete(interaction, url) {
-  try {
-    const guildConfig = getGuildConfig(interaction.guildId);
-    const index = guildConfig.liveConfigs.findIndex(l => l.url === url);
-    if (index !== -1) {
-      guildConfig.liveConfigs.splice(index, 1);
-      saveConfig(configData);
-      return await interaction.update({ content: `✅ Configuration supprimée pour **${url}**.`, embeds: [], components: [], flags: 64 });
-    }
-    return await interaction.reply({ content: "❌ Erreur lors de la suppression.", flags: 64 });
-  } catch (err) {
-    console.error("❌ Erreur suppression live:", err);
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const index = guildConfig.liveConfigs.findIndex(l => l.url === url);
+  if (index !== -1) {
+    guildConfig.liveConfigs.splice(index, 1);
+    saveConfig(configData);
+    return interaction.update({ content: `✅ Configuration supprimée pour **${url}**.`, embeds: [], components: [], flags: 64 });
   }
+  return interaction.reply({ content: "❌ Erreur lors de la suppression.", flags: 64 });
 }
 
+module.exports = {
+  getGuildConfig,
+  sendConfigPanel,
+  sendEditConfigPanel,
+  handleButtons,
+  handleModal,
+  handleMessage,
+  handleMessageDelete,
+  updateStatsMessage,
+  showStaffStats,
+  resumeTicketState,
+  sendBotNamePanel,
+  startVisualTimer,
+  sendLiveConfigPanel,
+  buildLiveConfigModal,
+  saveLiveConfig,
+  sendLiveEditList,
+  handleLiveEditSelect,
+  handleLiveDelete,
+  replyAndAutoDelete,
+  sendProtectionConfigPanel,
+  sendAntiRaidConfigPanel,
+  sendAntiSpamConfigPanel,
+  sendVerificationConfigPanel,
+  sendDmLockConfigPanel,
+  buildAntiRaidModal,
+  saveAntiRaidConfig,
+  buildVerificationModal,
+  saveVerificationConfig,
+  sendUserVerificationPanel,
+  sendUserDmSafetyPanel
+};
 /* ========================= */
 async function handleModal(interaction) {
   try {
@@ -1869,21 +1887,165 @@ async function handleModal(interaction) {
   }
 }
 
-/* ========================= */
 async function handleMessage(message) {
+  if (!message.guild || message.author.bot) return;
+  const guildConfig = getGuildConfig(message.guild.id);
+  const ticketOwnerId = guildConfig.ticketOwners[message.channel.id];
+  if (!ticketOwnerId) return;
+
+  const currentName = message.channel.name;
+  const cleanName = currentName.replace(/\s*[🟠🟢]$/, '');
+  const option = getPanelOptionFromChannel(message.channel);
+  const modRoleIds = option ? getRoleIds(guildConfig.roles[option]) : [];
+
+  const isOwner = message.author.id === ticketOwnerId;
+  const isMod = message.member.roles.cache.some(role => modRoleIds.includes(role.id)) || 
+                message.member.permissions.has(PermissionsBitField.Flags.Administrator);
+
+  let statusEmoji = isOwner ? '🟠' : (isMod ? '🟢' : '');
+  if (statusEmoji) {
+    const newName = `${cleanName} ${statusEmoji}`;
+    if (newName !== currentName) {
+      try { await message.channel.setName(newName); } catch (err) {}
+    }
+  }
+}
+
+/* ========================= */
+// PROTECTION HUB UI
+
+async function sendProtectionConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ Shield Protocol | Centre de Sécurité")
+    .setDescription("Gérez la protection de votre serveur en temps réel.")
+    .addFields(
+      { name: "🛡️ Anti-Raid", value: guildConfig.antiRaid.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "🚫 Anti-Spam", value: guildConfig.antiSpam.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "\u200b", value: "\u200b", inline: true },
+      { name: "🤖 Captcha", value: guildConfig.verification.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "📩 DM Lock", value: guildConfig.dmLock.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true }
+    )
+    .setColor("#2f3136")
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('Anti-Raid').setStyle(ButtonStyle.Primary).setEmoji('🛡️'),
+    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('Anti-Spam').setStyle(ButtonStyle.Primary).setEmoji('🚫'),
+    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('Captcha').setStyle(ButtonStyle.Primary).setEmoji('🤖'),
+    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('DM Lock').setStyle(ButtonStyle.Primary).setEmoji('📩')
+  );
+
+  const payload = { embeds: [embed], components: [row], flags: 64 };
+  return interaction.isButton() ? interaction.update(payload) : interaction.reply(payload);
+}
+
+async function sendAntiRaidConfigPanel(interaction) {
+  const settings = getGuildConfig(interaction.guildId).antiRaid;
+  const embed = new EmbedBuilder().setTitle("🛡️ Configuration Anti-Raid").setColor(settings.lockdown ? "#FF0000" : "#5865F2")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true },
+               { name: "Lockdown", value: settings.lockdown ? "🔒 Actif" : "🔓 Inactif", inline: true });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('antiraid_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('antiraid_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendAntiSpamConfigPanel(interaction) {
+  const settings = getGuildConfig(interaction.guildId).antiSpam;
+  const embed = new EmbedBuilder().setTitle("🚫 Configuration Anti-Spam").setColor("#5865F2")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendVerificationConfigPanel(interaction) {
+  const settings = getGuildConfig(interaction.guildId).verification;
+  const embed = new EmbedBuilder().setTitle("🤖 Configuration Captcha").setColor("#5865F2")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('verify_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('verify_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('verify_send_panel').setLabel('📤 Envoyer Panel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendDmLockConfigPanel(interaction) {
+  const settings = getGuildConfig(interaction.guildId).dmLock;
+  const embed = new EmbedBuilder().setTitle("📩 Configuration DM Lock").setColor("#5865F2")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('dmlock_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('dmlock_send_panel').setLabel('📤 Envoyer Infos').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+function buildAntiRaidModal(settings) {
+  return new ModalBuilder().setCustomId('modal_antiraid_settings').setTitle('Anti-Raid').addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('threshold').setLabel('Seuil membres').setValue(String(settings.threshold)).setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('window').setLabel('Fenêtre (sec)').setValue(String(settings.window)).setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('min_age').setLabel('Âge mini (h)').setValue(String(settings.minAge)).setStyle(TextInputStyle.Short))
+  );
+}
+
+async function saveAntiRaidConfig(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.antiRaid.threshold = parseInt(interaction.fields.getTextInputValue('threshold'));
+  guildConfig.antiRaid.window = parseInt(interaction.fields.getTextInputValue('window'));
+  guildConfig.antiRaid.minAge = parseInt(interaction.fields.getTextInputValue('min_age'));
+  saveConfig(configData);
+  return interaction.reply({ content: "✅ Configuration Anti-Raid sauvegardée !", flags: 64 });
+}
+
+function buildVerificationModal(settings) {
+  return new ModalBuilder().setCustomId('modal_verification_settings').setTitle('Captcha').addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID Rôle Membre').setValue(settings.roleId || '').setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('ID Salon Captcha').setValue(settings.channelId || '').setStyle(TextInputStyle.Short))
+  );
+}
+
+async function saveVerificationConfig(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.verification.roleId = interaction.fields.getTextInputValue('role_id');
+  guildConfig.verification.channelId = interaction.fields.getTextInputValue('channel_id');
+  saveConfig(configData);
+  return interaction.reply({ content: "✅ Configuration Captcha sauvegardée !", flags: 64 });
+}
+
+async function sendUserVerificationPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const channel = await interaction.guild.channels.fetch(guildConfig.verification.channelId).catch(() => null);
+  if (!channel) return interaction.reply({ content: "❌ Salon introuvable.", flags: 64 });
+  const embed = new EmbedBuilder().setTitle("🛡️ Vérification").setDescription("Cliquez ci-dessous pour accéder au serveur.").setColor("#5865F2");
+  const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_start').setLabel('Vérification').setStyle(ButtonStyle.Success));
+  await channel.send({ embeds: [embed], components: [row] });
+  return interaction.reply({ content: "✅ Panel envoyé.", flags: 64 });
+}
+
+async function sendUserDmSafetyPanel(interaction) {
+  const embed = new EmbedBuilder().setTitle("📩 Sécurité DM").setDescription("Ne cliquez sur aucun lien reçu en MP.").setColor("#2B2D31");
+  await interaction.channel.send({ embeds: [embed] });
+  return interaction.reply({ content: "✅ Infos envoyées.", flags: 64 });
+}
   if (!message.guild || message.author.bot) return;
 
   const guildConfig = getGuildConfig(message.guild.id);
   const ticketOwnerId = guildConfig.ticketOwners[message.channel.id];
 
-  // On vérifie si nous sommes dans un ticket actif
   if (!ticketOwnerId) return;
 
   const currentName = message.channel.name;
-  // Regex pour nettoyer les anciens emojis de statut
   const cleanName = currentName.replace(/\s*[🟠🟢]$/, '');
 
-  // Identification du staff via les rôles configurés pour cette catégorie
   const option = getPanelOptionFromChannel(message.channel);
   const modRoleIds = option ? getRoleIds(guildConfig.roles[option]) : [];
 
@@ -1893,9 +2055,9 @@ async function handleMessage(message) {
 
   let statusEmoji = '';
   if (isOwner) {
-    statusEmoji = '🟠'; // Le client attend une réponse
+    statusEmoji = '🟠';
   } else if (isMod) {
-    statusEmoji = '🟢'; // Le staff a répondu
+    statusEmoji = '🟢';
   }
 
   if (statusEmoji) {
@@ -1903,11 +2065,140 @@ async function handleMessage(message) {
     if (newName !== currentName) {
       try {
         await message.channel.setName(newName);
-      } catch (err) {
-        // On ignore silencieusement les Rate Limits de Discord (2 renommages / 10 min)
-      }
+      } catch (err) {}
     }
   }
+}
+
+/* ========================= */
+// PROTECTION HUB UI
+
+async function sendProtectionConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ Shield Protocol | Centre de Sécurité")
+    .setDescription("Gérez la protection de votre serveur en temps réel. Activez ou personnalisez chaque module.")
+    .addFields(
+      { name: "🛡️ Anti-Raid", value: guildConfig.antiRaid.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "🚫 Anti-Spam", value: guildConfig.antiSpam.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "\u200b", value: "\u200b", inline: true },
+      { name: "🤖 Captcha", value: guildConfig.verification.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "📩 DM Lock", value: guildConfig.dmLock.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "\u200b", value: "\u200b", inline: true }
+    )
+    .setColor("#2f3136")
+    .setFooter({ text: "U-Bot Security Protocol", iconURL: interaction.client.user.displayAvatarURL() })
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('Anti-Raid').setStyle(ButtonStyle.Primary).setEmoji('🛡️'),
+    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('Anti-Spam').setStyle(ButtonStyle.Primary).setEmoji('🚫'),
+    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('Captcha').setStyle(ButtonStyle.Primary).setEmoji('🤖'),
+    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('DM Lock').setStyle(ButtonStyle.Primary).setEmoji('📩')
+  );
+
+  const payload = { embeds: [embed], components: [row], flags: 64 };
+  if (interaction.isButton()) return interaction.update(payload);
+  return interaction.reply(payload);
+}
+
+async function sendAntiRaidConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.antiRaid;
+  const embed = new EmbedBuilder()
+    .setTitle("🛡️ Configuration Anti-Raid")
+    .setDescription("Paramètres de détection des arrivées massives.")
+    .addFields(
+      { name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true },
+      { name: "Lockdown", value: settings.lockdown ? "🔒 Actif" : "🔓 Inactif", inline: true }
+    )
+    .setColor(settings.lockdown ? "#FF0000" : "#5865F2");
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('antiraid_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('antiraid_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendAntiSpamConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.antiSpam;
+  const embed = new EmbedBuilder()
+    .setTitle("🚫 Configuration Anti-Spam")
+    .setDescription("Paramètres de filtrage des messages répétitifs.")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendVerificationConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.verification;
+  const embed = new EmbedBuilder()
+    .setTitle("🤖 Configuration Captcha")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('verify_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('verify_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('verify_send_panel').setLabel('📤 Envoyer Panel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function sendDmLockConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.dmLock;
+  const embed = new EmbedBuilder()
+    .setTitle("📩 Configuration DM Lock")
+    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('dmlock_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('dmlock_send_panel').setLabel('📤 Envoyer Infos').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+function buildAntiRaidModal(settings) {
+  return new ModalBuilder().setCustomId('modal_antiraid_settings').setTitle('Anti-Raid').addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('threshold').setLabel('Seuil membres').setValue(String(settings.threshold)).setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('window').setLabel('Fenêtre (sec)').setValue(String(settings.window)).setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('min_age').setLabel('Âge mini (h)').setValue(String(settings.minAge)).setStyle(TextInputStyle.Short))
+  );
+}
+
+async function saveAntiRaidConfig(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.antiRaid.threshold = parseInt(interaction.fields.getTextInputValue('threshold'));
+  guildConfig.antiRaid.window = parseInt(interaction.fields.getTextInputValue('window'));
+  guildConfig.antiRaid.minAge = parseInt(interaction.fields.getTextInputValue('min_age'));
+  saveConfig(configData);
+  return interaction.reply({ content: "✅ Configuration Anti-Raid sauvegardée !", flags: 64 });
+}
+
+function buildVerificationModal(settings) {
+  return new ModalBuilder().setCustomId('modal_verification_settings').setTitle('Captcha').addComponents(
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID Rôle Membre').setValue(settings.roleId || '').setStyle(TextInputStyle.Short)),
+    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('ID Salon Captcha').setValue(settings.channelId || '').setStyle(TextInputStyle.Short))
+  );
+}
+
+async function saveVerificationConfig(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.verification.roleId = interaction.fields.getTextInputValue('role_id');
+  guildConfig.verification.channelId = interaction.fields.getTextInputValue('channel_id');
+  saveConfig(configData);
+  return interaction.reply({ content: "✅ Configuration Captcha sauvegardée !", flags: 64 });
 }
 
 async function handleMessageDelete(message) {
