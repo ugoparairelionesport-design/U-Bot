@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.2.4...');
+console.log('🚀 [configsystem.js] Loading version 2.2.5...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -17,23 +17,6 @@ const {
 
 const configPath = path.join(__dirname, '../Data/config.json');
 let lastSavedContent = ""; 
-
-let configData = loadConfig(); // Chargement initial
-
-function getFullConfig() {
-  return configData;
-}
-
-function saveConfig(data) {
-  const content = JSON.stringify(data, null, 2);
-  if (content !== lastSavedContent) {
-    fs.writeFileSync(configPath, content);
-    lastSavedContent = content;
-  }
-}
-
-let lastSavedContent = ""; 
-
 const defaultConfig = {
   guilds: {} // Structure: { "guildId": { categories: {}, roles: {}, ... } }
 };
@@ -751,7 +734,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.4] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.5] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
