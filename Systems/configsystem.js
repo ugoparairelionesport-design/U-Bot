@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.0...');
+console.log('🚀 [configsystem.js] Loading version 2.8.1...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.0] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -922,6 +922,7 @@ async function handleButtons(interaction) {
       await interaction.reply({ content: "🔒 Fermeture...", flags: 64 });
       await interaction.channel.setName(getClosingChannelName(interaction.channel.name)).catch(() => {});
 
+      const ownerId = guildConfig.ticketOwners[interaction.channel.id];
       const claimedBy = guildConfig.claims[interaction.channel.id];
       const openedAt = guildConfig.ticketOpenTime[interaction.channel.id];
       const deleteAt = Date.now() + TICKET_DELETE_DELAY_MS;
@@ -1241,19 +1242,6 @@ async function handleModal(interaction) {
       }
     }
 
-    if (interaction.customId === 'modal_set_global_color') {
-      const color = interaction.fields.getTextInputValue('color_hex').trim();
-      const guildConfig = getGuildConfig(interaction.guildId);
-
-      // Validation simple du format HEX
-      if (!/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Code couleur HEX invalide. Utilisez le format #RRGGBB.", flags: 64 });
-      }
-
-      guildConfig.globalEmbedColor = color;
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: `✅ La couleur des embeds a été mise à jour en \`${color}\` !`, flags: 64 });
-    }
     const guildConfig = getGuildConfig(interaction.guildId);
 
     switch (interaction.customId) {
@@ -1551,6 +1539,37 @@ async function handleModal(interaction) {
     }
   }
 } // End of handleModal function
+
+/* ========================= */
+// HELPERS & MODALS
+
+function buildGlobalColorModal(currentColor) {
+  return new ModalBuilder()
+    .setCustomId('modal_set_global_color')
+    .setTitle('Couleur des Embeds')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('color_hex')
+          .setLabel('Code couleur HEX (ex: #FF0000)')
+          .setPlaceholder('Ex: #5865F2')
+          .setValue(currentColor || '#5865F2')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      )
+    );
+}
+
+async function saveGlobalColorConfig(interaction) {
+  const color = interaction.fields.getTextInputValue('color_hex').trim();
+  const guildConfig = getGuildConfig(interaction.guildId);
+  if (!/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
+    return replyAndAutoDelete(interaction, { content: "❌ Code couleur HEX invalide.", flags: 64 });
+  }
+  guildConfig.globalEmbedColor = color;
+  saveConfig(configData);
+  return replyAndAutoDelete(interaction, { content: `✅ Couleur mise à jour : \`${color}\``, flags: 64 });
+}
 
 /* ========================= */
 async function handleMessage(message) {
