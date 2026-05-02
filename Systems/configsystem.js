@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.12...');
+console.log('🚀 [configsystem.js] Loading version 2.8.13...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.12] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.13] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -965,7 +965,7 @@ async function handleButtons(interaction) {
         return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image (Bannière large)').setPlaceholder('Collez le lien direct de votre image ici').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
 
       case 'global_color_set_btn':
-        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code couleur HEX (ex: #FF0000)').setPlaceholder('Ex: #5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
+        return interaction.showModal(buildGlobalColorModal(guildConfig.globalEmbedColor));
 
       case 'refresh_stats':
       await interaction.deferUpdate();
@@ -1971,6 +1971,23 @@ async function sendUserVerificationPanel(interaction) {
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_start').setLabel('Vérification').setStyle(ButtonStyle.Success));
   await channel.send({ embeds: [embed], components: [row] });
   return replyAndAutoDelete(interaction, { content: "✅ Panel envoyé.", flags: 64 });
+}
+
+function buildGlobalColorModal(currentColor) {
+  return new ModalBuilder()
+    .setCustomId('modal_set_global_color')
+    .setTitle('Couleur des Embeds')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('color_hex')
+          .setLabel('Code couleur HEX (ex: #FF0000)')
+          .setPlaceholder('Ex: #5865F2')
+          .setValue(currentColor || '#5865F2')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      )
+    );
 }
 
 async function sendUserDmSafetyPanel(interaction) {
