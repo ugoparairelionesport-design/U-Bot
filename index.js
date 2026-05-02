@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.4.7...');
+console.log('🚀 [index.js] Loading version 2.4.9...');
 const {
   Client,
   GatewayIntentBits,
@@ -151,6 +151,11 @@ client.on('interactionCreate', async interaction => {
           });
           return setTimeout(() => interaction.deleteReply().catch(() => {}), 300000);
         }
+      }
+
+      // Gestion du timeout pour les messages d'erreur de permission
+      if (interaction.commandName === 'set_config' && interaction.user.id !== ownerId) {
+        return setTimeout(() => interaction.deleteReply().catch(() => {}), client.configSystem.CONFIG_MESSAGE_DELETE_DELAY_MS);
       }
 
       if (interaction.commandName === 'maintenance') {
@@ -385,6 +390,9 @@ client.on('interactionCreate', async interaction => {
       }
       if (interaction.customId === 'modal_verify_code') {
         return client.verification.handleModalSubmit(interaction);
+      }
+      if (interaction.customId === 'modal_set_global_color') {
+        return client.configSystem.saveGlobalColorConfig(interaction);
       }
       return await client.configSystem.handleModal(interaction);
     }
