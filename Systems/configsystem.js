@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.2.2...');
+console.log('🚀 [configsystem.js] Loading version 2.2.3...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -735,7 +735,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -2035,170 +2035,6 @@ async function sendUserDmSafetyPanel(interaction) {
   const embed = new EmbedBuilder().setTitle("📩 Sécurité DM").setDescription("Ne cliquez sur aucun lien reçu en MP.").setColor("#2B2D31");
   await interaction.channel.send({ embeds: [embed] });
   return interaction.reply({ content: "✅ Infos envoyées.", flags: 64 });
-}
-  if (!message.guild || message.author.bot) return;
-
-  const guildConfig = getGuildConfig(message.guild.id);
-  const ticketOwnerId = guildConfig.ticketOwners[message.channel.id];
-
-  if (!ticketOwnerId) return;
-
-  const currentName = message.channel.name;
-  const cleanName = currentName.replace(/\s*[🟠🟢]$/, '');
-
-  const option = getPanelOptionFromChannel(message.channel);
-  const modRoleIds = option ? getRoleIds(guildConfig.roles[option]) : [];
-
-  const isOwner = message.author.id === ticketOwnerId;
-  const isMod = message.member.roles.cache.some(role => modRoleIds.includes(role.id)) || 
-                message.member.permissions.has(PermissionsBitField.Flags.Administrator);
-
-  let statusEmoji = '';
-  if (isOwner) {
-    statusEmoji = '🟠';
-  } else if (isMod) {
-    statusEmoji = '🟢';
-  }
-
-  if (statusEmoji) {
-    const newName = `${cleanName} ${statusEmoji}`;
-    if (newName !== currentName) {
-      try {
-        await message.channel.setName(newName);
-      } catch (err) {}
-    }
-  }
-}
-
-/* ========================= */
-// PROTECTION HUB UI
-
-async function sendProtectionConfigPanel(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-
-  const embed = new EmbedBuilder()
-    .setTitle("🛡️ Shield Protocol | Centre de Sécurité")
-    .setDescription("Gérez la protection de votre serveur en temps réel. Activez ou personnalisez chaque module.")
-    .addFields(
-      { name: "🛡️ Anti-Raid", value: guildConfig.antiRaid.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
-      { name: "🚫 Anti-Spam", value: guildConfig.antiSpam.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
-      { name: "\u200b", value: "\u200b", inline: true },
-      { name: "🤖 Captcha", value: guildConfig.verification.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
-      { name: "📩 DM Lock", value: guildConfig.dmLock.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
-      { name: "\u200b", value: "\u200b", inline: true }
-    )
-    .setColor("#2f3136")
-    .setFooter({ text: "U-Bot Security Protocol", iconURL: interaction.client.user.displayAvatarURL() })
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('Anti-Raid').setStyle(ButtonStyle.Primary).setEmoji('🛡️'),
-    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('Anti-Spam').setStyle(ButtonStyle.Primary).setEmoji('🚫'),
-    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('Captcha').setStyle(ButtonStyle.Primary).setEmoji('🤖'),
-    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('DM Lock').setStyle(ButtonStyle.Primary).setEmoji('📩')
-  );
-
-  const payload = { embeds: [embed], components: [row], flags: 64 };
-  if (interaction.isButton()) return interaction.update(payload);
-  return interaction.reply(payload);
-}
-
-async function sendAntiRaidConfigPanel(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  const settings = guildConfig.antiRaid;
-  const embed = new EmbedBuilder()
-    .setTitle("🛡️ Configuration Anti-Raid")
-    .setDescription("Paramètres de détection des arrivées massives.")
-    .addFields(
-      { name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true },
-      { name: "Lockdown", value: settings.lockdown ? "🔒 Actif" : "🔓 Inactif", inline: true }
-    )
-    .setColor(settings.lockdown ? "#FF0000" : "#5865F2");
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('antiraid_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('antiraid_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
-  );
-  return interaction.update({ embeds: [embed], components: [row] });
-}
-
-async function sendAntiSpamConfigPanel(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  const settings = guildConfig.antiSpam;
-  const embed = new EmbedBuilder()
-    .setTitle("🚫 Configuration Anti-Spam")
-    .setDescription("Paramètres de filtrage des messages répétitifs.")
-    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
-  );
-  return interaction.update({ embeds: [embed], components: [row] });
-}
-
-async function sendVerificationConfigPanel(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  const settings = guildConfig.verification;
-  const embed = new EmbedBuilder()
-    .setTitle("🤖 Configuration Captcha")
-    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('verify_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('verify_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('verify_send_panel').setLabel('📤 Envoyer Panel').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
-  );
-  return interaction.update({ embeds: [embed], components: [row] });
-}
-
-async function sendDmLockConfigPanel(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  const settings = guildConfig.dmLock;
-  const embed = new EmbedBuilder()
-    .setTitle("📩 Configuration DM Lock")
-    .addFields({ name: "État", value: settings.enabled ? "🟢 Activé" : "🔴 Désactivé", inline: true });
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('dmlock_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('dmlock_send_panel').setLabel('📤 Envoyer Infos').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
-  );
-  return interaction.update({ embeds: [embed], components: [row] });
-}
-
-function buildAntiRaidModal(settings) {
-  return new ModalBuilder().setCustomId('modal_antiraid_settings').setTitle('Anti-Raid').addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('threshold').setLabel('Seuil membres').setValue(String(settings.threshold)).setStyle(TextInputStyle.Short)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('window').setLabel('Fenêtre (sec)').setValue(String(settings.window)).setStyle(TextInputStyle.Short)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('min_age').setLabel('Âge mini (h)').setValue(String(settings.minAge)).setStyle(TextInputStyle.Short))
-  );
-}
-
-async function saveAntiRaidConfig(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  guildConfig.antiRaid.threshold = parseInt(interaction.fields.getTextInputValue('threshold'));
-  guildConfig.antiRaid.window = parseInt(interaction.fields.getTextInputValue('window'));
-  guildConfig.antiRaid.minAge = parseInt(interaction.fields.getTextInputValue('min_age'));
-  saveConfig(configData);
-  return interaction.reply({ content: "✅ Configuration Anti-Raid sauvegardée !", flags: 64 });
-}
-
-function buildVerificationModal(settings) {
-  return new ModalBuilder().setCustomId('modal_verification_settings').setTitle('Captcha').addComponents(
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('role_id').setLabel('ID Rôle Membre').setValue(settings.roleId || '').setStyle(TextInputStyle.Short)),
-    new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('ID Salon Captcha').setValue(settings.channelId || '').setStyle(TextInputStyle.Short))
-  );
-}
-
-async function saveVerificationConfig(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  guildConfig.verification.roleId = interaction.fields.getTextInputValue('role_id');
-  guildConfig.verification.channelId = interaction.fields.getTextInputValue('channel_id');
-  saveConfig(configData);
-  return interaction.reply({ content: "✅ Configuration Captcha sauvegardée !", flags: 64 });
 }
 
 async function handleMessageDelete(message) {
