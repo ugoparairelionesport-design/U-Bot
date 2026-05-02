@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.7.1...');
+console.log('🚀 [configsystem.js] Loading version 2.7.2...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.1] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1119,69 +1119,68 @@ async function handleButtons(interaction) {
       );
 
       case 'claim_ticket':
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
-      if (guildConfig.claims[interaction.channel.id]) return replyAndAutoDelete(interaction, { content: "❌ Ce ticket est déjà pris en charge.", flags: 64 });
-      guildConfig.claims[interaction.channel.id] = interaction.user.id;
-      guildConfig.ticketOpenTime[interaction.channel.id] = Date.now(); // Début du claim
-      incrementStaffStat(interaction.guildId, interaction.user.id, 'claimed');
-      saveConfig(configData);
-      const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
-      await sendLog(interaction.guild, new EmbedBuilder().setTitle("🛠️ Ticket claim").addFields(buildTicketContextFields(interaction, [{ name: "Claims staff", value: `${staffStats.claimed}`, inline: true }, { name: "Tickets fermés staff", value: `${staffStats.closed}`, inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
-      return replyAndAutoDelete(interaction, {
-        embeds: [new EmbedBuilder().setTitle("🛠️ Claim").setDescription(`${interaction.user} a pris en charge ce ticket.\n\nUn membre de l'équipe est désormais assigné à votre demande.`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor).setFooter({ text: "Merci de patienter pendant le traitement." }).setTimestamp()],
-        flags: 64
-      });
-    }
+        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
+        if (guildConfig.claims[interaction.channel.id]) return replyAndAutoDelete(interaction, { content: "❌ Ce ticket est déjà pris en charge.", flags: 64 });
+        guildConfig.claims[interaction.channel.id] = interaction.user.id;
+        guildConfig.ticketOpenTime[interaction.channel.id] = Date.now(); 
+        incrementStaffStat(interaction.guildId, interaction.user.id, 'claimed');
+        saveConfig(configData);
+        const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
+        await sendLog(interaction.guild, new EmbedBuilder().setTitle("🛠️ Ticket claim").addFields(buildTicketContextFields(interaction, [{ name: "Claims staff", value: `${staffStats.claimed}`, inline: true }, { name: "Tickets fermés staff", value: `${staffStats.closed}`, inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
+        return replyAndAutoDelete(interaction, {
+          embeds: [new EmbedBuilder().setTitle("🛠️ Claim").setDescription(`${interaction.user} a pris en charge ce ticket.\n\nUn membre de l'équipe est désormais assigné à votre demande.`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor).setFooter({ text: "Merci de patienter pendant le traitement." }).setTimestamp()],
+          flags: 64
+        });
 
-    if (interaction.customId === 'unclaim_ticket') {
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      const previousClaim = guildConfig.claims[interaction.channel.id];
-      delete guildConfig.claims[interaction.channel.id];
-      saveConfig(configData);
-      await sendLog(interaction.guild, new EmbedBuilder().setTitle("♻️ Ticket libéré").addFields(buildTicketContextFields(interaction, [{ name: "Claim précédent", value: previousClaim ? `<@${previousClaim}>` : "Aucun", inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
-      return replyAndAutoDelete(interaction, {
-        embeds: [new EmbedBuilder().setTitle("♻️ Libéré").setDescription(`${interaction.user}`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor)],
-        flags: 64
-      });
+      case 'unclaim_ticket':
+        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
+        const previousClaim = guildConfig.claims[interaction.channel.id];
+        delete guildConfig.claims[interaction.channel.id];
+        saveConfig(configData);
+        await sendLog(interaction.guild, new EmbedBuilder().setTitle("♻️ Ticket libéré").addFields(buildTicketContextFields(interaction, [{ name: "Claim précédent", value: previousClaim ? `<@${previousClaim}>` : "Aucun", inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
+        return replyAndAutoDelete(interaction, {
+          embeds: [new EmbedBuilder().setTitle("♻️ Libéré").setDescription(`${interaction.user}`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor)],
+          flags: 64
+        });
 
       case 'save_close_archive':
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
-      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
-      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete guildConfig.pendingClosures[interaction.channel.id];
+        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
+        const pendingCloseSave = guildConfig.pendingClosures[interaction.channel.id];
+        if (!pendingCloseSave) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente.", flags: 64 });
+        if (pendingCloseSave.expiresAt && pendingCloseSave.expiresAt < Date.now()) {
+          delete guildConfig.pendingClosures[interaction.channel.id];
+          saveConfig(configData);
+          return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré.", flags: 64 });
+        }
+        if (pendingCloseSave.archiveSavedAt) return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée.", flags: 64 });
+        const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
+        if (!archiveResult.ok) return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
+        pendingCloseSave.archiveSavedAt = Date.now();
+        pendingCloseSave.archivedBy = interaction.user.id;
         saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
-      }
-      if (pendingClose.archiveSavedAt) return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
-      const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
-      if (!archiveResult.ok) return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
-      pendingClose.archiveSavedAt = Date.now();
-      pendingClose.archivedBy = interaction.user.id;
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée", flags: 64 });
+        return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée.", flags: 64 });
 
       case 'add_user':
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_add_user')
-          .setTitle('Ajouter membre')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('user_id')
-                .setLabel('ID utilisateur')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
+        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
+        return interaction.showModal(
+          new ModalBuilder()
+            .setCustomId('modal_add_user')
+            .setTitle('Ajouter membre')
+            .addComponents(
+              new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                  .setCustomId('user_id')
+                  .setLabel('ID utilisateur')
+                  .setStyle(TextInputStyle.Short)
+                  .setRequired(true)
+              )
             )
-          )
-      );
+        );
 
       case 'close_ticket':
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      }
+        if (!canManageTicket(interaction)) {
+          return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+        }
 
       return interaction.showModal(
         new ModalBuilder()
@@ -1199,9 +1198,9 @@ async function handleButtons(interaction) {
       );
 
       case 'confirm_close_ticket':
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      }
+        if (!canManageTicket(interaction)) {
+          return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+        }
 
       const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
       if (!pendingClose) {
