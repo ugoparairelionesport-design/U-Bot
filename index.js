@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.6.7...');
+console.log('🚀 [index.js] Loading version 2.6.9...');
 const {
   Client,
   GatewayIntentBits,
@@ -196,10 +196,7 @@ client.on('interactionCreate', async interaction => {
         const guild = interaction.guild;
         if (!guild) return;
 
-        // On récupère l'ID du propriétaire de manière sécurisée
-        const ownerId = guild.ownerId || (await guild.fetch().catch(() => ({}))).ownerId;
-
-        if (interaction.user.id !== ownerId) {
+        if (interaction.user.id !== guild.ownerId) {
           return await interaction.reply({
             content: "❌ Seul le propriétaire (Fonda) du serveur peut utiliser cette commande.",
             flags: 64

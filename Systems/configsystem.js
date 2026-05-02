@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.6.7...');
+console.log('🚀 [configsystem.js] Loading version 2.6.9...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.6.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.6.9] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -925,21 +925,18 @@ async function handleButtons(interaction) {
       );
     }
 
-    if (interaction.isStringSelectMenu() && interaction.customId === 'modif_select') {
+    if (interaction.customId === 'modif_select') {
       const selected = interaction.values[0];
-
       if (selected === 'logs') {
         return interaction.showModal(
           buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs')
         );
       }
-
       if (selected === 'stats') {
         return interaction.showModal(
           buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats')
         );
       }
-
       if (selected === 'options_panel') {
         const embed = new EmbedBuilder()
           .setTitle("🎫 Gestion des options du panel")
@@ -2240,241 +2237,4 @@ module.exports = {
   buildGlobalColorModal,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS
-};
-
-/* ========================= */
-async function handleMessage(message) {
-  if (!message.guild || message.author.bot) return;
-
-  const guildConfig = getGuildConfig(message.guild.id);
-  const ticketOwnerId = guildConfig.ticketOwners[message.channel.id];
-
-  // On vérifie si nous sommes dans un ticket actif
-  if (!ticketOwnerId) return;
-
-  const currentName = message.channel.name;
-  // Regex pour nettoyer les anciens emojis de statut
-  const cleanName = currentName.replace(/\s*[🟠🟢]$/, '');
-
-  // Identification du staff via les rôles configurés pour cette catégorie
-  const option = getPanelOptionFromChannel(message.channel);
-  const modRoleIds = option ? getRoleIds(guildConfig.roles[option]) : [];
-
-  const isOwner = message.author.id === ticketOwnerId;
-  const isMod = message.member.roles.cache.some(role => modRoleIds.includes(role.id)) || 
-                message.member.permissions.has(PermissionsBitField.Flags.Administrator);
-
-  let statusEmoji = '';
-  if (isOwner) {
-    statusEmoji = '🟠';
-  } else if (isMod) {
-    statusEmoji = '🟢';
-  }
-
-  if (statusEmoji) {
-    // On accole directement l'émoji. Discord ajoutera un tiret si nécessaire.
-    // Utiliser cleanName + statusEmoji sans espace évite les doubles tirets.
-    const newName = `${cleanName}-${statusEmoji}`;
-    
-    if (newName !== currentName) {
-      try {
-        await message.channel.setName(newName);
-      } catch (err) {
-        // On ignore silencieusement les Rate Limits de Discord (2 renommages / 10 min)
-      }
-    }
-  }
-}
-
-async function handleMessageDelete(message) {
-  try {
-    if (message.partial) {
-      await message.fetch().catch(() => null);
-    }
-
-    // On cherche dans tous les serveurs quel panel a été supprimé
-    for (const guildId of Object.keys(configData.guilds)) {
-      const guildConfig = configData.guilds[guildId];
-      const panelEntry = Object.entries(guildConfig.panelMessages).find(([, messageId]) => messageId === message.id);
-
-      if (panelEntry) {
-        const [channelId] = panelEntry;
-        const optionNames = Array.isArray(guildConfig.panelOptions[channelId]) ? guildConfig.panelOptions[channelId] : [];
-
-        delete guildConfig.panelMessages[channelId];
-        delete guildConfig.panelOptions[channelId];
-        saveConfig(configData);
-        break;
-      }
-    }
-  } catch (err) {
-    console.error("MESSAGE DELETE ERROR:", err);
-  }
-}
-
-async function sendEditConfigPanel(interaction) {
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId('modif_select')
-    .setPlaceholder('Que veux-tu modifier ?')
-    .addOptions([
-      { label: 'Logs', value: 'logs', description: 'Modifier le salon des logs', emoji: '📝' },
-      { label: 'Catégorie', value: 'category', description: 'Modifier la catégorie d’une option', emoji: '📂' },
-      { label: 'Rôle', value: 'role', description: 'Modifier le rôle de modération d’une option', emoji: '🛡️' },
-      { label: 'Stats', value: 'stats', description: 'Modifier le salon des statistiques', emoji: '📊' },
-      { label: 'Options', value: 'options_panel', description: 'Gérer les options de tickets (Ajout/Suppression)', emoji: '🎫' }
-    ]);
-
-  const embed = new EmbedBuilder()
-    .setTitle("⚙️ Modification de la configuration")
-    .setDescription(
-      "Utilise le menu ci-dessous pour modifier un élément précis du système de tickets.\n\n" +
-      "📝 **Logs** → Modifier le salon des logs\n" +
-      "📂 **Catégorie** → Modifier la catégorie liée à une option\n" +
-      "🛡️ **Rôle** → Modifier le rôle de modération lié à une option\n" +
-      "📊 **Stats** → Modifier le salon des statistiques\n" +
-      "🎫 **Options** → Ajouter ou supprimer des options de tickets\n\n" +
-      "_Choisis l’élément que tu souhaites mettre à jour._"
-    )
-    .setColor("#5865F2")
-    .setFooter({ text: "Système de tickets Discord" })
-    .setTimestamp();
-
-  const rowMenu = new ActionRowBuilder().addComponents(menu);
-
-  await interaction.reply({
-    embeds: [embed],
-    components: [rowMenu],
-    flags: 64
-  });
-
-  setTimeout(() => {
-    interaction.deleteReply().catch(() => {});
-  }, CONFIG_MESSAGE_DELETE_DELAY_MS);
-}
-
-/* ========================= */
-// PERSONNALISATION DU NOM
-
-async function sendBotNamePanel(interaction) {
-  const botMember = await interaction.guild.members.fetchMe().catch(() => null);
-  const currentNickname = botMember?.nickname || interaction.client.user.username;
-
-  const embed = new EmbedBuilder()
-    .setTitle("🤖 Personnalisation du nom")
-    .setDescription(
-      "Vous pouvez modifier le nom sous lequel le bot apparaît sur **ce serveur uniquement**.\n\n" +
-      `**Nom actuel** : \`${currentNickname}\`\n\n` +
-      "Cliquez sur le bouton ci-dessous pour définir un nouveau surnom."
-    )
-    .setColor("#5865F2")
-    .setFooter({ text: "Cette modification n'affecte pas les autres serveurs." })
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('bot_name_set_btn')
-      .setLabel('Modifier le nom')
-      .setEmoji('✏️')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('global_banner_set_btn')
-      .setLabel("image d'embed")
-      .setEmoji('📋')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  await interaction.reply({ 
-    embeds: [embed], 
-    components: [row],
-    flags: 64
-  });
-}
-
-async function handleBotNameButtonClick(interaction) {
-  const modal = new ModalBuilder()
-    .setCustomId('modal_set_bot_nickname')
-    .setTitle('Changer le nom du bot')
-    .addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('new_nickname')
-          .setLabel('Nouveau nom (vide pour réinitialiser)')
-          .setStyle(TextInputStyle.Short)
-          .setMaxLength(32)
-          .setRequired(false)
-      )
-    );
-
-  await interaction.showModal(modal);
-}
-
-async function handleSetBotNicknameModal(interaction) {
-  const newNickname = interaction.fields.getTextInputValue('new_nickname').trim();
-  
-  try {
-    const botMember = await interaction.guild.members.fetchMe();
-    
-    if (!botMember.permissions.has(PermissionsBitField.Flags.ChangeNickname) && 
-        !botMember.permissions.has(PermissionsBitField.Flags.ManageNicknames)) {
-      return await interaction.reply({ 
-        content: "❌ Je n'ai pas la permission `Changer le pseudo` ou `Gérer les pseudos` sur ce serveur.", 
-        flags: 64 
-      });
-    }
-
-    // Vérification de la hiérarchie des rôles
-    try {
-      await botMember.setNickname(newNickname || null);
-
-      // Envoi d'un log pour tracer le changement de nom
-      await sendLog(
-        interaction.guild,
-        new EmbedBuilder()
-          .setTitle("🤖 Nom du bot modifié")
-          .addFields(
-            { name: "Nouveau nom", value: `\`${newNickname || interaction.client.user.username}\``, inline: true },
-            { name: "Modifié par", value: `${interaction.user}`, inline: true }
-          )
-          .setColor("#5865F2")
-          .setTimestamp()
-      );
-
-      return await interaction.reply({ 
-        content: `✅ Le nom du bot a été mis à jour : \`${newNickname || interaction.client.user.username}\``, 
-        flags: 64 
-      });
-    } catch (roleErr) {
-      return await interaction.reply({ 
-        content: "❌ Impossible de changer mon nom. Mon rôle est probablement trop bas dans la hiérarchie ou je n'ai pas les permissions suffisantes.", 
-        flags: 64 
-      });
-    }
-  } catch (err) {
-    console.error("Erreur changement surnom:", err);
-    return interaction.reply({ content: "❌ Je n'ai pas la permission de changer mon surnom sur ce serveur.", flags: 64 });
-  }
-}
-
-module.exports = {
-  getGuildConfig,
-  getFullConfig,
-  saveConfig,
-  sendConfigPanel,
-  sendEditConfigPanel,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState,
-  sendBotNamePanel,
-  startVisualTimer,
-  sendLiveConfigPanel,
-  buildLiveConfigModal,
-  saveLiveConfig,
-  sendLiveEditList,
-  handleLiveEditSelect,
-  handleLiveDelete,
-  replyAndAutoDelete
 };
