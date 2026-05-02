@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.4.2...');
+console.log('🚀 [configsystem.js] Loading version 2.4.3...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -14,12 +14,12 @@ const {
   ChannelType,
   PermissionsBitField,
 } = require('discord.js');
-const { fetch } = require('undici');
 
 const configPath = path.join(__dirname, '../Data/config.json');
-let lastSavedContent = ""; // Déclaration unique (World Class Optimization)
+let lastSavedContent = ""; 
+
 const defaultConfig = {
-  guilds: {} // Structure: { "guildId": { categories: {}, roles: {}, ... } }
+  guilds: {}
 };
 
 const defaultGuildSettings = {
@@ -63,8 +63,7 @@ const defaultGuildSettings = {
   },
   dmLock: {
     enabled: false
-  },
-  globalEmbedBanner: null
+  }
 };
 
 function loadConfig() {
@@ -167,7 +166,7 @@ function startVisualTimer(message, deleteAt) {
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
-const CONFIG_MESSAGE_DELETE_DELAY_MS = 5 * 60 * 1000; // Passage à 5 minutes pour la configuration
+const CONFIG_MESSAGE_DELETE_DELAY_MS = 3 * 60 * 1000;
 const PENDING_CLOSE_EXPIRE_MS = 10 * 60 * 1000;
 const pendingTicketCreations = new Map();
 
@@ -236,10 +235,10 @@ async function safeInteractionReply(interaction, payload, deferred = false) {
       message = await interaction.followUp(payload);
     }
 
-    // Système de suppression automatique des "messages bleus" (ephémères) après 5 minutes
-    if (payload && payload.flags === 64) {
+    // Auto-delete messages with ephemeral flag after 5 minutes
+    if (message && payload.flags === 64) {
       setTimeout(() => {
-        interaction.deleteReply().catch(() => {});
+        message.delete().catch(() => {});
       }, 300000); // 5 minutes
     }
 
@@ -740,7 +739,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.4.2] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.4.3] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -764,12 +763,6 @@ async function resumeTicketState(client) {
         const storedDeleteAt = guildConfig.pendingDeletions?.[channel.id];
         const deleteAt = storedDeleteAt || (Date.now() + TICKET_DELETE_DELAY_MS);
         const delay = Math.max(5000, deleteAt - Date.now()); 
-
-        // Si le timer n'était pas encore en base, on le fixe pour qu'il soit persistant
-        if (!storedDeleteAt) {
-          if (!guildConfig.pendingDeletions) guildConfig.pendingDeletions = {};
-          guildConfig.pendingDeletions[channel.id] = deleteAt;
-        }
 
         console.log(`⏳ [TICKETS] Reprise de la suppression pour #${channel.name} dans ${Math.round(delay/60000)} min.`);
 
@@ -846,6 +839,7 @@ function sendConfigPanel(interaction) {
       "_Assure-toi que les IDs sont corrects pour éviter les erreurs._"
     )
     .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -878,26 +872,6 @@ async function handleButtons(interaction) {
     // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
     if (interaction.customId === 'bot_name_set_btn') {
       return await handleBotNameButtonClick(interaction);
-    }
-
-    if (interaction.customId === 'global_banner_set_btn' || interaction.customId === 'prot_banner_set_btn') {
-      const guildConfig = getGuildConfig(interaction.guildId);
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_set_global_banner')
-          .setTitle('Image de fond des Embeds')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('banner_url')
-                .setLabel('URL de l\'image (Bannière large)')
-                .setPlaceholder('Collez le lien direct de votre image ici')
-                .setValue(guildConfig.globalEmbedBanner || '')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-            )
-          )
-      );
     }
 
     const guildConfig = getGuildConfig(interaction.guildId);
@@ -1445,6 +1419,8 @@ async function sendLiveConfigPanel(interaction) {
       "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
       "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
     )
+    .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setTimestamp();
 
@@ -1590,55 +1566,6 @@ async function handleModal(interaction) {
     // RÉPONSE PRIORITAIRE : Traitement du formulaire de nom
     if (interaction.customId === 'modal_set_bot_nickname') {
       return await handleSetBotNicknameModal(interaction);
-    }
-
-    if (interaction.customId === 'modal_set_global_banner') {
-      await interaction.deferReply({ flags: 64 });
-      const url = interaction.fields.getTextInputValue('banner_url').trim();
-      const guildConfig = getGuildConfig(interaction.guildId);
-
-      if (!url) {
-        guildConfig.globalEmbedBanner = null;
-        saveConfig(configData);
-        return interaction.editReply({ content: "🗑️ L'image d'embed a été supprimée." });
-      }
-
-      try {
-        // Téléchargement de l'image
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Impossible de télécharger l'image");
-        
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        // Création du dossier assets pour le serveur
-        const assetsDir = path.join(__dirname, '../Data/assets', interaction.guildId);
-        if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
-
-        // Sauvegarde locale (on utilise l'extension d'origine ou .png par défaut)
-        const filePath = path.join(assetsDir, 'banner.png');
-        fs.writeFileSync(filePath, buffer);
-
-        // Construction de l'URL publique hébergée par le bot
-        // Replit fournit l'URL via les variables d'environnement
-        const replName = process.env.REPL_SLUG;
-        const replOwner = process.env.REPL_OWNER;
-        
-        if (replName && replOwner) {
-          const publicUrl = `https://${replName}.${replOwner}.repl.co/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
-          guildConfig.globalEmbedBanner = publicUrl;
-          saveConfig(configData);
-          return interaction.editReply({ content: "✅ Image téléchargée et sauvegardée localement ! Elle ne disparaîtra plus, même si vous supprimez le message d'origine." });
-        } else {
-          // Si hors Replit, on garde l'URL d'origine
-          guildConfig.globalEmbedBanner = url;
-          saveConfig(configData);
-          return interaction.editReply({ content: "✅ Image enregistrée (URL directe)." });
-        }
-      } catch (err) {
-        console.error("❌ Erreur téléchargement bannière:", err);
-        return interaction.editReply({ content: "❌ Erreur : Impossible de récupérer l'image. Assurez-vous que le lien est direct (finit par .png, .jpg...)." });
-      }
     }
 
     const guildConfig = getGuildConfig(interaction.guildId);
@@ -1966,43 +1893,27 @@ async function handleMessage(message) {
 async function sendProtectionConfigPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const embed = new EmbedBuilder()
-    .setTitle("🛡️ U-BOT | Shield Protocol")
-    .setDescription(
-      "### 🛰️ Centre de Commandement\n" +
-      "> *Gérez l'ensemble des modules de protection avancée pour garantir la sécurité de votre communauté.*\n\n" +
-      "**✨ Modules de Protection**\n" +
-      "┣ 🛡️ **Anti-Raid** : Bloque les vagues de bots et comptes suspects.\n" +
-      "┣ 🚫 **Anti-Spam** : Filtre le flood, les liens et les répétitions.\n" +
-      "┣ 🤖 **Captcha** : Vérification humaine pour les nouveaux membres.\n" +
-      "┗ 📩 **DM Lock** : Prévention contre les scams en messages privés.\n\n" +
-      "**📊 État actuel du serveur**"
-    )
+    .setTitle("🛡️ Shield Protocol | Centre de Sécurité")
+    .setDescription("Gérez la protection de votre serveur en temps réel.")
     .addFields(
-      { name: "Systèmes Passifs", value: `🛡️ Anti-Raid: ${guildConfig.antiRaid.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n🚫 Anti-Spam: ${guildConfig.antiSpam.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true },
-      { name: "Systèmes Actifs", value: `🤖 Captcha: ${guildConfig.verification.enabled ? '`🟢 ON`' : '`🔴 OFF`'}\n📩 DM Lock: ${guildConfig.dmLock.enabled ? '`🟢 ON`' : '`🔴 OFF`'}`, inline: true }
+      { name: "🛡️ Anti-Raid", value: guildConfig.antiRaid.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "🚫 Anti-Spam", value: guildConfig.antiSpam.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "\u200b", value: "\u200b", inline: true },
+      { name: "🤖 Captcha", value: guildConfig.verification.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true },
+      { name: "📩 DM Lock", value: guildConfig.dmLock.enabled ? "🟢 **Activé**" : "🔴 **Désactivé**", inline: true }
     )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setImage(guildConfig.globalEmbedBanner)
-    .setColor(guildConfig.antiRaid.lockdown ? "#FF0000" : "#2f3136")
-    .setFooter({ text: "U-Bot Security • Protection en temps réel", iconURL: interaction.client.user.displayAvatarURL() })
+    .setColor("#2f3136")
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('🛡️ Anti-Raid').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('🚫 Anti-Spam').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('🤖 Captcha').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('📩 DM Lock').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('prot_hub_antiraid').setLabel('Anti-Raid').setStyle(ButtonStyle.Primary).setEmoji('🛡️'),
+    new ButtonBuilder().setCustomId('prot_hub_antispam').setLabel('Anti-Spam').setStyle(ButtonStyle.Primary).setEmoji('🚫'),
+    new ButtonBuilder().setCustomId('prot_hub_captcha').setLabel('Captcha').setStyle(ButtonStyle.Primary).setEmoji('🤖'),
+    new ButtonBuilder().setCustomId('prot_hub_dmlock').setLabel('DM Lock').setStyle(ButtonStyle.Primary).setEmoji('📩')
   );
 
   const payload = { embeds: [embed], components: [row], flags: 64 };
-  
-  try {
-    if (interaction.isButton()) return await interaction.update(payload);
-    return await safeInteractionReply(interaction, payload);
-  } catch (err) {
-    // Si l'interaction est inconnue (Unknown Interaction), on tente un followUp discret
-    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
-  }
+  return interaction.isButton() ? interaction.update(payload) : interaction.reply(payload);
 }
 
 async function sendAntiRaidConfigPanel(interaction) {
@@ -2025,13 +1936,7 @@ async function sendAntiRaidConfigPanel(interaction) {
     new ButtonBuilder().setCustomId('antiraid_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
-
-  const payload = { embeds: [embed], components: [row], flags: 64 };
-  try {
-    return await interaction.update(payload);
-  } catch (err) {
-    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
-  }
+  return interaction.update({ embeds: [embed], components: [row] });
 }
 
 async function sendAntiSpamConfigPanel(interaction) {
@@ -2046,18 +1951,14 @@ async function sendAntiSpamConfigPanel(interaction) {
       `┣ ⏳ Fenêtre : \`${settings.window}s\`\n` +
       `┗ 📝 Doublons max : \`${settings.maxDuplicates}\``
     )
+    .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
-
-  const payload = { embeds: [embed], components: [row], flags: 64 };
-  try {
-    return await interaction.update(payload);
-  } catch (err) {
-    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
-  }
+  return interaction.update({ embeds: [embed], components: [row] });
 }
 
 async function sendVerificationConfigPanel(interaction) {
@@ -2071,6 +1972,8 @@ async function sendVerificationConfigPanel(interaction) {
       `┣ 🛡️ Rôle attribué : ${settings.roleId ? `<@&${settings.roleId}>` : '`❌ Non configuré`'}\n` +
       `┗ 📍 Salon Captcha : ${settings.channelId ? `<#${settings.channelId}>` : '`❌ Non configuré`'}`
     )
+    .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('verify_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
@@ -2078,13 +1981,7 @@ async function sendVerificationConfigPanel(interaction) {
     new ButtonBuilder().setCustomId('verify_send_panel').setLabel('📤 Envoyer Panel').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
-
-  const payload = { embeds: [embed], components: [row], flags: 64 };
-  try {
-    return await interaction.update(payload);
-  } catch (err) {
-    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
-  }
+  return interaction.update({ embeds: [embed], components: [row] });
 }
 
 async function sendDmLockConfigPanel(interaction) {
@@ -2096,19 +1993,15 @@ async function sendDmLockConfigPanel(interaction) {
       "**⚙️ Paramètres Actuels**\n" +
       `┗ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}`
     )
+    .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('dmlock_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('dmlock_send_panel').setLabel('📤 Envoyer Infos').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
-
-  const payload = { embeds: [embed], components: [row], flags: 64 };
-  try {
-    return await interaction.update(payload);
-  } catch (err) {
-    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
-  }
+  return interaction.update({ embeds: [embed], components: [row] });
 }
 
 function buildAntiRaidModal(settings) {
@@ -2155,7 +2048,8 @@ async function saveVerificationConfig(interaction) {
 async function sendUserVerificationPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const channel = await interaction.guild.channels.fetch(guildConfig.verification.channelId).catch(() => null);
-  if (!channel || !channel.isTextBased()) return interaction.reply({ content: "❌ Salon introuvable ou invalide (doit être un salon textuel).", flags: 64 });
+  const banner = guildConfig.globalEmbedBanner;
+  if (!channel) return interaction.reply({ content: "❌ Salon introuvable.", flags: 64 });
   const embed = new EmbedBuilder().setTitle("🛡️ Vérification").setDescription("Cliquez ci-dessous pour accéder au serveur.").setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_start').setLabel('Vérification').setStyle(ButtonStyle.Success));
   await channel.send({ embeds: [embed], components: [row] });
@@ -2163,87 +2057,11 @@ async function sendUserVerificationPanel(interaction) {
 }
 
 async function sendUserDmSafetyPanel(interaction) {
-  const embed = new EmbedBuilder().setTitle("📩 Sécurité DM").setDescription("Ne cliquez sur aucun lien reçu en MP.").setColor("#2B2D31");
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const banner = guildConfig.globalEmbedBanner;
+  const embed = new EmbedBuilder().setTitle("📩 Sécurité DM").setDescription("Ne cliquez sur aucun lien reçu en MP.").setColor("#2B2D31").setImage(banner);
   await interaction.channel.send({ embeds: [embed] });
   return interaction.reply({ content: "✅ Infos envoyées.", flags: 64 });
-}
-
-/* ========================= */
-// HELP SYSTEM
-
-async function sendHelpPanel(interaction) {
-  const { commands } = require('../deploy-commands');
-  const guildConfig = getGuildConfig(interaction.guildId);
-
-  const categories = {
-    "🛡️ Protection": ['config_protection'],
-    "🎫 Tickets": ['config_ticket', 'modif_config_ticket', 'stats', 'staff_stats'],
-    "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
-    "🛠️ Maintenance": ['maintenance'],
-    "🤖 Configuration": ['set_config', 'help']
-  };
-
-  const embed = new EmbedBuilder()
-    .setTitle("📚 Centre d'Aide & Commandes")
-    .setDescription(
-      `### 🛰️ Guide Opérationnel\n` +
-      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.4.0\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
-      `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
-    )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setImage(guildConfig.globalEmbedBanner)
-    .setColor("#2b2d31")
-    .setFooter({ text: "U-Bot System • Support & Sécurité", iconURL: interaction.client.user.displayAvatarURL() })
-    .setTimestamp();
-
-  // Parcours des catégories pour remplir l'embed dynamiquement
-  for (const [catName, cmdList] of Object.entries(categories)) {
-    let categoryContent = "";
-    
-    commands.forEach(cmd => {
-      const data = cmd.toJSON();
-      if (cmdList.includes(data.name)) {
-        // Résumé concis basé sur le nom de la commande
-        const summaries = {
-          'maintenance': 'Gérer les MAJ et le status du bot.',
-          'config_protection': 'Hub central Anti-Raid/Spam/Captcha.',
-          'config_ticket': 'Initialiser le système de support.',
-          'modif_config_ticket': 'Editer les salons et rôles support.',
-          'stats': 'Voir les volumes de tickets.',
-          'staff_stats': 'Classement d\'activité des modérateurs.',
-          'config_live': 'Ajouter des alertes Twitch/YT/TikTok.',
-          'modif_config_live': 'Gérer les chaînes surveillées.',
-          'test_live': 'Simuler une alerte en direct.',
-          'set_config': 'Changer le nom et l\'image du bot.',
-          'help': 'Afficher ce menu d\'assistance.'
-        };
-        
-        categoryContent += `┣ \`/${data.name}\` : ${summaries[data.name] || data.description}\n`;
-      }
-    });
-
-    if (categoryContent) {
-      embed.addFields({ 
-        name: catName, 
-        value: categoryContent.replace(/┣(?=[^┣]*$)/, "┗"), // Remplace le dernier symbole pour le design
-        inline: false 
-      });
-    }
-  }
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setLabel('Support Officiel')
-      .setURL('https://discord.gg/example') // Remplace par ton lien
-      .setStyle(ButtonStyle.Link),
-    new ButtonBuilder()
-      .setCustomId('prot_hub_back')
-      .setLabel('Dashboard Sécurité')
-      .setEmoji('🛡️')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return safeInteractionReply(interaction, { embeds: [embed], components: [row], flags: 64 });
 }
 
 async function handleMessageDelete(message) {
@@ -2295,7 +2113,7 @@ async function sendEditConfigPanel(interaction) {
       "🎫 **Options** → Ajouter ou supprimer des options de tickets\n\n" +
       "_Choisis l’élément que tu souhaites mettre à jour._"
     )
-    .setImage(getGuildConfig(interaction.guildId).globalEmbedBanner)
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Système de tickets Discord" })
     .setTimestamp();
@@ -2327,6 +2145,7 @@ async function sendBotNamePanel(interaction) {
       `**Nom actuel** : \`${currentNickname}\`\n\n` +
       "Cliquez sur le bouton ci-dessous pour définir un nouveau surnom."
     )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
     .setColor("#5865F2")
     .setFooter({ text: "Cette modification n'affecte pas les autres serveurs." })
     .setTimestamp();
@@ -2336,12 +2155,7 @@ async function sendBotNamePanel(interaction) {
       .setCustomId('bot_name_set_btn')
       .setLabel('Modifier le nom')
       .setEmoji('✏️')
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('global_banner_set_btn')
-      .setLabel("image d'embed")
-      .setEmoji('🖼️')
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
   );
 
   await interaction.reply({ 
@@ -2452,6 +2266,5 @@ module.exports = {
   buildVerificationModal,
   saveVerificationConfig,
   sendUserVerificationPanel,
-  sendUserDmSafetyPanel,
-  sendHelpPanel
+  sendUserDmSafetyPanel
 };
