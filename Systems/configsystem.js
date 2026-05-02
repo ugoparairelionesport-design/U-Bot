@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.7.6...');
+console.log('🚀 [configsystem.js] Loading version 2.7.7...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.6] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.7.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -922,7 +922,7 @@ async function handleButtons(interaction) {
       );
       }
 
-      case 'modif_select': {
+      case 'modif_select': { // Gestion menu de modification
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const selected = interaction.values[0];
       if (selected === 'logs') { // Modifier logs
@@ -1011,9 +1011,7 @@ async function handleButtons(interaction) {
 
       case 'bot_name_set_btn':
         return await handleBotNameButtonClick(interaction);
-      
-      case 'prot_hub_back':
-        return await sendProtectionConfigPanel(interaction);
+
       case 'prot_hub_antiraid':
         return await sendAntiRaidConfigPanel(interaction);
       case 'prot_hub_antispam':
@@ -1245,6 +1243,7 @@ async function handleButtons(interaction) {
       
       {
       const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
+      const ownerId = guildConfig.ticketOwners[interaction.channel.id];
 
       await sendMessageWithTimer(
         interaction.channel,
@@ -1291,63 +1290,20 @@ async function handleButtons(interaction) {
       }, TICKET_DELETE_DELAY_MS);
       return;
       }
-
-    if (interaction.customId === 'save_close_archive') {
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      }
-
-      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) {
-        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
-      }
-
-      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
+      
+      case 'cancel_close_ticket': {
+        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
+        const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
+        if (!pendingClose) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente.", flags: 64 });
         delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
+        return replyAndAutoDelete(interaction, { content: '❌ Fermeture annulée', flags: 64 });
       }
 
-      if (pendingClose.archiveSavedAt) {
-        return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
-      }
-
-      const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
-
-      if (!archiveResult.ok) {
-        return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
-      }
-
-      pendingClose.archiveSavedAt = Date.now();
-      pendingClose.archivedBy = interaction.user.id;
-      saveConfig(configData);
-
-      return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée", flags: 64 });
+      default:
+        break;
     }
 
-    if (interaction.customId === 'cancel_close_ticket') {
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      }
-
-      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) {
-        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
-      }
-
-      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete guildConfig.pendingClosures[interaction.channel.id];
-        saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
-      }
-
-      delete guildConfig.pendingClosures[interaction.channel.id];
-      saveConfig(configData);
-
-      return replyAndAutoDelete(interaction, { content: '❌ Fermeture annulée', flags: 64 });
-    }
-
-    // Si aucune condition n'est remplie, on ne laisse pas l'interaction expirer
     if (!interaction.replied && !interaction.deferred && interaction.isButton()) {
         return replyAndAutoDelete(interaction, { content: "⚠️ Bouton non reconnu ou en cours de déploiement.", flags: 64 });
     }
