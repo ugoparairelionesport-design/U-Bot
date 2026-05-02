@@ -20,7 +20,7 @@ const AntiSpamSystem = require('./Systems/antispam');
 const VerificationSystem = require('./Systems/verificationsystem');
 const DmLockSystem = require('./Systems/dmlock');
 
-const { deployCommands } = require('./deploy-commands');
+const { commands, deployCommands } = require('./deploy-commands');
 
 require('dotenv').config();
 
@@ -90,6 +90,7 @@ try {
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Bot en ligne : ${client.user.tag}`);
   console.log(`🌍 Serveur(s) : ${client.guilds.cache.size}`);
+  console.log(`📋 Total des commandes configurées : ${commands.length}`);
 
   try {
     if (client.configSystem && typeof client.configSystem.resumeTicketState === 'function') {

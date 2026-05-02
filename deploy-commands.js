@@ -92,7 +92,7 @@ async function deployCommands() {
     }
 
     try {
-        console.log(`🚀 Déploiement [${guildId ? 'GUILD' : 'GLOBAL'}] des commandes slash...`);
+        console.log(`🚀 Déploiement [${guildId ? 'GUILD' : 'GLOBAL'}] de ${commands.length} commandes slash...`);
         if (guildId) console.log(`📍 Guild ID cible : ${guildId}`);
 
         // Déploiement global (peut prendre jusqu'à 1 heure pour apparaître)
@@ -104,7 +104,7 @@ async function deployCommands() {
             { body: commands },
         );
 
-        console.log('✅ Commandes slash déployées avec succès !');
+        console.log(`✅ ${commands.length} commandes slash déployées avec succès !`);
     } catch (error) {
         console.error('❌ Erreur lors du déploiement des commandes slash :', error);
     }
