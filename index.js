@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 2.3.7...');
+console.log('🚀 [index.js] Loading version 2.3.8...');
 const {
   Client,
   GatewayIntentBits,
@@ -132,10 +132,11 @@ client.on('interactionCreate', async interaction => {
       
       if (adminCommands.includes(interaction.commandName)) {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-          return interaction.reply({
+          await interaction.reply({
             content: "❌ Vous n'avez pas les permissions (Administrateur) pour utiliser cette commande.",
             flags: 64
           });
+          return setTimeout(() => interaction.deleteReply().catch(() => {}), 300000);
         }
       }
 

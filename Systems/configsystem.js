@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.7...');
+console.log('🚀 [configsystem.js] Loading version 2.3.8...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -166,7 +166,7 @@ function startVisualTimer(message, deleteAt) {
 }
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
-const CONFIG_MESSAGE_DELETE_DELAY_MS = 3 * 60 * 1000;
+const CONFIG_MESSAGE_DELETE_DELAY_MS = 5 * 60 * 1000; // Passage à 5 minutes pour la configuration
 const PENDING_CLOSE_EXPIRE_MS = 10 * 60 * 1000;
 const pendingTicketCreations = new Map();
 
@@ -235,10 +235,10 @@ async function safeInteractionReply(interaction, payload, deferred = false) {
       message = await interaction.followUp(payload);
     }
 
-    // Auto-delete messages with ephemeral flag after 5 minutes
-    if (message && payload.flags === 64) {
+    // Système de suppression automatique des "messages bleus" (ephémères) après 5 minutes
+    if (payload && payload.flags === 64) {
       setTimeout(() => {
-        message.delete().catch(() => {});
+        interaction.deleteReply().catch(() => {});
       }, 300000); // 5 minutes
     }
 
@@ -739,7 +739,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1947,7 +1947,14 @@ async function sendProtectionConfigPanel(interaction) {
   );
 
   const payload = { embeds: [embed], components: [row], flags: 64 };
-  return interaction.isButton() ? interaction.update(payload) : interaction.reply(payload);
+  
+  try {
+    if (interaction.isButton()) return await interaction.update(payload);
+    return await safeInteractionReply(interaction, payload);
+  } catch (err) {
+    // Si l'interaction est inconnue (Unknown Interaction), on tente un followUp discret
+    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
+  }
 }
 
 async function sendAntiRaidConfigPanel(interaction) {
@@ -1970,7 +1977,13 @@ async function sendAntiRaidConfigPanel(interaction) {
     new ButtonBuilder().setCustomId('antiraid_setup').setLabel('⚙️ Paramètres').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
-  return interaction.update({ embeds: [embed], components: [row] });
+
+  const payload = { embeds: [embed], components: [row], flags: 64 };
+  try {
+    return await interaction.update(payload);
+  } catch (err) {
+    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
+  }
 }
 
 async function sendAntiSpamConfigPanel(interaction) {
@@ -1990,7 +2003,13 @@ async function sendAntiSpamConfigPanel(interaction) {
     new ButtonBuilder().setCustomId('antispam_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
-  return interaction.update({ embeds: [embed], components: [row] });
+
+  const payload = { embeds: [embed], components: [row], flags: 64 };
+  try {
+    return await interaction.update(payload);
+  } catch (err) {
+    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
+  }
 }
 
 async function sendVerificationConfigPanel(interaction) {
@@ -2011,7 +2030,13 @@ async function sendVerificationConfigPanel(interaction) {
     new ButtonBuilder().setCustomId('verify_send_panel').setLabel('📤 Envoyer Panel').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
-  return interaction.update({ embeds: [embed], components: [row] });
+
+  const payload = { embeds: [embed], components: [row], flags: 64 };
+  try {
+    return await interaction.update(payload);
+  } catch (err) {
+    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
+  }
 }
 
 async function sendDmLockConfigPanel(interaction) {
@@ -2029,7 +2054,13 @@ async function sendDmLockConfigPanel(interaction) {
     new ButtonBuilder().setCustomId('dmlock_send_panel').setLabel('📤 Envoyer Infos').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
-  return interaction.update({ embeds: [embed], components: [row] });
+
+  const payload = { embeds: [embed], components: [row], flags: 64 };
+  try {
+    return await interaction.update(payload);
+  } catch (err) {
+    if (err.code === 10062) return interaction.followUp(payload).catch(() => {});
+  }
 }
 
 function buildAntiRaidModal(settings) {
@@ -2076,7 +2107,7 @@ async function saveVerificationConfig(interaction) {
 async function sendUserVerificationPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const channel = await interaction.guild.channels.fetch(guildConfig.verification.channelId).catch(() => null);
-  if (!channel) return interaction.reply({ content: "❌ Salon introuvable.", flags: 64 });
+  if (!channel || !channel.isTextBased()) return interaction.reply({ content: "❌ Salon introuvable ou invalide (doit être un salon textuel).", flags: 64 });
   const embed = new EmbedBuilder().setTitle("🛡️ Vérification").setDescription("Cliquez ci-dessous pour accéder au serveur.").setColor("#5865F2");
   const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('verify_start').setLabel('Vérification').setStyle(ButtonStyle.Success));
   await channel.send({ embeds: [embed], components: [row] });
