@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.8...');
+console.log('🚀 [configsystem.js] Loading version 2.3.9...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -16,7 +16,7 @@ const {
 } = require('discord.js');
 
 const configPath = path.join(__dirname, '../Data/config.json');
-let lastSavedContent = ""; 
+let lastSavedContent = ""; // Déclaration unique (World Class Optimization)
 const defaultConfig = {
   guilds: {} // Structure: { "guildId": { categories: {}, roles: {}, ... } }
 };
@@ -763,6 +763,12 @@ async function resumeTicketState(client) {
         const storedDeleteAt = guildConfig.pendingDeletions?.[channel.id];
         const deleteAt = storedDeleteAt || (Date.now() + TICKET_DELETE_DELAY_MS);
         const delay = Math.max(5000, deleteAt - Date.now()); 
+
+        // Si le timer n'était pas encore en base, on le fixe pour qu'il soit persistant
+        if (!storedDeleteAt) {
+          if (!guildConfig.pendingDeletions) guildConfig.pendingDeletions = {};
+          guildConfig.pendingDeletions[channel.id] = deleteAt;
+        }
 
         console.log(`⏳ [TICKETS] Reprise de la suppression pour #${channel.name} dans ${Math.round(delay/60000)} min.`);
 
