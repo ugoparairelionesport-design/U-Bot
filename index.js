@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 2.1.9...');
+console.log('🚀 [index.js] Loading version 2.2.0...');
 const {
   Client,
   GatewayIntentBits,
@@ -229,6 +229,10 @@ client.on('interactionCreate', async interaction => {
         return await client.maintenance.handleButton(interaction);
       }
       
+      if (interaction.customId === 'prot_hub_back') {
+        return client.configSystem.sendProtectionConfigPanel(interaction);
+      }
+
       if (interaction.customId === 'prot_hub_antiraid') {
         return client.configSystem.sendAntiRaidConfigPanel(interaction);
       }
