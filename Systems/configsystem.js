@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.2.7...');
+console.log('🚀 [configsystem.js] Loading version 2.2.8...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -96,6 +96,10 @@ function saveConfig(data) {
 }
 
 let configData = loadConfig();
+
+function getFullConfig() {
+  return configData;
+}
 
 function getGuildConfig(guildId) {
   if (!configData.guilds) configData.guilds = {};
@@ -734,7 +738,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.2.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
