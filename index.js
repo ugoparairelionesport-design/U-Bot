@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.8.7...');
+console.log('🚀 [index.js] Loading version 2.8.8...');
 
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = require('discord.js');
 const configSystem = require('./Systems/configsystem');
@@ -23,13 +23,17 @@ console.log('🚀 Lancement du bot en cours...');
 const server = http.createServer((req, res) => {
   // Route pour servir les images (assets)
   if (req.url.startsWith('/assets/')) {
-    const urlPath = req.url.split('?')[0];
-    const filePath = path.join(__dirname, 'Data', urlPath.substring(1)); // On retire le '/' pour path.join
+    const urlPath = req.url.split('?')[0]; // On retire le paramètre de version ?v=...
+    const filePath = path.join(__dirname, 'Data', urlPath.substring(1));
+    
     if (fs.existsSync(filePath)) {
       const ext = path.extname(filePath).toLowerCase();
       const contentType = ext === '.png' ? 'image/png' : (ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg' : 'application/octet-stream');
+      console.log(`🖼️ [HTTP] Service de l'image : ${urlPath}`);
       res.writeHead(200, { 'Content-Type': contentType });
       return res.end(fs.readFileSync(filePath));
+    } else {
+      console.warn(`⚠️ [HTTP] Image non trouvée : ${filePath}`);
     }
   }
 

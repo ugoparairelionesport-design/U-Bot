@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.7...');
+console.log('🚀 [configsystem.js] Loading version 2.8.8...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -730,7 +730,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.7] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1284,9 +1284,10 @@ async function handleModal(interaction) {
         if (replName && replOwner) {
           // Correction de l'URL Replit : slug.owner.replit.app
           const publicUrl = `https://${replName}.${replOwner}.replit.app/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
+          console.log(`🔗 [CONFIG] Nouvelle URL d'image générée : ${publicUrl}`);
           guildConfig.globalEmbedBanner = publicUrl;
           saveConfig(configData);
-          return interaction.editReply({ content: "✅ Image téléchargée et sauvegardée localement ! Elle ne disparaîtra plus, même si vous supprimez le message d'origine." });
+          return interaction.editReply({ content: "✅ Image téléchargée et sauvegardée localement ! Elle s'affichera désormais dans tous les embeds." });
         } else {
           // Si hors Replit, on garde l'URL d'origine
           guildConfig.globalEmbedBanner = url;
@@ -2077,7 +2078,7 @@ async function sendHelpPanel(interaction) {
     .setTitle("📚 Centre d'Aide & Commandes")
     .setDescription(
       `### 🛰️ Guide Opérationnel\n` + // Corrected version number
-      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.8.7\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.8.8\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
       `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
