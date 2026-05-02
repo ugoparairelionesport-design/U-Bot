@@ -1,8 +1,8 @@
 // Bot Discord - Ticket System
 const http = require('http');
-const fs = require('fs'); // Keep fs and path for HTTP server
-const path = require('path'); // Keep fs and path for HTTP server
-console.log('🚀 [index.js] Loading version 2.4.3...');
+const fs = require('fs');
+const path = require('path');
+console.log('🚀 [index.js] Loading version 2.4.5...');
 const {
   Client,
   GatewayIntentBits,
