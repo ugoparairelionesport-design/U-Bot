@@ -32,6 +32,13 @@ class DmLockSystem {
 
     try {
       await member.send({ embeds: [embed] });
+      const logEmbed = new EmbedBuilder()
+        .setTitle("📩 DM Lock : Alerte envoyée")
+        .setDescription(`Un message de prévention a été envoyé à ${member.user} (${member.user.tag}).`)
+        .setColor("#5865F2")
+        .setTimestamp();
+      
+      await configSystem.sendLog(member.guild, logEmbed, settings.logChannel);
     } catch (err) {
       // Si l'envoi échoue, c'est que l'utilisateur a déjà ses DMs fermés (parfait)
       console.log(`ℹ️ [DM-LOCK] Message non envoyé à ${member.user.tag} (DMs déjà fermés).`);

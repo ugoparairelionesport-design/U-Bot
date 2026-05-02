@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 2.2.0...');
+console.log('🚀 [index.js] Loading version 2.2.1...');
 const {
   Client,
   GatewayIntentBits,
@@ -120,7 +120,8 @@ client.on('interactionCreate', async interaction => {
   try {
     const isCommand = interaction.isChatInputCommand();
     if (interaction.isButton() || interaction.isStringSelectMenu()) {
-        console.log(`🔘 Bouton cliqué : ${interaction.customId}`);
+        const type = interaction.isButton() ? 'Bouton' : 'Menu';
+        console.log(`🔘 ${type} cliqué : ${interaction.customId}`);
     }
 
     /* ===== COMMANDES ===== */

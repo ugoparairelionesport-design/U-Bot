@@ -91,7 +91,7 @@ class AntiSpamSystem {
           return; // Pas besoin de log complet pour un simple warn
       }
 
-      await configSystem.sendLog(guild, embed);
+      await configSystem.sendLog(guild, embed, settings.logChannel);
     } catch (err) {
       console.error("❌ Erreur lors de la sanction Anti-Spam:", err.message);
     }

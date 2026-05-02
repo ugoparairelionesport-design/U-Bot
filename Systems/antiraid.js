@@ -112,7 +112,7 @@ class AntiRaidSystem {
       .addFields({ name: 'Action', value: 'Toutes les nouvelles entrées sont bloquées.' })
       .setTimestamp();
 
-    await configSystem.sendLog(guild, embed);
+    await configSystem.sendLog(guild, embed, guildConfig.antiRaid.logChannel);
 
     // Optionnel : Suppression automatique du lien d'invite compromis
     if (invite && invite.deletable) {
@@ -121,6 +121,7 @@ class AntiRaidSystem {
   }
 
   async logAction(guild, user, reason, invite = null) {
+    const guildConfig = configSystem.getGuildConfig(guild.id);
     const embed = new EmbedBuilder()
       .setTitle('🛡️ Action Anti-Raid')
       .setThumbnail(user.displayAvatarURL())
@@ -132,7 +133,7 @@ class AntiRaidSystem {
       .setColor(reason.includes('Lockdown') ? '#000000' : '#FFA500')
       .setTimestamp();
 
-    await configSystem.sendLog(guild, embed);
+    await configSystem.sendLog(guild, embed, guildConfig.antiRaid.logChannel);
   }
 
   async toggleLockdown(interaction) {
