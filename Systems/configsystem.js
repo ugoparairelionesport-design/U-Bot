@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.3.9...');
+console.log('🚀 [configsystem.js] Loading version 2.4.0...');
 const {
   ActionRowBuilder,
   ButtonBuilder,
@@ -739,7 +739,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.8] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.3.9] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -2124,6 +2124,84 @@ async function sendUserDmSafetyPanel(interaction) {
   const embed = new EmbedBuilder().setTitle("📩 Sécurité DM").setDescription("Ne cliquez sur aucun lien reçu en MP.").setColor("#2B2D31");
   await interaction.channel.send({ embeds: [embed] });
   return interaction.reply({ content: "✅ Infos envoyées.", flags: 64 });
+}
+
+/* ========================= */
+// HELP SYSTEM
+
+async function sendHelpPanel(interaction) {
+  const { commands } = require('../deploy-commands');
+  const guildConfig = getGuildConfig(interaction.guildId);
+
+  const categories = {
+    "🛡️ Protection": ['config_protection'],
+    "🎫 Tickets": ['config_ticket', 'modif_config_ticket', 'stats', 'staff_stats'],
+    "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
+    "🛠️ Maintenance": ['maintenance'],
+    "🤖 Configuration": ['set_config', 'help']
+  };
+
+  const embed = new EmbedBuilder()
+    .setTitle("📚 Centre d'Aide & Commandes")
+    .setDescription(
+      `### 🛰️ Guide Opérationnel\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.4.0\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor("#2b2d31")
+    .setFooter({ text: "U-Bot System • Support & Sécurité", iconURL: interaction.client.user.displayAvatarURL() })
+    .setTimestamp();
+
+  // Parcours des catégories pour remplir l'embed dynamiquement
+  for (const [catName, cmdList] of Object.entries(categories)) {
+    let categoryContent = "";
+    
+    commands.forEach(cmd => {
+      const data = cmd.toJSON();
+      if (cmdList.includes(data.name)) {
+        // Résumé concis basé sur le nom de la commande
+        const summaries = {
+          'maintenance': 'Gérer les MAJ et le status du bot.',
+          'config_protection': 'Hub central Anti-Raid/Spam/Captcha.',
+          'config_ticket': 'Initialiser le système de support.',
+          'modif_config_ticket': 'Editer les salons et rôles support.',
+          'stats': 'Voir les volumes de tickets.',
+          'staff_stats': 'Classement d\'activité des modérateurs.',
+          'config_live': 'Ajouter des alertes Twitch/YT/TikTok.',
+          'modif_config_live': 'Gérer les chaînes surveillées.',
+          'test_live': 'Simuler une alerte en direct.',
+          'set_config': 'Changer le nom et l\'image du bot.',
+          'help': 'Afficher ce menu d\'assistance.'
+        };
+        
+        categoryContent += `┣ \`/${data.name}\` : ${summaries[data.name] || data.description}\n`;
+      }
+    });
+
+    if (categoryContent) {
+      embed.addFields({ 
+        name: catName, 
+        value: categoryContent.replace(/┣(?=[^┣]*$)/, "┗"), // Remplace le dernier symbole pour le design
+        inline: false 
+      });
+    }
+  }
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setLabel('Support Officiel')
+      .setURL('https://discord.gg/example') // Remplace par ton lien
+      .setStyle(ButtonStyle.Link),
+    new ButtonBuilder()
+      .setCustomId('prot_hub_back')
+      .setLabel('Dashboard Sécurité')
+      .setEmoji('🛡️')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return safeInteractionReply(interaction, { embeds: [embed], components: [row], flags: 64 });
 }
 
 async function handleMessageDelete(message) {

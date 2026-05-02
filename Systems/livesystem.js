@@ -8,6 +8,7 @@ class LiveSystem {
   constructor(client) {
     this.client = client;
     this.checkInterval = 30 * 1000; // Vérification toutes les 30 secondes
+    this.twitchToken = null;
     this.twitchTokenExpires = 0;
     this.cache = new Map(); // Cache pour avatars et résolutions d'ID
     this.init();

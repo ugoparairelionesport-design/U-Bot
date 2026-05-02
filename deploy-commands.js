@@ -77,6 +77,12 @@ const commands = [
         .setName('set_config')
         .setDescription('Permet de personnaliser le nom du bot sur ce serveur.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    // Help Command
+    new SlashCommandBuilder()
+        .setName('help')
+        .setDescription('Affiche la liste complète des commandes et les modules du bot.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ];
 
 const token = process.env.TOKEN || process.env.DISCORD_TOKEN;

@@ -1,6 +1,6 @@
 // Bot Discord - Ticket System
 const http = require('http');
-console.log('🚀 [index.js] Loading version 2.3.9...');
+console.log('🚀 [index.js] Loading version 2.4.0...');
 const {
   Client,
   GatewayIntentBits,
@@ -149,6 +149,10 @@ client.on('interactionCreate', async interaction => {
             flags: 64
           });
         }
+      }
+
+      if (interaction.commandName === 'help') {
+        return client.configSystem.sendHelpPanel(interaction);
       }
 
       if (interaction.commandName === 'config_protection') {
