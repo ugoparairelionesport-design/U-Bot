@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.15...');
+console.log('🚀 [configsystem.js] Loading version 2.8.17...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -674,7 +674,7 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.15] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.17] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1288,41 +1288,9 @@ async function handleButtons(interaction) {
         interaction.channel.delete().catch(() => {});
       }, TICKET_DELETE_DELAY_MS);
 
-      return;
-    }
-
-    if (interaction.customId === 'save_close_archive') {
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+        return;
       }
-
-      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) {
-        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
-      }
-
-      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete guildConfig.pendingClosures[interaction.channel.id];
-        saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
-      }
-
-      if (pendingClose.archiveSavedAt) {
-        return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
-      }
-
-      const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
-
-      if (!archiveResult.ok) {
-        return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
-      }
-
-      pendingClose.archiveSavedAt = Date.now();
-      pendingClose.archivedBy = interaction.user.id;
-      saveConfig(configData);
-
-      return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée", flags: 64 });
-    }
+    } // Fermeture du switch(interaction.customId)
 
     if (interaction.customId === 'cancel_close_ticket') {
       if (!canManageTicket(interaction)) {
@@ -2356,7 +2324,7 @@ async function sendHelpPanel(interaction) {
     .setTitle("📚 Centre d'Aide & Commandes")
     .setDescription(
       `### 🛰️ Guide Opérationnel\n` +
-      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.8.15\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.8.17\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
       `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
@@ -2432,6 +2400,9 @@ module.exports = {
   sendBotNamePanel,
   startVisualTimer,
   replyAndAutoDelete,
+  buildGlobalColorModal,
+  saveGlobalColorConfig,
+  sendHelpPanel,
   // Live System
   sendLiveConfigPanel,
   buildLiveConfigModal,
