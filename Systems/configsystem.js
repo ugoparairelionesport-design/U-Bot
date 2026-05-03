@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.19...');
+console.log('🚀 [configsystem.js] Loading version 2.8.21...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -621,38 +621,21 @@ async function saveTicketArchive(guild, channel, requestedBy) {
 
 async function createTicketFromChoice(interaction, choice, openingReason = '') {
   const guildConfig = getGuildConfig(interaction.guildId);
+  
+  if (openingReason) {
+    return executeTicketCreation(interaction, choice, openingReason);
+  }
+
   const categoryId = guildConfig.categories[choice];
   const roleIds = getRoleIds(guildConfig.roles[choice]);
 
-  let deferred = false;
-  try {
-    await interaction.deferReply({ flags: 64 });
-    deferred = true;
-  } catch (_) {}
-
-  const respond = async payload => replyAndAutoDelete(interaction, payload);
-
-  if (!categoryId) {
-    return respond({ content: "❌ Catégorie introuvable", flags: 64 });
-  }
-
-  if (getTicketCount(interaction.guildId, interaction.user.id) >= 3) {
-    return respond({ content: "❌ Max 3 tickets", flags: 64 });
-  }
+  if (!categoryId) return replyAndAutoDelete(interaction, { content: "❌ Catégorie introuvable", flags: 64 });
+  if (getTicketCount(interaction.guildId, interaction.user.id) >= 3) return replyAndAutoDelete(interaction, { content: "❌ Max 3 tickets", flags: 64 });
 
   const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
-
-  if (!category || category.type !== ChannelType.GuildCategory) {
-    return respond({ content: `❌ Catégorie invalide pour l'option ${choice}`, flags: 64 });
-  }
-
-  if (roleIds.some(roleId => !interaction.guild.roles.cache.get(roleId))) {
-    return respond({ content: `❌ Rôle de modération invalide pour l'option ${choice}`, flags: 64 });
-  }
-
-  if (!(await ensureBotPermissions(interaction))) {
-    return;
-  }
+  if (!category || category.type !== ChannelType.GuildCategory) return replyAndAutoDelete(interaction, { content: `❌ Catégorie invalide pour l'option ${choice}`, flags: 64 });
+  if (roleIds.some(roleId => !interaction.guild.roles.cache.get(roleId))) return replyAndAutoDelete(interaction, { content: `❌ Rôle de modération invalide pour l'option ${choice}`, flags: 64 });
+  if (!(await ensureBotPermissions(interaction))) return;
 
   pendingTicketCreations.set(interaction.user.id, { choice });
 
@@ -672,9 +655,61 @@ async function createTicketFromChoice(interaction, choice, openingReason = '') {
   );
 }
 
+async function executeTicketCreation(interaction, choice, openingReason) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const categoryId = guildConfig.categories[choice];
+  const roleIds = getRoleIds(guildConfig.roles[choice]);
+
+  guildConfig.stats.opened = (guildConfig.stats.opened || 0) + 1;
+  const ticketId = String(guildConfig.stats.opened).padStart(4, '0');
+  const channelName = `${choice}-${ticketId}`;
+
+  const channel = await interaction.guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: categoryId,
+    permissionOverwrites: [
+      { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+      { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
+      ...roleIds.map(id => ({ id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }))
+    ]
+  });
+
+  guildConfig.ticketOwners[channel.id] = interaction.user.id;
+  guildConfig.ticketOpenTime[channel.id] = Date.now();
+  setTicketCount(interaction.guildId, interaction.user.id, getTicketCount(interaction.guildId, interaction.user.id) + 1);
+  saveConfig(configData);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🎫 Ticket - ${choice}`)
+    .setDescription(`Bienvenue ${interaction.user},\n\nLe staff a été notifié de votre demande.\n\n**Raison :** ${openingReason || "Aucune raison fournie"}`)
+    .addFields(
+      { name: "Utilisateur", value: `${interaction.user}`, inline: true },
+      { name: "Numéro", value: `#${ticketId}`, inline: true }
+    )
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('claim_ticket').setLabel('Prendre en charge').setStyle(ButtonStyle.Primary).setEmoji('🛠️'),
+    new ButtonBuilder().setCustomId('close_ticket').setLabel('Fermer').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+  );
+
+  await channel.send({ content: `${interaction.user} | ${roleIds.map(id => `<@&${id}>`).join(' ')}`, embeds: [embed], components: [row] });
+  
+  await sendLog(interaction.guild, new EmbedBuilder()
+    .setTitle("📩 Nouveau ticket")
+    .addFields(buildTicketContextFields(interaction, [{ name: "Raison", value: openingReason || "Aucune", inline: false }]))
+    .setColor(guildConfig.globalEmbedColor).setTimestamp());
+
+  await updateStatsMessage(interaction.guild);
+  return interaction.editReply({ content: `✅ Votre ticket a été créé : ${channel}`, flags: 64 });
+}
+
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.19] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.21] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -1029,7 +1064,7 @@ async function handleButtons(interaction) {
         return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image (Bannière large)').setPlaceholder('Collez le lien direct de votre image ici').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
 
       case 'global_color_set_btn':
-        return interaction.showModal(buildGlobalColorModal(guildConfig.globalEmbedColor));
+        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code couleur HEX (ex: #FF0000)').setPlaceholder('Ex: #5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
 
       case 'refresh_stats':
       await interaction.deferUpdate();
@@ -1288,9 +1323,41 @@ async function handleButtons(interaction) {
         interaction.channel.delete().catch(() => {});
       }, TICKET_DELETE_DELAY_MS);
 
-        return;
+      return;
+    }
+
+    if (interaction.customId === 'save_close_archive') {
+      if (!canManageTicket(interaction)) {
+        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
-    } // Fermeture du switch(interaction.customId)
+
+      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
+      if (!pendingClose) {
+        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
+      }
+
+      if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
+        delete guildConfig.pendingClosures[interaction.channel.id];
+        saveConfig(configData);
+        return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
+      }
+
+      if (pendingClose.archiveSavedAt) {
+        return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
+      }
+
+      const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
+
+      if (!archiveResult.ok) {
+        return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
+      }
+
+      pendingClose.archiveSavedAt = Date.now();
+      pendingClose.archivedBy = interaction.user.id;
+      saveConfig(configData);
+
+      return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée", flags: 64 });
+    }
 
     if (interaction.customId === 'cancel_close_ticket') {
       if (!canManageTicket(interaction)) {
@@ -1542,7 +1609,7 @@ async function handleModal(interaction) {
         const replOwner = process.env.REPL_OWNER;
         
         if (replName && replOwner) {
-          const publicUrl = `https://${replName}.replit.app/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
+          const publicUrl = `https://${replName}.${replOwner}.replit.app/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
           guildConfig.globalEmbedBanner = publicUrl;
           saveConfig(configData);
           return interaction.editReply({ content: "✅ Image téléchargée et sauvegardée localement ! Elle ne disparaîtra plus, même si vous supprimez le message d'origine." });
@@ -1779,7 +1846,8 @@ async function handleModal(interaction) {
       pendingTicketCreations.delete(interaction.user.id);
       const openingReason = interaction.fields.getTextInputValue('opening_reason').trim();
 
-      return createTicketFromChoice(interaction, pendingCreation.choice, openingReason);
+      await interaction.deferReply({ flags: 64 });
+      return executeTicketCreation(interaction, pendingCreation.choice, openingReason);
     }
 
     if (interaction.customId === 'modal_add_user') {
@@ -2297,23 +2365,6 @@ async function sendUserDmSafetyPanel(interaction) {
   return replyAndAutoDelete(interaction, { content: "✅ Infos envoyées.", flags: 64 });
 }
 
-function buildGlobalColorModal(currentColor) {
-  return new ModalBuilder()
-    .setCustomId('modal_set_global_color')
-    .setTitle('Couleur des Embeds')
-    .addComponents(
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('color_hex')
-          .setLabel('Code couleur HEX (ex: #FF0000)')
-          .setPlaceholder('Ex: #5865F2')
-          .setValue(currentColor || '#5865F2')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-      )
-    );
-}
-
 async function saveGlobalColorConfig(interaction) {
   const color = interaction.fields.getTextInputValue('color_hex').trim();
   const guildConfig = getGuildConfig(interaction.guildId);
@@ -2341,7 +2392,7 @@ async function sendHelpPanel(interaction) {
     .setTitle("📚 Centre d'Aide & Commandes")
     .setDescription(
       `### 🛰️ Guide Opérationnel\n` +
-      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.8.19\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.4.9\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
       `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
@@ -2417,9 +2468,6 @@ module.exports = {
   sendBotNamePanel,
   startVisualTimer,
   replyAndAutoDelete,
-  buildGlobalColorModal,
-  saveGlobalColorConfig,
-  sendHelpPanel,
   // Live System
   sendLiveConfigPanel,
   buildLiveConfigModal,
