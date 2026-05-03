@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.8.17...');
+console.log('🚀 [index.js] Loading version 2.8.19...');
 
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = require('discord.js');
 const configSystem = require('./Systems/configsystem');
@@ -380,9 +380,6 @@ client.on('interactionCreate', async interaction => {
       }
       if (interaction.customId === 'modal_verify_code') {
         return client.verification.handleModalSubmit(interaction);
-      }
-      if (interaction.customId === 'modal_set_global_color') {
-        return client.configSystem.saveGlobalColorConfig(interaction);
       }
       return await client.configSystem.handleModal(interaction);
     }
