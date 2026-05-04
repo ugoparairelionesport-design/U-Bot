@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.36...');
+console.log('🚀 [configsystem.js] Loading version 2.8.37...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -681,7 +681,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
   saveConfig(configData);
 
   const embed = new EmbedBuilder()
-    .setTitle(`🎫 Ticket - ${choice}`)
+    .setTitle(`🎫 Support - ${choice}`)
     .setDescription(`Bienvenue ${interaction.user},\n\nLe staff a été notifié de votre demande.\n\n**Raison :** ${openingReason || "Aucune raison fournie"}`)
     .addFields(
       { name: "Utilisateur", value: `${interaction.user}`, inline: true },
@@ -709,7 +709,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.36] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.37] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -846,10 +846,6 @@ function sendConfigPanel(interaction) {
 /* ========================= */
 async function handleButtons(interaction) {
   try {
-    // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
-    if (interaction.customId === 'bot_name_set_btn') {
-      return await handleBotNameButtonClick(interaction);
-    }
 
     if (interaction.customId === 'prot_hub_back') {
       return await sendProtectionConfigPanel(interaction);
@@ -913,6 +909,7 @@ async function handleButtons(interaction) {
     // Gestion des boutons et menus de sélection spécifiques
     switch (interaction.customId) {
       case 'ticket_select': {
+        const guildConfig = getGuildConfig(interaction.guildId);
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const choice = interaction.values[0];
       const categoryId = guildConfig.categories[choice];
@@ -959,6 +956,7 @@ async function handleButtons(interaction) {
       }
 
       case 'modif_select': {
+        const guildConfig = getGuildConfig(interaction.guildId);
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const selected = interaction.values[0];
       
@@ -1255,77 +1253,52 @@ async function handleButtons(interaction) {
         saveConfig(configData);
         interaction.channel.delete().catch(() => {});
       }, TICKET_DELETE_DELAY_MS);
-
-      return;
+      break;
     }
 
-    if (interaction.customId === 'save_close_archive') {
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      }
-
+    case 'save_close_archive': {
+      const guildConfig = getGuildConfig(interaction.guildId);
+      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) {
-        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
-      }
-
+      if (!pendingClose) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
         delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
         return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
       }
-
-      if (pendingClose.archiveSavedAt) {
-        return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
-      }
-
+      if (pendingClose.archiveSavedAt) return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
       const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
-
-      if (!archiveResult.ok) {
-        return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
-      }
-
+      if (!archiveResult.ok) return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
       pendingClose.archiveSavedAt = Date.now();
       pendingClose.archivedBy = interaction.user.id;
       saveConfig(configData);
-
       return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée", flags: 64 });
     }
 
-    if (interaction.customId === 'cancel_close_ticket') {
-      if (!canManageTicket(interaction)) {
-        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
-      }
-
+    case 'cancel_close_ticket': {
+      const guildConfig = getGuildConfig(interaction.guildId);
+      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) {
-        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
-      }
-
+      if (!pendingClose) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
         delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
         return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
       }
-
       delete guildConfig.pendingClosures[interaction.channel.id];
       saveConfig(configData);
-
       return replyAndAutoDelete(interaction, { content: '❌ Fermeture annulée', flags: 64 });
+    }
     }
 
     // Si aucune condition n'est remplie, on ne laisse pas l'interaction expirer
     if (!interaction.replied && !interaction.deferred && interaction.isButton()) {
-        return replyAndAutoDelete(interaction, { content: "⚠️ Bouton non reconnu ou en cours de déploiement.", flags: 64 });
+        return replyAndAutoDelete(interaction, { content: "⚠️ Bouton non reconnu.", flags: 64 });
     }
   } catch (err) {
     console.error("BUTTON ERROR:", err);
-
     if (!interaction.replied && !interaction.deferred) {
-      replyAndAutoDelete(interaction, {
-        content: "❌ Une erreur est survenue",
-        flags: 64
-      }).catch(() => {});
+      replyAndAutoDelete(interaction, { content: "❌ Une erreur est survenue", flags: 64 }).catch(() => {});
     }
   }
 }
@@ -2443,6 +2416,5 @@ module.exports = {
   // Help System
   sendHelpPanel,
   saveGlobalColorConfig,
-  CONFIG_MESSAGE_DELETE_DELAY_MS,
-  buildGlobalColorModal
+  CONFIG_MESSAGE_DELETE_DELAY_MS
 };
