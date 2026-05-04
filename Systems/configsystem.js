@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.32...');
+console.log('🚀 [configsystem.js] Loading version 2.8.34...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -709,7 +709,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.32] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.34] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -961,87 +961,21 @@ async function handleButtons(interaction) {
       case 'modif_select': {
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const selected = interaction.values[0];
-      if (selected === 'logs') { // Modifier logs
-        return interaction.showModal(
-          buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs')
-        );
-      }
-      if (selected === 'stats') {
-        return interaction.showModal(
-          buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats')
-        );
-      }
-      if (selected === 'options_panel') { // Gérer les options du panel
-        const embed = new EmbedBuilder()
-          .setTitle("🎫 Gestion des options du panel")
-          .setDescription(
-            "Choisissez l'action à effectuer sur les options de vos tickets.\n\n" +
-            "➕ **Ajouter** : Créer une nouvelle option dans le système\n" +
-            "➖ **Supprimer** : Supprimer définitivement une option"
-          )
-          .setThumbnail(interaction.client.user.displayAvatarURL())
-          .setImage(guildConfig.globalEmbedBanner)
-          .setColor(guildConfig.globalEmbedColor);
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('panel_opt_add').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'),
-          new ButtonBuilder().setCustomId('panel_opt_remove').setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('➖')
-        );
-
-        return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
-      }
-
-      if (selected === 'category') {
-        return interaction.showModal(
-          new ModalBuilder()
-            .setCustomId('modal_edit_category')
-            .setTitle('Modifier catégorie')
-            .addComponents(
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('option_name')
-                  .setLabel('Nom exact de l’option')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(true)
-              ),
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('category_id')
-                  .setLabel('Nouvel ID catégorie')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(true))
-            )
-        );
-      }
-
-      if (selected === 'role') {
-        return interaction.showModal(
-          new ModalBuilder()
-            .setCustomId('modal_edit_role')
-            .setTitle('Modifier rôle')
-            .addComponents(
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('option_name')
-                  .setLabel('Nom exact de l’option')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(true)
-              ),
-              new ActionRowBuilder().addComponents(
-                new TextInputBuilder()
-                  .setCustomId('roles')
-                  .setLabel('Nouveaux rôles (@role ou IDs)')
-                  .setStyle(TextInputStyle.Short)
-                  .setRequired(false)
-              )
-            )
-        );
-      }
-
-      return replyAndAutoDelete(interaction, {
-        content: "❌ Option de modification invalide.",
-        flags: 64
-      });
+      
+        if (selected === 'logs') return interaction.showModal(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
+        if (selected === 'stats') return interaction.showModal(buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats'));
+        if (selected === 'options_panel') {
+          const embed = new EmbedBuilder().setTitle("🎫 Gestion des options").setDescription("Ajoutez ou supprimez des types de tickets.").setColor(guildConfig.globalEmbedColor);
+          const row = new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('panel_opt_add').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'), new ButtonBuilder().setCustomId('panel_opt_remove').setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('➖'));
+          return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+        }
+        if (selected === 'category') {
+          return interaction.showModal(new ModalBuilder().setCustomId('modal_edit_category').setTitle('Modifier catégorie').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('category_id').setLabel('Nouvel ID catégorie').setStyle(TextInputStyle.Short).setRequired(true))));
+        } // Removed extra ')' here
+        if (selected === 'role') {
+          return interaction.showModal(new ModalBuilder().setCustomId('modal_edit_role').setTitle('Modifier rôle').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roles').setLabel('Nouveaux rôles (@role ou IDs)').setStyle(TextInputStyle.Short).setRequired(false))));
+        }
+        break;
       }
 
       case 'bot_name_set_btn':
