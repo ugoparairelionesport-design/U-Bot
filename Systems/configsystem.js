@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.35...');
+console.log('🚀 [configsystem.js] Loading version 2.8.36...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -709,7 +709,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.35] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.36] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -971,7 +971,7 @@ async function handleButtons(interaction) {
         }
         if (selected === 'category') {
           return interaction.showModal(new ModalBuilder().setCustomId('modal_edit_category').setTitle('Modifier catégorie').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('category_id').setLabel('Nouvel ID catégorie').setStyle(TextInputStyle.Short).setRequired(true))));
-        } // Removed extra ')' here
+        }
         if (selected === 'role') {
           return interaction.showModal(new ModalBuilder().setCustomId('modal_edit_role').setTitle('Modifier rôle').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roles').setLabel('Nouveaux rôles (@role ou IDs)').setStyle(TextInputStyle.Short).setRequired(false))));
         }
@@ -2443,5 +2443,6 @@ module.exports = {
   // Help System
   sendHelpPanel,
   saveGlobalColorConfig,
-  CONFIG_MESSAGE_DELETE_DELAY_MS
+  CONFIG_MESSAGE_DELETE_DELAY_MS,
+  buildGlobalColorModal
 };

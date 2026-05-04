@@ -99,12 +99,12 @@ class MaintenanceSystem {
       const remoteHash = results[1];
 
       if (remoteHash && localHash !== remoteHash && remoteHash.length >= 40) {
-        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (v2.8.34)`);
+        console.log(`✨ [GIT] Nouvelle version détectée : ${remoteHash.slice(0, 7)} (v2.8.36)`);
         
         const updateCmd = 'git fetch origin main && git reset --hard origin/main && git clean -fd -e Data/';
         exec(updateCmd, () => {
           if (process.env.REPL_ID || process.env.REPL_SLUG) {
-            console.log('🔄 [REPLIT] Code mis à jour (v2.8.34). Redémarrage du processus...');
+            console.log('🔄 [REPLIT] Code mis à jour (v2.8.36). Redémarrage du processus...');
             
             // On stoppe la surveillance pour éviter les rechargements inutiles pendant le shutdown
             this.maintenanceMode = true;
