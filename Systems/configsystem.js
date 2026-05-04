@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.39...');
+console.log('🚀 [configsystem.js] Loading version 2.8.41...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -681,7 +681,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
   saveConfig(configData);
 
   const embed = new EmbedBuilder()
-    .setTitle(`🎫 Support - ${choice}`)
+    .setTitle(`🎫 Ticket - ${choice}`)
     .setDescription(`Bienvenue ${interaction.user},\n\nLe staff a été notifié de votre demande.\n\n**Raison :** ${openingReason || "Aucune raison fournie"}`)
     .addFields(
       { name: "Utilisateur", value: `${interaction.user}`, inline: true },
@@ -709,7 +709,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
 async function resumeTicketState(client) {
   if (!configData.guilds) return;
-  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.39] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
+  console.log(`🔍 [SYSTEM - TICKETS VER: 2.8.36] Analyse et restauration pour ${Object.keys(configData.guilds).length} serveur(s)...`);
 
   for (const guildId of Object.keys(configData.guilds)) {
     const guildConfig = configData.guilds[guildId];
@@ -846,7 +846,10 @@ function sendConfigPanel(interaction) {
 /* ========================= */
 async function handleButtons(interaction) {
   try {
-    const guildConfig = getGuildConfig(interaction.guildId);
+    // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
+    if (interaction.customId === 'bot_name_set_btn') {
+      return await handleBotNameButtonClick(interaction);
+    }
 
     if (interaction.customId === 'prot_hub_back') {
       return await sendProtectionConfigPanel(interaction);
@@ -869,6 +872,7 @@ async function handleButtons(interaction) {
     }
 
     if (interaction.customId === 'global_banner_set_btn' || interaction.customId === 'prot_banner_set_btn') {
+      const guildConfig = getGuildConfig(interaction.guildId);
       return interaction.showModal(
         new ModalBuilder()
           .setCustomId('modal_set_global_banner')
@@ -909,6 +913,7 @@ async function handleButtons(interaction) {
     // Gestion des boutons et menus de sélection spécifiques
     switch (interaction.customId) {
       case 'ticket_select': {
+        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const choice = interaction.values[0];
       const categoryId = guildConfig.categories[choice];
       const roleIds = getRoleIds(guildConfig.roles[choice]);
@@ -954,6 +959,7 @@ async function handleButtons(interaction) {
       }
 
       case 'modif_select': {
+        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const selected = interaction.values[0];
       
         if (selected === 'logs') return interaction.showModal(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
@@ -1249,52 +1255,255 @@ async function handleButtons(interaction) {
         saveConfig(configData);
         interaction.channel.delete().catch(() => {});
       }, TICKET_DELETE_DELAY_MS);
-      break;
+
+      return;
     }
 
-    case 'save_close_archive': {
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+    if (interaction.customId === 'save_close_archive') {
+      if (!canManageTicket(interaction)) {
+        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
       const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
+      if (!pendingClose) {
+        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
+      }
+
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
         delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
         return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
       }
-      if (pendingClose.archiveSavedAt) return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
+
+      if (pendingClose.archiveSavedAt) {
+        return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
+      }
+
       const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
-      if (!archiveResult.ok) return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
+
+      if (!archiveResult.ok) {
+        return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
+      }
+
       pendingClose.archiveSavedAt = Date.now();
       pendingClose.archivedBy = interaction.user.id;
       saveConfig(configData);
+
       return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée", flags: 64 });
     }
 
-    case 'cancel_close_ticket': {
-      if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+    if (interaction.customId === 'cancel_close_ticket') {
+      if (!canManageTicket(interaction)) {
+        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
       const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
-      if (!pendingClose) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
+      if (!pendingClose) {
+        return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
+      }
+
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
         delete guildConfig.pendingClosures[interaction.channel.id];
         saveConfig(configData);
         return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
       }
+
       delete guildConfig.pendingClosures[interaction.channel.id];
       saveConfig(configData);
+
       return replyAndAutoDelete(interaction, { content: '❌ Fermeture annulée', flags: 64 });
     }
-    } // Close Switch
 
     // Si aucune condition n'est remplie, on ne laisse pas l'interaction expirer
     if (!interaction.replied && !interaction.deferred && interaction.isButton()) {
-        return replyAndAutoDelete(interaction, { content: "⚠️ Bouton non reconnu.", flags: 64 });
+        return replyAndAutoDelete(interaction, { content: "⚠️ Bouton non reconnu ou en cours de déploiement.", flags: 64 });
     }
   } catch (err) {
     console.error("BUTTON ERROR:", err);
-async function handleModal(interaction) {
+
+    if (!interaction.replied && !interaction.deferred) {
+      replyAndAutoDelete(interaction, {
+        content: "❌ Une erreur est survenue",
+        flags: 64
+      }).catch(() => {});
+    }
+  }
+}
+
+/* ========================= */
+// CONFIGURATION LIVE
+
+async function sendLiveConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const embed = new EmbedBuilder()
+    .setTitle("📡 Configuration des Alertes Live")
+    .setDescription(
+      "Configurez ici les notifications automatiques pour vos plateformes préférées.\n\n" +
+      "Choisissez la plateforme que vous souhaitez ajouter ou modifier :"
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('live_config_twitch').setLabel('Twitch').setStyle(ButtonStyle.Primary).setEmoji('1499576322869956668'),
+    new ButtonBuilder().setCustomId('live_config_youtube').setLabel('YouTube').setStyle(ButtonStyle.Danger).setEmoji('1499576375911383110'),
+    new ButtonBuilder().setCustomId('live_config_tiktok').setLabel('TikTok').setStyle(ButtonStyle.Secondary).setEmoji('1499576285951823902')
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+}
+
+function buildLiveConfigModal(platform, existingData = null) {
+  return new ModalBuilder()
+    .setCustomId(`modal_live_config_${platform}`)
+    .setTitle(`Alerte ${platform.charAt(0).toUpperCase() + platform.slice(1)}`)
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('channel_url')
+          .setLabel('Lien de la chaîne / Pseudo')
+          .setPlaceholder('https://twitch.tv/nom_du_streamer')
+          .setValue(existingData?.url || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('notif_channel_id')
+          .setLabel('ID du salon de notification')
+          .setValue(existingData?.channelId || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('role_id')
+          .setLabel('ID du rôle à mentionner (Optionnel)')
+          .setValue(existingData?.roleId || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('security_hashtag')
+          .setLabel('Hashtag de sécurité (Ex: #live)')
+          .setPlaceholder('Le live doit contenir ce hashtag pour être notifié')
+          .setValue(existingData?.securityHashtag || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+      )
+    );
+}
+
+async function saveLiveConfig(interaction, platform) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  let url = interaction.fields.getTextInputValue('channel_url').trim();
+  const channelId = interaction.fields.getTextInputValue('notif_channel_id').trim();
+  const roleId = interaction.fields.getTextInputValue('role_id').trim();
+  const securityHashtag = interaction.fields.getTextInputValue('security_hashtag').trim();
+
+  // Nettoyage de l'URL pour respecter la limite de 100 caractères des IDs Discord
+  url = url.replace(/<|>/g, '');
+  try {
+    if (url.startsWith('http')) {
+      const urlObj = new URL(url);
+      urlObj.search = ''; // Supprime les paramètres ?...
+      urlObj.hash = '';   // Supprime les ancres #...
+      url = urlObj.toString().replace(/\/$/, ''); // Uniformisation sans slash final
+    }
+  } catch (e) {
+    // On garde la valeur brute si ce n'est pas une URL complète
+  }
+
+  const targetChannel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+  if (!targetChannel) return replyAndAutoDelete(interaction, { content: "❌ ID de salon invalide.", flags: 64 });
+
+  const newConfig = {
+    platform,
+    url,
+    channelId,
+    roleId: roleId || null,
+    securityHashtag: securityHashtag || null,
+    lastMessageId: null,
+    isLive: false
+  };
+
+  if (!guildConfig.liveConfigs) guildConfig.liveConfigs = [];
+  const index = guildConfig.liveConfigs.findIndex(c => c.url === url);
+  if (index !== -1) guildConfig.liveConfigs[index] = newConfig;
+  else guildConfig.liveConfigs.push(newConfig);
+
+  saveConfig(configData);
+  return replyAndAutoDelete(interaction, { content: `✅ Configuration live enregistrée pour **${platform}** (${url}) !`, flags: 64 });
+}
+
+async function sendLiveEditList(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const lives = guildConfig.liveConfigs || [];
+
+  if (lives.length === 0) return replyAndAutoDelete(interaction, { content: "❌ Aucune configuration trouvée.", flags: 64 });
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('live_edit_select')
+    .setPlaceholder('Choisir une chaîne à gérer...')
+    .addOptions(lives.map(l => ({
+      label: l.url.split('/').pop().replace('@', ''),
+      description: `${l.platform.toUpperCase()} - Salon: ${l.channelId}`,
+      value: l.url,
+      emoji: l.platform === 'twitch' ? '1499576322869956668' : (l.platform === 'youtube' ? '1499576375911383110' : '1499576285951823902')
+    })));
+
+  return replyAndAutoDelete(interaction, { 
+    content: "📝 **Gestion des lives**\nSélectionnez une chaîne pour la modifier ou la supprimer.", 
+    components: [new ActionRowBuilder().addComponents(select)], 
+    flags: 64 
+  });
+}
+
+async function handleLiveEditSelect(interaction, url) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const live = guildConfig.liveConfigs.find(l => l.url === url);
+  if (!live) return replyAndAutoDelete(interaction, { content: "❌ Config introuvable.", flags: 64 });
+
+  const embed = new EmbedBuilder()
+    .setTitle(`⚙️ Gestion : ${url.split('/').pop()}`)
+    .addFields(
+      { name: "Hashtag", value: `\`${live.securityHashtag || 'Aucun'}\``, inline: true },
+      { name: "Salon", value: `<#${live.channelId}>`, inline: true },
+      { name: "Rôle", value: live.roleId ? `<@&${live.roleId}>` : "`Aucun`", inline: true }
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`live_btn_edit_${url}`).setLabel('Modifier').setStyle(ButtonStyle.Primary).setEmoji('✏️'),
+    new ButtonBuilder().setCustomId(`live_btn_del_${url}`).setLabel('Supprimer').setStyle(ButtonStyle.Danger).setEmoji('🗑️')
+  );
+
+  return interaction.update({ embeds: [embed], components: [row] });
+}
+
+async function handleLiveDelete(interaction, url) {
   try {
     const guildConfig = getGuildConfig(interaction.guildId);
+    const index = guildConfig.liveConfigs.findIndex(l => l.url === url);
+    if (index !== -1) {
+      guildConfig.liveConfigs.splice(index, 1);
+      saveConfig(configData);
+      return await interaction.update({ content: `✅ Configuration supprimée pour **${url}**.`, embeds: [], components: [], flags: 64 });
+    }
+    return await replyAndAutoDelete(interaction, { content: "❌ Erreur lors de la suppression.", flags: 64 });
+  } catch (err) {
+    console.error("❌ Erreur suppression live:", err);
+  }
+}
 
+/* ========================= */
+async function handleModal(interaction) {
+  try {
     // RÉPONSE PRIORITAIRE : Traitement du formulaire de nom
     if (interaction.customId === 'modal_set_bot_nickname') {
       return await handleSetBotNicknameModal(interaction);
@@ -1303,6 +1512,7 @@ async function handleModal(interaction) {
     if (interaction.customId === 'modal_set_global_banner') {
       await interaction.deferReply({ flags: 64 });
       const url = interaction.fields.getTextInputValue('banner_url').trim();
+      const guildConfig = getGuildConfig(interaction.guildId);
 
       if (!url) {
         guildConfig.globalEmbedBanner = null;
@@ -1362,6 +1572,7 @@ async function handleModal(interaction) {
       return replyAndAutoDelete(interaction, { content: `✅ La couleur des embeds a été mise à jour en \`${color}\` !`, flags: 64 });
     }
 
+    const guildConfig = getGuildConfig(interaction.guildId);
     if (interaction.customId === 'modal_logs') {
       const channelId = interaction.fields.getTextInputValue('channel_id');
       const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
@@ -2197,15 +2408,6 @@ module.exports = {
   saveConfig,
   sendConfigPanel,
   sendEditConfigPanel,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState,
-  sendBotNamePanel,
-  startVisualTimer,
   buildGlobalColorModal,
   replyAndAutoDelete,
   // Live System
@@ -2232,5 +2434,14 @@ module.exports = {
   // Help System
   sendHelpPanel,
   saveGlobalColorConfig,
-  CONFIG_MESSAGE_DELETE_DELAY_MS
+  CONFIG_MESSAGE_DELETE_DELAY_MS,
+  handleButtons,
+  handleModal,
+  handleMessage,
+  handleMessageDelete,
+  updateStatsMessage,
+  showStaffStats,
+  resumeTicketState,
+  sendBotNamePanel,
+  startVisualTimer
 };
