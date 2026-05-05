@@ -3,10 +3,15 @@ const configSystem = require('./configsystem');
 
 let createCanvas, loadImage;
 try {
-  // Tentative d'importation de canvas (ou @napi-rs/canvas si sur Replit)
-  ({ createCanvas, loadImage } = require('canvas'));
+  // On privilégie @napi-rs/canvas sur Replit pour sa stabilité
+  ({ createCanvas, loadImage } = require('@napi-rs/canvas'));
 } catch (e) {
-  console.error("⚠️ Erreur : La dépendance 'canvas' est absente ou mal installée. npm install canvas");
+  try {
+    // Fallback sur canvas standard
+    ({ createCanvas, loadImage } = require('canvas'));
+  } catch (err) {
+    console.error("⚠️ Erreur : Aucune librairie de génération d'image trouvée. Tapez 'npm install @napi-rs/canvas' dans le Shell Replit.");
+  }
 }
 
 class EntranceSystem {
@@ -49,11 +54,13 @@ class EntranceSystem {
 
         const payload = { content: `${member.user}`, embeds: [embed] };
 
-        if (settings.welcomeImage) {
+        if (settings.welcomeImage && createCanvas && loadImage) {
             const imageBuffer = await this.generateWelcomeImage(member, guildConfig);
-            const attachment = new AttachmentBuilder(imageBuffer, { name: 'welcome.png' });
-            embed.setImage('attachment://welcome.png');
-            payload.files = [attachment];
+            if (imageBuffer) {
+                const attachment = new AttachmentBuilder(imageBuffer, { name: 'welcome.png' });
+                embed.setImage('attachment://welcome.png');
+                payload.files = [attachment];
+            }
         }
 
         await channel.send(payload).catch(() => {});
@@ -91,6 +98,8 @@ class EntranceSystem {
   }
 
   async generateWelcomeImage(member, guildConfig) {
+    if (!createCanvas || !loadImage) return null;
+
     const canvas = createCanvas(700, 250);
     const ctx = canvas.getContext('2d');
 
