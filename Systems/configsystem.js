@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.53...');
+console.log('🚀 [configsystem.js] Loading version 2.8.54...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -40,30 +40,7 @@ const defaultGuildSettings = {
   pendingClosures: {},
   pendingDeletions: {},
   securityHashtag: null, // Ajout du hashtag de sécurité par défaut
-  liveConfigs: [], // Ajout de la liste des configurations de live
-  detailedLogs: {
-    enabled: false,
-    categoryId: null,
-    channels: {
-      message: null, member: null, mod: null, server: null
-    }
-  },
-  entrance: {
-    enabled: false,
-    welcomeChannel: null,
-    leaveChannel: null,
-    welcomeDm: false,
-    welcomeImage: false,
-    welcomeImageBg: null,
-    autoRoles: [],
-    rulesEnabled: false,
-    rulesRoleId: null,
-    rulesChannelId: null,
-    rulesText: "Bienvenue ! Pour accéder à l'intégralité du serveur, veuillez lire et accepter notre règlement en cliquant sur le bouton ci-dessous.",
-    statsChannel: null,
-    welcomeText: "Bienvenue {user} sur **{server}** ! Nous sommes maintenant {count}.",
-    leaveText: "**{user}** a quitté le navire. Nous sommes {count}."
-  }
+  liveConfigs: [] // Ajout de la liste des configurations de live
 };
 
 // Default settings for protection modules

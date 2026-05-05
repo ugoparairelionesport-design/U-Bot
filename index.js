@@ -2,7 +2,10 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.8.5stem');
+const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = require('discord.js');
+const configSystem = require('./Systems/configsystem');
+
+console.log('🚀 [index.js] Loading version 2.8.54');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
 const LogSystem = require('./Systems/logsystem');
