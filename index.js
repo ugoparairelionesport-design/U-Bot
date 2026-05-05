@@ -2,13 +2,14 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [index.js] Loading version 2.8.48...');
+console.log('🚀 [index.js] Loading version 2.8.52...');
 
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = require('discord.js');
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
 const LogSystem = require('./Systems/logsystem');
+const EntranceSystem = require('./Systems/entrancesystem');
 const AntiRaidSystem = require('./Systems/antiraid');
 const AntiSpamSystem = require('./Systems/antispam');
 const VerificationSystem = require('./Systems/verificationsystem');
@@ -88,6 +89,7 @@ client.configSystem = configSystem;
 try {
   client.maintenance = new MaintenanceSystem(client);
   client.logSystem = new LogSystem(client);
+  client.entranceSystem = new EntranceSystem(client);
   client.liveSystem = new LiveSystem(client);
   client.antiRaid = new AntiRaidSystem(client);
   client.antiSpam = new AntiSpamSystem(client);
@@ -174,6 +176,10 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'set_logs') {
         return client.configSystem.sendLogsConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'set_entrée') {
+        return client.configSystem.sendEntranceConfigPanel(interaction);
       }
 
       if (interaction.commandName === 'config_ticket') {
@@ -355,6 +361,10 @@ client.on('interactionCreate', async interaction => {
         return client.verification.showCodeModal(interaction);
       }
 
+      if (interaction.customId === 'entrance_accept_rules') {
+        return client.entranceSystem.handleRulesAcceptance(interaction);
+      }
+
       if (interaction.customId === 'dmlock_toggle_status') {
         const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
         guildConfig.dmLock.enabled = !guildConfig.dmLock.enabled;
@@ -421,6 +431,7 @@ client.on('messageUpdate', (oldM, newM) => client.logSystem?.handleMessageUpdate
 
 client.on(Events.GuildMemberAdd, async member => {
   try {
+    client.entranceSystem?.handleMemberJoin(member);
     client.logSystem?.handleMemberJoin(member);
     if (client.antiRaid) {
       await client.antiRaid.handleMemberJoin(member);
@@ -433,7 +444,11 @@ client.on(Events.GuildMemberAdd, async member => {
   }
 });
 
-client.on(Events.GuildMemberRemove, member => client.logSystem?.handleMemberRemove(member));
+client.on(Events.GuildMemberRemove, member => {
+    client.entranceSystem?.handleMemberRemove(member);
+    client.logSystem?.handleMemberRemove(member);
+});
+
 client.on(Events.GuildBanAdd, ban => client.logSystem?.handleGuildBan(ban));
 client.on(Events.GuildMemberUpdate, (oldM, newM) => client.logSystem?.handleMemberUpdate(oldM, newM));
 client.on(Events.ChannelUpdate, (oldC, newC) => client.logSystem?.handleChannelUpdate(oldC, newC));

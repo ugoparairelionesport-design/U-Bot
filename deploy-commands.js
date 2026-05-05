@@ -84,6 +84,12 @@ const commands = [
         .setDescription('Configure le système de logs ultra-détaillés (catégorie et salons automatiques).')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
+    // Entrance System
+    new SlashCommandBuilder()
+        .setName('set_entrée')
+        .setDescription('Configure l\'accueil, les auto-roles, le règlement et les statistiques membres.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
     // Help Command
     new SlashCommandBuilder()
         .setName('help')

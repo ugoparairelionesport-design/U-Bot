@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.50...');
+console.log('🚀 [configsystem.js] Loading version 2.8.52...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -40,13 +40,6 @@ const defaultGuildSettings = {
   pendingClosures: {},
   pendingDeletions: {},
   securityHashtag: null, // Ajout du hashtag de sécurité par défaut
-  detailedLogs: {
-    enabled: false,
-    categoryId: null,
-    channels: {
-      message: null, member: null, mod: null, server: null
-    }
-  },
   liveConfigs: [] // Ajout de la liste des configurations de live
 };
 
@@ -853,15 +846,10 @@ function sendConfigPanel(interaction) {
 /* ========================= */
 async function handleButtons(interaction) {
   try {
-    const guildConfig = getGuildConfig(interaction.guildId);
-
     // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
     if (interaction.customId === 'bot_name_set_btn') {
       return await handleBotNameButtonClick(interaction);
     }
-
-    if (interaction.customId === 'logs_toggle_status') return await toggleLogsStatus(interaction);
-    if (interaction.customId === 'logs_setup_channels') return await setupLogsChannels(interaction);
 
     if (interaction.customId === 'prot_hub_back') {
       return await sendProtectionConfigPanel(interaction);
@@ -2345,7 +2333,6 @@ async function sendHelpPanel(interaction) {
   const categories = {
     "🛡️ Protection": ['config_protection'],
     "🎫 Tickets": ['config_ticket', 'modif_config_ticket', 'stats', 'staff_stats'],
-    "📜 Logs": ['set_logs'],
     "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
     "🛠️ Maintenance": ['maintenance'],
     "🤖 Configuration": ['set_config', 'help']
@@ -2382,7 +2369,6 @@ async function sendHelpPanel(interaction) {
           'config_live': 'Ajouter des alertes Twitch/YT/TikTok.',
           'modif_config_live': 'Gérer les chaînes surveillées.',
           'test_live': 'Simuler une alerte en direct.',
-          'set_logs': 'Activer les logs ultra-détaillés.',
           'set_config': 'Changer le nom et l\'image/couleur du bot.',
           'help': 'Afficher ce menu d\'assistance.'
         };
@@ -2413,93 +2399,6 @@ async function sendHelpPanel(interaction) {
   );
 
   return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
-}
-
-async function sendLogsConfigPanel(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  const settings = guildConfig.detailedLogs;
-
-  const embed = new EmbedBuilder()
-    .setTitle("🛰️ U-BOT | Logging Protocol")
-    .setDescription(
-      "### 📜 Système de Logs Ultra-Détaillés\n" +
-      "> *Surveillez chaque action effectuée sur votre serveur avec une précision chirurgicale.*\n\n" +
-      "**✨ Modules de Surveillance**\n" +
-      "┣ 📜 **Messages** : Suppressions et modifications.\n" +
-      "┣ 👥 **Membres** : Arrivées, départs, profils et rôles.\n" +
-      "┣ 🛡️ **Modération** : Bannissements et actions Staff (Audit Logs).\n" +
-      "┗ ⚙️ **Serveur** : Salons, permissions et webhooks.\n\n" +
-      "**📊 État du système**\n" +
-      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
-      `┗ 📂 Catégorie : ${settings.categoryId ? `<#${settings.categoryId}>` : '`❌ Non configuré`'}`
-    )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setImage(guildConfig.globalEmbedBanner)
-    .setColor(guildConfig.globalEmbedColor)
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('logs_toggle_status')
-      .setLabel(settings.enabled ? 'Désactiver' : 'Activer')
-      .setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('logs_setup_channels')
-      .setLabel('🛠️ Créer Catégorie & Salons')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(settings.enabled && settings.categoryId !== null),
-    new ButtonBuilder()
-      .setCustomId('prot_hub_back')
-      .setLabel('Retour')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
-}
-
-async function toggleLogsStatus(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  guildConfig.detailedLogs.enabled = !guildConfig.detailedLogs.enabled;
-  saveConfig(configData);
-  return sendLogsConfigPanel(interaction);
-}
-
-async function setupLogsChannels(interaction) {
-  const guild = interaction.guild;
-  const guildConfig = getGuildConfig(guild.id);
-  await interaction.deferReply({ flags: 64 });
-
-  try {
-    let category = guild.channels.cache.get(guildConfig.detailedLogs.categoryId);
-    if (!category) {
-      category = await guild.channels.create({
-        name: '🛰️-ubot-logs',
-        type: ChannelType.GuildCategory,
-        permissionOverwrites: [{ id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }]
-      });
-      guildConfig.detailedLogs.categoryId = category.id;
-    }
-
-    const channels = [
-      { key: 'message', name: '📜-messages' },
-      { key: 'member', name: '👥-membres' },
-      { key: 'mod', name: '🛡️-moderation' },
-      { key: 'server', name: '⚙️-serveur' }
-    ];
-
-    for (const chan of channels) {
-      let existing = guild.channels.cache.get(guildConfig.detailedLogs.channels[chan.key]);
-      if (!existing) {
-        existing = await guild.channels.create({ name: chan.name, type: ChannelType.GuildText, parent: category.id });
-        guildConfig.detailedLogs.channels[chan.key] = existing.id;
-      }
-    }
-
-    saveConfig(configData);
-    return interaction.editReply({ content: "✅ Catégorie et salons de logs créés avec succès ! Pensez à activer le système." });
-  } catch (err) {
-    return interaction.editReply({ content: "❌ Erreur lors de la création des salons. Vérifiez mes permissions." });
-  }
 }
 
 module.exports = {
@@ -2534,7 +2433,6 @@ module.exports = {
   sendUserDmSafetyPanel,
   // Help System
   sendHelpPanel,
-  sendLogsConfigPanel,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS, // Keep this one, it's a constant
   handleButtons,
@@ -2545,6 +2443,5 @@ module.exports = {
   showStaffStats,
   resumeTicketState,
   sendBotNamePanel,
-  sendLogsConfigPanel,
   startVisualTimer
 };
