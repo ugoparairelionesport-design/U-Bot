@@ -8,6 +8,7 @@ const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = req
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
+const LogSystem = require('./Systems/logsystem');
 const AntiRaidSystem = require('./Systems/antiraid');
 const AntiSpamSystem = require('./Systems/antispam');
 const VerificationSystem = require('./Systems/verificationsystem');
@@ -86,6 +87,7 @@ client.configSystem = configSystem;
 // Initialisation de la maintenance AVANT tout le reste (important pour le redémarrage rapide)
 try {
   client.maintenance = new MaintenanceSystem(client);
+  client.logSystem = new LogSystem(client);
   client.liveSystem = new LiveSystem(client);
   client.antiRaid = new AntiRaidSystem(client);
   client.antiSpam = new AntiSpamSystem(client);
@@ -168,6 +170,10 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'config_protection') {
         return client.configSystem.sendProtectionConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'set_logs') {
+        return client.configSystem.sendLogsConfigPanel(interaction);
       }
 
       if (interaction.commandName === 'config_ticket') {
@@ -410,8 +416,12 @@ client.on('messageCreate', async message => {
   }
 });
 
+client.on('messageDelete', message => client.logSystem?.handleMessageDelete(message));
+client.on('messageUpdate', (oldM, newM) => client.logSystem?.handleMessageUpdate(oldM, newM));
+
 client.on(Events.GuildMemberAdd, async member => {
   try {
+    client.logSystem?.handleMemberJoin(member);
     if (client.antiRaid) {
       await client.antiRaid.handleMemberJoin(member);
     }
@@ -421,6 +431,16 @@ client.on(Events.GuildMemberAdd, async member => {
   } catch (err) {
     console.error("❌ GUILD MEMBER ADD ERROR:", err);
   }
+});
+
+client.on(Events.GuildMemberRemove, member => client.logSystem?.handleMemberRemove(member));
+client.on(Events.GuildBanAdd, ban => client.logSystem?.handleGuildBan(ban));
+client.on(Events.GuildMemberUpdate, (oldM, newM) => client.logSystem?.handleMemberUpdate(oldM, newM));
+client.on(Events.ChannelUpdate, (oldC, newC) => client.logSystem?.handleChannelUpdate(oldC, newC));
+
+// Audit Logs Handler
+client.on(Events.GuildAuditLogEntryCreate, (entry, guild) => {
+    client.logSystem?.handleAuditLogEntry(entry, guild);
 });
 
 // Tracking des invitations pour l'Anti-Raid

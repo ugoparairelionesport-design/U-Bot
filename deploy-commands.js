@@ -78,6 +78,12 @@ const commands = [
         .setDescription('Permet de personnaliser le nom du bot sur ce serveur.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
+    // Logs System
+    new SlashCommandBuilder()
+        .setName('set_logs')
+        .setDescription('Configure le système de logs ultra-détaillés (catégorie et salons automatiques).')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
     // Help Command
     new SlashCommandBuilder()
         .setName('help')
