@@ -1,6 +1,5 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.48...');
 console.log('🚀 [configsystem.js] Loading version 2.8.49...');
 const { fetch } = require('undici');
 const {
@@ -41,14 +40,13 @@ const defaultGuildSettings = {
   pendingClosures: {},
   pendingDeletions: {},
   securityHashtag: null, // Ajout du hashtag de sécurité par défaut
-  liveConfigs: [], // Ajout de la liste des configurations de live
   detailedLogs: {
     enabled: false,
     categoryId: null,
     channels: {
       message: null, member: null, mod: null, server: null
     }
-  }
+  },
   liveConfigs: [] // Ajout de la liste des configurations de live
 };
 
@@ -2547,7 +2545,6 @@ module.exports = {
   showStaffStats,
   resumeTicketState,
   sendBotNamePanel,
-  startVisualTimer,
-  sendLogsConfigPanel
+  sendLogsConfigPanel,
   startVisualTimer
 };
