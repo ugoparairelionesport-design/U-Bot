@@ -5,7 +5,6 @@ const path = require('path');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder } = require('discord.js');
 
 console.log('🚀 [index.js] Loading version 2.8.55');
-const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = require('discord.js');
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
@@ -182,10 +181,6 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'set_entrée') {
         return client.configSystem.sendEntranceConfigPanel(interaction);
-      }
-
-      if (interaction.commandName === 'set_xp') {
-        return client.configSystem.sendXPConfigPanel(interaction);
       }
 
       if (interaction.commandName === 'set_xp') {
@@ -383,10 +378,6 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.customId === 'verify_enter_code') {
         return client.verification.showCodeModal(interaction);
-      }
-
-      if (interaction.customId === 'entrance_accept_rules') {
-        return client.entranceSystem.handleRulesAcceptance(interaction);
       }
 
       if (interaction.customId === 'entrance_accept_rules') {
