@@ -94,11 +94,11 @@ class XPSystem {
     // Pseudo et Level
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 40px sans-serif';
-    ctx.fillText(member.user.username.toUpperCase(), 300, 100);
+    ctx.fillText(String(member.user.username || "MEMBRE").toUpperCase(), 300, 100);
     
     ctx.font = '30px sans-serif';
     ctx.fillStyle = guildConfig.globalEmbedColor || '#5865f2';
-    ctx.fillText(`LEVEL ${userData.level}`, 300, 150);
+    ctx.fillText(`LEVEL ${String(userData.level || 0)}`, 300, 150);
     if (userData.prestige > 0) ctx.fillText(`• PRESTIGE ${userData.prestige}`, 500, 150);
 
     // Barre d'XP
