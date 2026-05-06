@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.66...');
+console.log('🚀 [configsystem.js] Loading version 2.8.68...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -2715,7 +2715,12 @@ async function sendAIConfigPanel(interaction) {
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
 
-  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row1, row2], flags: 64 });
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('ai_action_summarize').setLabel('Résumer Salon').setEmoji('📝').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('ai_action_gen_events').setLabel('Idées Events').setEmoji('💡').setStyle(ButtonStyle.Secondary)
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row1, row2, row3], flags: 64 });
 }
 
 async function toggleAISetting(interaction, key) {
@@ -2759,6 +2764,10 @@ module.exports = {
   sendHelpPanel,
   sendLogsConfigPanel,
   sendEntranceConfigPanel,
+  sendXPConfigPanel,
+  toggleXPStatus,
+  sendAIConfigPanel,
+  toggleAISetting,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS, // Keep this one, it's a constant
   handleButtons,

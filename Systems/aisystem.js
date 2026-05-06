@@ -71,17 +71,66 @@ class AISystem {
   }
 
   async generateEventIdeas(guild) {
-    // Fonction pour suggérer des idées d'événements
-    return [
-        "🏆 Tournoi Gaming inter-rôles",
-        "🎨 Concours de design de bannière",
-        "🎤 Soirée Blind Test thématique"
-    ];
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return "❌ Clé API manquante.";
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: "Tu es un organisateur d'événements communautaires Discord créatif. Propose 3 idées originales et engageantes." }]
+          },
+          contents: [{
+            parts: [{ text: `Génère des idées d'événements pour le serveur "${guild.name}".` }]
+          }]
+        })
+      });
+
+      const data = await response.json();
+      return data.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Échec de la génération d'idées.";
+    } catch (err) {
+      console.error("AI EVENT GEN ERROR:", err);
+      return "❌ Erreur lors de la génération d'idées d'événements.";
+    }
   }
 
-  async summarizeConversation(messages) {
-    // Logique de résumé de texte
-    return "Résumé : Discussion active sur l'intégration des nouvelles commandes IA.";
+  async summarizeConversation(channel) {
+    try {
+      const messages = await channel.messages.fetch({ limit: 50 });
+      const textToSummarize = messages
+        .filter(m => !m.author.bot && m.content.length > 2)
+        .map(m => `${m.author.username}: ${m.content}`)
+        .reverse()
+        .join('\n');
+
+      if (!textToSummarize) return "❌ Pas assez de messages récents pour résumer.";
+
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) return "❌ Clé API manquante.";
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: "Tu es un assistant Discord chargé de résumer les conversations. Sois concis, utilise des listes à puces et identifie les sujets principaux." }]
+          },
+          contents: [{
+            parts: [{ text: `Résume cette discussion :\n\n${textToSummarize}` }]
+          }]
+        })
+      });
+
+      const data = await response.json();
+      const summary = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      return summary || "❌ Échec du résumé.";
+    } catch (err) {
+      console.error("AI SUMMARIZE ERROR:", err);
+      return "❌ Erreur lors du résumé de la conversation.";
+    }
   }
 
   async checkGrammar(text) {

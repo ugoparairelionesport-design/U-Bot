@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.8.66');
+console.log('🚀 [index.js] Loading version 2.8.68');
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
@@ -307,6 +307,18 @@ client.on('interactionCreate', async interaction => {
             new TextInputBuilder().setCustomId('channel_id').setLabel('ID du Salon (Dédié au Chat/Logs)').setStyle(TextInputStyle.Short).setRequired(true)
           ));
         return interaction.showModal(modal);
+      }
+
+      if (interaction.customId === 'ai_action_summarize') {
+        await interaction.deferReply({ flags: 64 });
+        const summary = await client.aiSystem.summarizeConversation(interaction.channel);
+        return interaction.editReply({ content: `### 📝 Résumé de la conversation\n${summary}` });
+      }
+
+      if (interaction.customId === 'ai_action_gen_events') {
+        await interaction.deferReply({ flags: 64 });
+        const ideas = await client.aiSystem.generateEventIdeas(interaction.guild);
+        return interaction.editReply({ content: `### 💡 Idées d'événements (IA)\n${ideas}` });
       }
 
       if (interaction.customId === 'prot_hub_captcha') {
