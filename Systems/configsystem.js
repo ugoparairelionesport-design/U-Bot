@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.57...');
+console.log('🚀 [configsystem.js] Loading version 2.8.58...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -1550,6 +1550,7 @@ async function handleLiveDelete(interaction, url) {
 async function handleModal(interaction) {
   try {
     const guildConfig = getGuildConfig(interaction.guildId);
+
     // --- Entrance System Modals ---
     if (interaction.customId === 'modal_entrance_texts') {
       guildConfig.entrance.welcomeText = interaction.fields.getTextInputValue('welcome_text');
@@ -1631,7 +1632,6 @@ async function handleModal(interaction) {
 
     if (interaction.customId === 'modal_set_global_color') {
       const color = interaction.fields.getTextInputValue('color_hex').trim();
-      const guildConfig = getGuildConfig(interaction.guildId);
 
       // Validation simple du format HEX
       if (!/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
@@ -2701,50 +2701,6 @@ async function toggleXPStatus(interaction) {
   return sendXPConfigPanel(interaction);
 }
 
-module.exports = {
-  getGuildConfig,
-  getFullConfig,
-  saveConfig,
-  sendConfigPanel,
-  sendEditConfigPanel,
-  buildGlobalColorModal,
-  replyAndAutoDelete,
-  sendLiveConfigPanel,
-  buildLiveConfigModal,
-  saveLiveConfig,
-  sendLiveEditList,
-  handleLiveEditSelect,
-  handleLiveDelete,
-  sendProtectionConfigPanel,
-  sendAntiRaidConfigPanel,
-  sendAntiSpamConfigPanel,
-  sendVerificationConfigPanel,
-  sendDmLockConfigPanel,
-  buildAntiRaidModal,
-  saveAntiRaidConfig,
-  buildAntiSpamModal,
-  saveAntiSpamConfig,
-  buildVerificationModal,
-  saveVerificationConfig,
-  sendUserVerificationPanel,
-  sendUserDmSafetyPanel,
-  sendHelpPanel,
-  sendLogsConfigPanel,
-  sendEntranceConfigPanel,
-  sendXPConfigPanel,
-  toggleXPStatus,
-  saveGlobalColorConfig,
-  CONFIG_MESSAGE_DELETE_DELAY_MS,
-  handleButtons,
-  handleModal,
-  handleMessage,
-  handleMessageDelete,
-  updateStatsMessage,
-  showStaffStats,
-  resumeTicketState,
-  sendBotNamePanel,
-  startVisualTimer
-};
 module.exports = {
   // Core & Tickets
   getGuildConfig,
