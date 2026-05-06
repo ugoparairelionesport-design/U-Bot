@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.8.63');
+console.log('🚀 [index.js] Loading version 2.8.64');
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');

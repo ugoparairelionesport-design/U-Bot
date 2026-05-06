@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.63...');
+console.log('🚀 [configsystem.js] Loading version 2.8.64...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -2662,43 +2662,6 @@ function buildEntranceRolesModal(settings) {
 }
 
 async function sendXPConfigPanel(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  const settings = guildConfig.xp;
-
-  const embed = new EmbedBuilder()
-    .setTitle("📈 U-BOT | Leveling Protocol")
-    .setDescription(
-      "### 🚀 Système d'Engagement & Niveaux\n" +
-      "> *Récompensez l'activité de vos membres avec un système de progression complet.*\n\n" +
-      "**✨ Fonctionnalités**\n" +
-      "┣ 📊 **Progression** : XP dynamique par message.\n" +
-      "┣ 🏆 **Leaderboard** : Classement mondial du serveur.\n" +
-      "┣ 🎖️ **Prestige** : Système de réinitialisation avec bonus.\n" +
-      "┗ 🃏 **Cartes Profil** : Cartes générées dynamiquement.\n\n" +
-      "**📊 État actuel**\n" +
-      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
-      `┣ ⏱️ Cooldown : \`${settings.cooldown}s\`\n` +
-      `┗ 👥 Joueurs : \`${settings.users ? Object.keys(settings.users).length : 0}\``
-    )
-    .setThumbnail(interaction.client.user.displayAvatarURL())
-    .setImage(guildConfig.globalEmbedBanner)
-    .setColor(guildConfig.globalEmbedColor)
-    .setTimestamp();
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('xp_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
-  );
-
-  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
-}
-
-async function toggleXPStatus(interaction) {
-  const guildConfig = getGuildConfig(interaction.guildId);
-  guildConfig.xp.enabled = !guildConfig.xp.enabled;
-  saveConfig(configData);
-  return sendXPConfigPanel(interaction);
-}
   const guildConfig = getGuildConfig(interaction.guildId);
   const settings = guildConfig.xp;
 
