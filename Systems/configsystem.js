@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.62...');
+console.log('🚀 [configsystem.js] Loading version 2.8.63...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -1549,6 +1549,33 @@ async function handleLiveDelete(interaction, url) {
 /* ========================= */
 async function handleModal(interaction) {
   try {
+    const guildConfig = getGuildConfig(interaction.guildId);
+    // --- Entrance System Modals ---
+    if (interaction.customId === 'modal_entrance_texts') {
+      guildConfig.entrance.welcomeText = interaction.fields.getTextInputValue('welcome_text') || "";
+      guildConfig.entrance.leaveText = interaction.fields.getTextInputValue('leave_text') || "";
+      saveConfig(configData);
+      return replyAndAutoDelete(interaction, { content: "✅ Textes mis à jour !", flags: 64 });
+    }
+
+    if (interaction.customId === 'modal_entrance_channels') {
+      guildConfig.entrance.welcomeChannel = interaction.fields.getTextInputValue('welcome_chan').trim() || null;
+      guildConfig.entrance.statsChannel = interaction.fields.getTextInputValue('stats_chan').trim() || null;
+      guildConfig.entrance.welcomeImageBg = interaction.fields.getTextInputValue('welcome_bg').trim() || null;
+      const roles = interaction.fields.getTextInputValue('auto_roles').split(',').map(r => r.trim()).filter(r => r.length > 15);
+      guildConfig.entrance.autoRoles = roles;
+      saveConfig(configData);
+      return replyAndAutoDelete(interaction, { content: "✅ Configuration des salons et rôles enregistrée !", flags: 64 });
+    }
+
+    if (interaction.customId === 'modal_entrance_rules') {
+      guildConfig.entrance.rulesText = interaction.fields.getTextInputValue('rules_text');
+      guildConfig.entrance.rulesRoleId = interaction.fields.getTextInputValue('rules_role').trim();
+      guildConfig.entrance.rulesChannelId = interaction.fields.getTextInputValue('rules_chan').trim();
+      saveConfig(configData);
+      return replyAndAutoDelete(interaction, { content: "✅ Configuration du règlement mise à jour !", flags: 64 });
+    }
+
     // RÉPONSE PRIORITAIRE : Traitement du formulaire de nom
     if (interaction.customId === 'modal_set_bot_nickname') {
       return await handleSetBotNicknameModal(interaction);
@@ -1557,7 +1584,6 @@ async function handleModal(interaction) {
     if (interaction.customId === 'modal_set_global_banner') {
       await interaction.deferReply({ flags: 64 });
       const url = interaction.fields.getTextInputValue('banner_url').trim();
-      const guildConfig = getGuildConfig(interaction.guildId);
 
       if (!url) {
         guildConfig.globalEmbedBanner = null;
@@ -1583,10 +1609,10 @@ async function handleModal(interaction) {
 
         // Construction de l'URL publique hébergée par le bot
         // Replit fournit l'URL via les variables d'environnement
-        const replName = process.env.REPL_SLUG;
-        const replOwner = process.env.REPL_OWNER;
+        const replName = process.env.REPL_SLUG || process.env.REPLIT_SLUG;
+        const replOwner = process.env.REPL_OWNER || process.env.REPLIT_OWNER;
         
-        if (replName && replOwner) {
+        if (replName && replOwner && replName !== "workspace") {
           const publicUrl = `https://${replName}.${replOwner}.replit.app/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
           guildConfig.globalEmbedBanner = publicUrl;
           saveConfig(configData);
@@ -1605,7 +1631,6 @@ async function handleModal(interaction) {
 
     if (interaction.customId === 'modal_set_global_color') {
       const color = interaction.fields.getTextInputValue('color_hex').trim();
-      const guildConfig = getGuildConfig(interaction.guildId);
 
       // Validation simple du format HEX
       if (!/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/.test(color)) {
@@ -1617,7 +1642,6 @@ async function handleModal(interaction) {
       return replyAndAutoDelete(interaction, { content: `✅ La couleur des embeds a été mise à jour en \`${color}\` !`, flags: 64 });
     }
 
-    const guildConfig = getGuildConfig(interaction.guildId);
     if (interaction.customId === 'modal_logs') {
       const channelId = interaction.fields.getTextInputValue('channel_id');
       const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
@@ -2637,27 +2661,80 @@ function buildEntranceRolesModal(settings) {
     );
 }
 
-async function handleModal(interaction) {
-  // ... (code existant) ...
+async function sendXPConfigPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.xp;
 
-  if (interaction.customId === 'modal_entrance_texts') {
-    guildConfig.entrance.welcomeText = interaction.fields.getTextInputValue('welcome_text');
-    guildConfig.entrance.leaveText = interaction.fields.getTextInputValue('leave_text');
-    saveConfig(configData);
-    return replyAndAutoDelete(interaction, { content: "✅ Textes mis à jour !", flags: 64 });
-  }
+  const embed = new EmbedBuilder()
+    .setTitle("📈 U-BOT | Leveling Protocol")
+    .setDescription(
+      "### 🚀 Système d'Engagement & Niveaux\n" +
+      "> *Récompensez l'activité de vos membres avec un système de progression complet.*\n\n" +
+      "**✨ Fonctionnalités**\n" +
+      "┣ 📊 **Progression** : XP dynamique par message.\n" +
+      "┣ 🏆 **Leaderboard** : Classement mondial du serveur.\n" +
+      "┣ 🎖️ **Prestige** : Système de réinitialisation avec bonus.\n" +
+      "┗ 🃏 **Cartes Profil** : Cartes générées dynamiquement.\n\n" +
+      "**📊 État actuel**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ ⏱️ Cooldown : \`${settings.cooldown}s\`\n` +
+      `┗ 👥 Joueurs : \`${settings.users ? Object.keys(settings.users).length : 0}\``
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
 
-  if (interaction.customId === 'modal_entrance_channels') {
-    guildConfig.entrance.welcomeChannel = interaction.fields.getTextInputValue('welcome_chan').trim() || null;
-    guildConfig.entrance.statsChannel = interaction.fields.getTextInputValue('stats_chan').trim() || null;
-    guildConfig.entrance.welcomeImageBg = interaction.fields.getTextInputValue('welcome_bg').trim() || null;
-    const roles = interaction.fields.getTextInputValue('auto_roles').split(',').map(r => r.trim()).filter(r => r.length > 15);
-    guildConfig.entrance.autoRoles = roles;
-    saveConfig(configData);
-    return replyAndAutoDelete(interaction, { content: "✅ Configuration des salons et rôles enregistrée !", flags: 64 });
-  }
-  // ...
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('xp_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+}
+
+async function toggleXPStatus(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.xp.enabled = !guildConfig.xp.enabled;
+  saveConfig(configData);
+  return sendXPConfigPanel(interaction);
+}
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.xp;
+
+  const embed = new EmbedBuilder()
+    .setTitle("📈 U-BOT | Leveling Protocol")
+    .setDescription(
+      "### 🚀 Système d'Engagement & Niveaux\n" +
+      "> *Récompensez l'activité de vos membres avec un système de progression complet.*\n\n" +
+      "**✨ Fonctionnalités**\n" +
+      "┣ 📊 **Progression** : XP dynamique par message.\n" +
+      "┣ 🏆 **Leaderboard** : Classement mondial du serveur.\n" +
+      "┣ 🎖️ **Prestige** : Système de réinitialisation avec bonus.\n" +
+      "┗ 🃏 **Cartes Profil** : Cartes générées dynamiquement.\n\n" +
+      "**📊 État actuel**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ ⏱️ Cooldown : \`${settings.cooldown}s\`\n` +
+      `┗ 👥 Joueurs : \`${settings.users ? Object.keys(settings.users).length : 0}\``
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('xp_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+}
+
+async function toggleXPStatus(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.xp.enabled = !guildConfig.xp.enabled;
+  saveConfig(configData);
+  return sendXPConfigPanel(interaction);
 }
 
 module.exports = {
