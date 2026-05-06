@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.60...');
+console.log('🚀 [configsystem.js] Loading version 2.8.61...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -1556,31 +1556,6 @@ async function handleModal(interaction) {
       guildConfig.entrance.leaveText = interaction.fields.getTextInputValue('leave_text') || "";
       saveConfig(configData);
       return replyAndAutoDelete(interaction, { content: "✅ Textes mis à jour !", flags: 64 });
-    }
-
-    if (interaction.customId === 'modal_entrance_channels') {
-      guildConfig.entrance.welcomeChannel = interaction.fields.getTextInputValue('welcome_chan').trim() || null;
-      guildConfig.entrance.statsChannel = interaction.fields.getTextInputValue('stats_chan').trim() || null;
-      guildConfig.entrance.welcomeImageBg = interaction.fields.getTextInputValue('welcome_bg').trim() || null;
-      const roles = interaction.fields.getTextInputValue('auto_roles').split(',').map(r => r.trim()).filter(r => r.length > 15);
-      guildConfig.entrance.autoRoles = roles;
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: "✅ Configuration des salons et rôles enregistrée !", flags: 64 });
-    }
-
-    if (interaction.customId === 'modal_entrance_rules') {
-      guildConfig.entrance.rulesText = interaction.fields.getTextInputValue('rules_text');
-      guildConfig.entrance.rulesRoleId = interaction.fields.getTextInputValue('rules_role').trim();
-      guildConfig.entrance.rulesChannelId = interaction.fields.getTextInputValue('rules_chan').trim();
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: "✅ Configuration du règlement mise à jour !", flags: 64 });
-    }
-
-    if (interaction.customId === 'modal_entrance_texts') {
-      guildConfig.entrance.welcomeText = interaction.fields.getTextInputValue('welcome_text');
-      guildConfig.entrance.leaveText = interaction.fields.getTextInputValue('leave_text');
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: "✅ Textes d'accueil mis à jour !", flags: 64 });
     }
 
     if (interaction.customId === 'modal_entrance_channels') {
