@@ -10,6 +10,7 @@ const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
 const LogSystem = require('./Systems/logsystem');
 const EntranceSystem = require('./Systems/entrancesystem');
+const VerificationSystem = require('./Systems/verificationsystem');
 const XPSystem = require('./Systems/xpsystem');
 const AntiRaidSystem = require('./Systems/antiraid');
 const AntiSpamSystem = require('./Systems/antispam');

@@ -2694,6 +2694,7 @@ module.exports = {
   sendHelpPanel,
   sendLogsConfigPanel,
   sendEntranceConfigPanel,
+  sendXPConfigPanel,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS, // Keep this one, it's a constant
   handleButtons,
@@ -2704,6 +2705,5 @@ module.exports = {
   showStaffStats,
   resumeTicketState,
   sendBotNamePanel,
-  sendLogsConfigPanel,
   startVisualTimer
 };
