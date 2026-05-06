@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.54...');
+console.log('🚀 [configsystem.js] Loading version 2.8.52...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -40,6 +40,36 @@ const defaultGuildSettings = {
   pendingClosures: {},
   pendingDeletions: {},
   securityHashtag: null, // Ajout du hashtag de sécurité par défaut
+  detailedLogs: {
+    enabled: false,
+    categoryId: null,
+    channels: {
+      message: null, member: null, mod: null, server: null
+    }
+  },
+  entrance: {
+    enabled: false,
+    welcomeChannel: null,
+    leaveChannel: null,
+    welcomeDm: false,
+    welcomeImage: false,
+    welcomeImageBg: null,
+    autoRoles: [],
+    rulesEnabled: false,
+    rulesRoleId: null,
+    rulesChannelId: null,
+    rulesText: "Bienvenue ! Pour accéder à l'intégralité du serveur, veuillez lire et accepter notre règlement en cliquant sur le bouton ci-dessous.",
+    statsChannel: null, // Salon vocal pour le compteur de membres
+    welcomeText: "Bienvenue {user} sur **{server}** ! Nous sommes maintenant {count}.",
+    leaveText: "**{user}** a quitté le navire. Nous sommes {count}."
+  },
+  xp: {
+    enabled: false,
+    levelUpChannel: null,
+    cooldown: 60, // Secondes entre chaque gain
+    xpRange: [15, 25], // Min/Max XP par message
+    users: {} // userId: { xp, level, prestige, badges: [], lastMessage: 0 }
+  },
   liveConfigs: [] // Ajout de la liste des configurations de live
 };
 
@@ -846,10 +876,25 @@ function sendConfigPanel(interaction) {
 /* ========================= */
 async function handleButtons(interaction) {
   try {
+    const guildConfig = getGuildConfig(interaction.guildId);
+
     // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
     if (interaction.customId === 'bot_name_set_btn') {
       return await handleBotNameButtonClick(interaction);
     }
+
+    if (interaction.customId === 'logs_toggle_status') return await toggleLogsStatus(interaction);
+    if (interaction.customId === 'logs_setup_channels') return await setupLogsChannels(interaction);
+
+    if (interaction.customId === 'entrance_toggle_status') return await toggleEntranceStatus(interaction);
+    if (interaction.customId === 'entrance_toggle_rules') return await toggleEntranceRules(interaction);
+    if (interaction.customId === 'entrance_toggle_image') return await toggleEntranceImage(interaction);
+    if (interaction.customId === 'entrance_setup_welcome') return await interaction.showModal(buildEntranceTextModal(guildConfig.entrance));
+    if (interaction.customId === 'entrance_setup_roles') return await interaction.showModal(buildEntranceRolesModal(guildConfig.entrance));
+    if (interaction.customId === 'entrance_setup_rules') return await interaction.showModal(buildEntranceRulesModal(guildConfig.entrance));
+    if (interaction.customId === 'entrance_send_rules') return await interaction.client.entranceSystem.sendRulesPanel(interaction);
+
+    if (interaction.customId === 'xp_toggle_status') return await toggleXPStatus(interaction);
 
     if (interaction.customId === 'prot_hub_back') {
       return await sendProtectionConfigPanel(interaction);
@@ -2138,6 +2183,31 @@ async function sendProtectionConfigPanel(interaction) {
   return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
 }
 
+async function toggleEntranceRules(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.entrance.rulesEnabled = !guildConfig.entrance.rulesEnabled;
+  saveConfig(configData);
+  return sendEntranceConfigPanel(interaction);
+}
+
+async function toggleEntranceImage(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.entrance.welcomeImage = !guildConfig.entrance.welcomeImage;
+  saveConfig(configData);
+  return sendEntranceConfigPanel(interaction);
+}
+
+function buildEntranceRulesModal(settings) {
+  return new ModalBuilder()
+    .setCustomId('modal_entrance_rules')
+    .setTitle('Configuration Règlement')
+    .addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rules_text').setLabel('Contenu du Règlement').setValue(settings.rulesText).setStyle(TextInputStyle.Paragraph).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rules_role').setLabel('ID du Rôle à donner').setValue(settings.rulesRoleId || '').setStyle(TextInputStyle.Short).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('rules_chan').setLabel('ID Salon Règlement').setValue(settings.rulesChannelId || '').setStyle(TextInputStyle.Short).setRequired(true))
+    );
+}
+
 async function sendAntiRaidConfigPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const settings = guildConfig.antiRaid;
@@ -2333,6 +2403,9 @@ async function sendHelpPanel(interaction) {
   const categories = {
     "🛡️ Protection": ['config_protection'],
     "🎫 Tickets": ['config_ticket', 'modif_config_ticket', 'stats', 'staff_stats'],
+    "📜 Logs": ['set_logs'],
+    "👋 Accueil": ['set_entrée'],
+    "📈 Niveaux": ['set_xp', 'rank', 'leaderboard'],
     "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
     "🛠️ Maintenance": ['maintenance'],
     "🤖 Configuration": ['set_config', 'help']
@@ -2369,6 +2442,11 @@ async function sendHelpPanel(interaction) {
           'config_live': 'Ajouter des alertes Twitch/YT/TikTok.',
           'modif_config_live': 'Gérer les chaînes surveillées.',
           'test_live': 'Simuler une alerte en direct.',
+          'set_logs': 'Activer les logs ultra-détaillés.',
+          'set_entrée': 'Configurer l\'accueil et les membres.',
+          'set_xp': 'Gérer le système d\'XP et niveaux.',
+          'rank': 'Voir son profil d\'XP.',
+          'leaderboard': 'Voir le classement général.',
           'set_config': 'Changer le nom et l\'image/couleur du bot.',
           'help': 'Afficher ce menu d\'assistance.'
         };
@@ -2399,6 +2477,187 @@ async function sendHelpPanel(interaction) {
   );
 
   return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+}
+
+async function sendLogsConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.detailedLogs;
+
+  const embed = new EmbedBuilder()
+    .setTitle("🛰️ U-BOT | Logging Protocol")
+    .setDescription(
+      "### 📜 Système de Logs Ultra-Détaillés\n" +
+      "> *Surveillez chaque action effectuée sur votre serveur avec une précision chirurgicale.*\n\n" +
+      "**✨ Modules de Surveillance**\n" +
+      "┣ 📜 **Messages** : Suppressions et modifications.\n" +
+      "┣ 👥 **Membres** : Arrivées, départs, profils et rôles.\n" +
+      "┣ 🛡️ **Modération** : Bannissements et actions Staff (Audit Logs).\n" +
+      "┗ ⚙️ **Serveur** : Salons, permissions et webhooks.\n\n" +
+      "**📊 État du système**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┗ 📂 Catégorie : ${settings.categoryId ? `<#${settings.categoryId}>` : '`❌ Non configuré`'}`
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('logs_toggle_status')
+      .setLabel(settings.enabled ? 'Désactiver' : 'Activer')
+      .setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('logs_setup_channels')
+      .setLabel('🛠️ Créer Catégorie & Salons')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(settings.enabled && settings.categoryId !== null),
+    new ButtonBuilder()
+      .setCustomId('prot_hub_back')
+      .setLabel('Retour')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row], flags: 64 });
+}
+
+async function toggleLogsStatus(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.detailedLogs.enabled = !guildConfig.detailedLogs.enabled;
+  saveConfig(configData);
+  return sendLogsConfigPanel(interaction);
+}
+
+async function setupLogsChannels(interaction) {
+  const guild = interaction.guild;
+  const guildConfig = getGuildConfig(guild.id);
+  await interaction.deferReply({ flags: 64 });
+
+  try {
+    let category = guild.channels.cache.get(guildConfig.detailedLogs.categoryId);
+    if (!category) {
+      category = await guild.channels.create({
+        name: '🛰️-ubot-logs',
+        type: ChannelType.GuildCategory,
+        permissionOverwrites: [{ id: guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }]
+      });
+      guildConfig.detailedLogs.categoryId = category.id;
+    }
+
+    const channels = [
+      { key: 'message', name: '📜-messages' },
+      { key: 'member', name: '👥-membres' },
+      { key: 'mod', name: '🛡️-moderation' },
+      { key: 'server', name: '⚙️-serveur' }
+    ];
+
+    for (const chan of channels) {
+      let existing = guild.channels.cache.get(guildConfig.detailedLogs.channels[chan.key]);
+      if (!existing) {
+        existing = await guild.channels.create({ name: chan.name, type: ChannelType.GuildText, parent: category.id });
+        guildConfig.detailedLogs.channels[chan.key] = existing.id;
+      }
+    }
+
+    saveConfig(configData);
+    return interaction.editReply({ content: "✅ Catégorie et salons de logs créés avec succès ! Pensez à activer le système." });
+  } catch (err) {
+    return interaction.editReply({ content: "❌ Erreur lors de la création des salons. Vérifiez mes permissions." });
+  }
+}
+
+async function sendEntranceConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.entrance;
+
+  const embed = new EmbedBuilder()
+    .setTitle("👋 U-BOT | Entrance Protocol")
+    .setDescription(
+      "### 🚀 Gestion des Flux de Membres\n" +
+      "> *Automatisez l'accueil, l'attribution des rôles et le monitoring de votre population.*\n\n" +
+      "**✨ Fonctionnalités**\n" +
+      "┣ 📝 **Accueil/Départ** : Messages et images personnalisés.\n" +
+      "┣ 🎭 **Auto-Role** : Attribution automatique à l'arrivée.\n" +
+      "┣ ⚖️ **Règlement** : Validation par bouton (Gatekeeping).\n" +
+      "┗ 📊 **Live Stats** : Salon vocal avec compteur de membres.\n\n" +
+      "**📊 État du système**\n" +
+      `┣ 📡 État : ${settings.enabled ? '`🟢 Activé`' : '`🔴 Désactivé`'}\n` +
+      `┣ 🖼️ Image : ${settings.welcomeImage ? '`🟢 ON`' : '`🔴 OFF`'}\n` +
+      `┣ 🎭 Auto-Roles : \`${settings.autoRoles.length}\` configurés\n` +
+      `┗ ⚖️ Règlement : ${settings.rulesEnabled ? '`🟢 Actif`' : '`🔴 Off`'}`
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('entrance_toggle_status').setLabel(settings.enabled ? 'Désactiver' : 'Activer').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('entrance_setup_welcome').setLabel('📝 Textes').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('entrance_setup_roles').setLabel('🎭 Rôles & Salons').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+
+  const rowRules = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('entrance_toggle_rules').setLabel(settings.rulesEnabled ? 'Rules: ON' : 'Rules: OFF').setStyle(settings.rulesEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('entrance_toggle_image').setLabel(settings.welcomeImage ? 'Image: ON' : 'Image: OFF').setStyle(settings.welcomeImage ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('entrance_setup_rules').setLabel('⚖️ Règlement').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('entrance_send_rules').setLabel('📤 Envoyer Règlement').setStyle(ButtonStyle.Danger).setDisabled(!settings.rulesEnabled || !settings.rulesChannelId)
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row, rowRules], flags: 64 });
+}
+
+async function toggleEntranceStatus(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.entrance.enabled = !guildConfig.entrance.enabled;
+  saveConfig(configData);
+  return sendEntranceConfigPanel(interaction);
+}
+
+function buildEntranceTextModal(settings) {
+  return new ModalBuilder()
+    .setCustomId('modal_entrance_texts')
+    .setTitle('Textes Accueil & Départ')
+    .addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('welcome_text').setLabel('Message de Bienvenue').setValue(settings.welcomeText).setStyle(TextInputStyle.Paragraph).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('leave_text').setLabel('Message de Départ').setValue(settings.leaveText).setStyle(TextInputStyle.Paragraph).setRequired(true))
+    );
+}
+
+function buildEntranceRolesModal(settings) {
+  return new ModalBuilder()
+    .setCustomId('modal_entrance_channels')
+    .setTitle('Salons & Rôles')
+    .addComponents(
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('welcome_chan').setLabel('ID Salon Bienvenue').setValue(settings.welcomeChannel || '').setStyle(TextInputStyle.Short)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('auto_roles').setLabel('IDs Rôles auto (séparés par ,)').setValue(settings.autoRoles.join(',')).setStyle(TextInputStyle.Short)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('stats_chan').setLabel('ID Salon Vocal Stats (Compteur)').setValue(settings.statsChannel || '').setStyle(TextInputStyle.Short)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('welcome_bg').setLabel('URL Fond Image (700x250)').setValue(settings.welcomeImageBg || '').setStyle(TextInputStyle.Short).setRequired(false))
+    );
+}
+
+async function handleModal(interaction) {
+  // ... (code existant) ...
+  const guildConfig = getGuildConfig(interaction.guildId);
+
+  if (interaction.customId === 'modal_entrance_texts') {
+    guildConfig.entrance.welcomeText = interaction.fields.getTextInputValue('welcome_text');
+    guildConfig.entrance.leaveText = interaction.fields.getTextInputValue('leave_text');
+    saveConfig(configData);
+    return replyAndAutoDelete(interaction, { content: "✅ Textes mis à jour !", flags: 64 });
+  }
+
+  if (interaction.customId === 'modal_entrance_channels') {
+    guildConfig.entrance.welcomeChannel = interaction.fields.getTextInputValue('welcome_chan').trim() || null;
+    guildConfig.entrance.statsChannel = interaction.fields.getTextInputValue('stats_chan').trim() || null;
+    guildConfig.entrance.welcomeImageBg = interaction.fields.getTextInputValue('welcome_bg').trim() || null;
+    const roles = interaction.fields.getTextInputValue('auto_roles').split(',').map(r => r.trim()).filter(r => r.length > 15);
+    guildConfig.entrance.autoRoles = roles;
+    saveConfig(configData);
+    return replyAndAutoDelete(interaction, { content: "✅ Configuration des salons et rôles enregistrée !", flags: 64 });
+  }
+  // ...
 }
 
 module.exports = {
@@ -2433,6 +2692,8 @@ module.exports = {
   sendUserDmSafetyPanel,
   // Help System
   sendHelpPanel,
+  sendLogsConfigPanel,
+  sendEntranceConfigPanel,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS, // Keep this one, it's a constant
   handleButtons,
@@ -2443,5 +2704,6 @@ module.exports = {
   showStaffStats,
   resumeTicketState,
   sendBotNamePanel,
+  sendLogsConfigPanel,
   startVisualTimer
 };

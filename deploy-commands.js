@@ -90,6 +90,20 @@ const commands = [
         .setDescription('Configure l\'accueil, les auto-roles, le règlement et les statistiques membres.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
+    // XP System
+    // Correction: Ajout des commandes XP
+    new SlashCommandBuilder()
+        .setName('set_xp')
+        .setDescription('Configure le système de niveaux (niveaux, prestige, missions).')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('rank')
+        .setDescription('Affiche votre carte de niveau ou celle d\'un membre.')
+        .addUserOption(option => option.setName('membre').setDescription('Le membre à afficher')),
+    new SlashCommandBuilder()
+        .setName('leaderboard')
+        .setDescription('Affiche le classement des membres les plus actifs.'),
+
     // Help Command
     new SlashCommandBuilder()
         .setName('help')

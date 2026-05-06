@@ -2,17 +2,18 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder } = require('discord.js');
+
+console.log('🚀 [index.js] Loading version 2.8.55');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField } = require('discord.js');
 const configSystem = require('./Systems/configsystem');
-
-console.log('🚀 [index.js] Loading version 2.8.54');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
 const LogSystem = require('./Systems/logsystem');
 const EntranceSystem = require('./Systems/entrancesystem');
+const XPSystem = require('./Systems/xpsystem');
 const AntiRaidSystem = require('./Systems/antiraid');
 const AntiSpamSystem = require('./Systems/antispam');
-const VerificationSystem = require('./Systems/verificationsystem');
 const DmLockSystem = require('./Systems/dmlock');
 
 const { commands, deployCommands } = require('./deploy-commands');
@@ -71,7 +72,7 @@ const CONFIG_MESSAGE_DELETE_DELAY_MS = 3 * 60 * 1000;
 /* ========================= */
 // CLIENT
 
-const client = new Client({
+const client = new Client({ // Ligne 71
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
@@ -90,9 +91,10 @@ try {
   client.maintenance = new MaintenanceSystem(client);
   client.logSystem = new LogSystem(client);
   client.entranceSystem = new EntranceSystem(client);
+  client.xpSystem = new XPSystem(client);
   client.liveSystem = new LiveSystem(client);
   client.antiRaid = new AntiRaidSystem(client);
-  client.antiSpam = new AntiSpamSystem(client);
+  client.antiSpam = new AntiSpamSystem(client); // Correction: AntiSpamSystem était mal importé
   client.verification = new VerificationSystem(client);
   client.dmLock = new DmLockSystem(client);
 } catch (err) {
@@ -180,6 +182,28 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'set_entrée') {
         return client.configSystem.sendEntranceConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'set_xp') {
+        return client.configSystem.sendXPConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'set_xp') {
+        return client.configSystem.sendXPConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'rank') {
+        const member = interaction.options.getMember('membre') || interaction.member;
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        const buffer = await client.xpSystem.generateProfileCard(member, guildConfig);
+        if (!buffer) return interaction.reply({ content: "❌ Impossible de générer la carte (Canvas manquant).", flags: 64 });
+        const attachment = new AttachmentBuilder(buffer, { name: 'rank.png' });
+        return interaction.reply({ files: [attachment] });
+      }
+
+      if (interaction.commandName === 'leaderboard') {
+        const embed = await client.xpSystem.getLeaderboard(interaction.guild);
+        return interaction.reply({ embeds: [embed] });
       }
 
       if (interaction.commandName === 'config_ticket') {
@@ -365,6 +389,10 @@ client.on('interactionCreate', async interaction => {
         return client.entranceSystem.handleRulesAcceptance(interaction);
       }
 
+      if (interaction.customId === 'entrance_accept_rules') {
+        return client.entranceSystem.handleRulesAcceptance(interaction);
+      }
+
       if (interaction.customId === 'dmlock_toggle_status') {
         const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
         guildConfig.dmLock.enabled = !guildConfig.dmLock.enabled;
@@ -418,6 +446,7 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', async message => {
   try {
     await client.configSystem.handleMessage(message);
+    await client.xpSystem?.handleMessage(message);
     if (client.antiSpam) {
       await client.antiSpam.handleMessage(message);
     }
@@ -471,14 +500,6 @@ client.on(Events.InviteDelete, async invite => {
     if (client.antiRaid) {
         client.antiRaid.invitesCache.get(invite.guild.id)?.delete(invite.code);
     }
-});
-
-client.on('messageDelete', async message => {
-  try {
-    await client.configSystem.handleMessageDelete(message);
-  } catch (err) {
-    console.error("❌ MESSAGE DELETE ERROR:", err);
-  }
 });
 
 /* ========================= */

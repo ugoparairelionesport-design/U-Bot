@@ -6,11 +6,12 @@ try {
   // On privilégie @napi-rs/canvas sur Replit pour sa stabilité
   ({ createCanvas, loadImage } = require('@napi-rs/canvas'));
 } catch (e) {
+  console.warn("⚠️ @napi-rs/canvas non trouvé, tentative avec 'canvas' standard.");
   try {
     // Fallback sur canvas standard
     ({ createCanvas, loadImage } = require('canvas'));
   } catch (err) {
-    console.error("⚠️ Erreur : Aucune librairie de génération d'image trouvée. Tapez 'npm install @napi-rs/canvas' dans le Shell Replit.");
+    console.error("❌ Erreur : Aucune librairie de génération d'image (canvas ou @napi-rs/canvas) trouvée. Tapez 'npm install @napi-rs/canvas' dans le Shell Replit.");
   }
 }
 
