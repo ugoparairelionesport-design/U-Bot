@@ -2,9 +2,9 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.8.68');
+console.log('🚀 [index.js] Loading version 2.8.69');
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
