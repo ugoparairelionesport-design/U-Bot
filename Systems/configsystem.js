@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.64...');
+console.log('🚀 [configsystem.js] Loading version 2.8.66...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -70,7 +70,15 @@ const defaultGuildSettings = {
     xpRange: [15, 25], // Min/Max XP par message
     users: {} // userId: { xp, level, prestige, badges: [], lastMessage: 0 }
   },
-  liveConfigs: [] // Ajout de la liste des configurations de live
+  liveConfigs: [], // Ajout de la liste des configurations de live
+  ai: {
+    enabled: false,
+    chatEnabled: false,
+    autoTranslate: false,
+    spellCheck: false,
+    staffSuggestions: false,
+    aiChannel: null
+  }
 };
 
 // Default settings for protection modules
@@ -1550,32 +1558,6 @@ async function handleLiveDelete(interaction, url) {
 async function handleModal(interaction) {
   try {
     const guildConfig = getGuildConfig(interaction.guildId);
-    // --- Entrance System Modals ---
-    if (interaction.customId === 'modal_entrance_texts') {
-      guildConfig.entrance.welcomeText = interaction.fields.getTextInputValue('welcome_text') || "";
-      guildConfig.entrance.leaveText = interaction.fields.getTextInputValue('leave_text') || "";
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: "✅ Textes mis à jour !", flags: 64 });
-    }
-
-    if (interaction.customId === 'modal_entrance_channels') {
-      guildConfig.entrance.welcomeChannel = interaction.fields.getTextInputValue('welcome_chan').trim() || null;
-      guildConfig.entrance.statsChannel = interaction.fields.getTextInputValue('stats_chan').trim() || null;
-      guildConfig.entrance.welcomeImageBg = interaction.fields.getTextInputValue('welcome_bg').trim() || null;
-      const roles = interaction.fields.getTextInputValue('auto_roles').split(',').map(r => r.trim()).filter(r => r.length > 15);
-      guildConfig.entrance.autoRoles = roles;
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: "✅ Configuration des salons et rôles enregistrée !", flags: 64 });
-    }
-
-    if (interaction.customId === 'modal_entrance_rules') {
-      guildConfig.entrance.rulesText = interaction.fields.getTextInputValue('rules_text');
-      guildConfig.entrance.rulesRoleId = interaction.fields.getTextInputValue('rules_role').trim();
-      guildConfig.entrance.rulesChannelId = interaction.fields.getTextInputValue('rules_chan').trim();
-      saveConfig(configData);
-      return replyAndAutoDelete(interaction, { content: "✅ Configuration du règlement mise à jour !", flags: 64 });
-    }
-
     // RÉPONSE PRIORITAIRE : Traitement du formulaire de nom
     if (interaction.customId === 'modal_set_bot_nickname') {
       return await handleSetBotNicknameModal(interaction);
@@ -1609,10 +1591,10 @@ async function handleModal(interaction) {
 
         // Construction de l'URL publique hébergée par le bot
         // Replit fournit l'URL via les variables d'environnement
-        const replName = process.env.REPL_SLUG || process.env.REPLIT_SLUG;
-        const replOwner = process.env.REPL_OWNER || process.env.REPLIT_OWNER;
+        const replName = process.env.REPL_SLUG;
+        const replOwner = process.env.REPL_OWNER;
         
-        if (replName && replOwner && replName !== "workspace") {
+        if (replName && replOwner) {
           const publicUrl = `https://${replName}.${replOwner}.replit.app/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
           guildConfig.globalEmbedBanner = publicUrl;
           saveConfig(configData);
@@ -2700,6 +2682,49 @@ async function toggleXPStatus(interaction) {
   return sendXPConfigPanel(interaction);
 }
 
+async function sendAIConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.ai;
+
+  const embed = new EmbedBuilder()
+    .setTitle("🤖 U-BOT | AI & Automation Protocol")
+    .setDescription(
+      "### 🧠 Intelligence Artificielle Intégrée\n" +
+      "> *Automatisez les tâches redondantes et améliorez l'expérience utilisateur grâce à l'IA.*\n\n" +
+      "**✨ Modules Disponibles**\n" +
+      `┣ 💬 **Chat IA** : ${settings.chatEnabled ? '`🟢 ON`' : '`🔴 OFF`'}\n` +
+      `┣ 🌍 **Traduction Auto** : ${settings.autoTranslate ? '`🟢 ON`' : '`🔴 OFF`'}\n` +
+      `┣ ✍️ **Correction Ortho** : ${settings.spellCheck ? '`🟢 ON`' : '`🔴 OFF`'}\n` +
+      `┗ 💡 **Suggestions Staff** : ${settings.staffSuggestions ? '`🟢 ON`' : '`🔴 OFF`'}\n\n` +
+      "**📊 Salon IA** : " + (settings.aiChannel ? `<#${settings.aiChannel}>` : '`Non défini`')
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('ai_toggle_chat').setLabel('Chat IA').setStyle(settings.chatEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('ai_toggle_translate').setLabel('Traduction').setStyle(settings.autoTranslate ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('ai_toggle_ortho').setLabel('Correction').setStyle(settings.spellCheck ? ButtonStyle.Success : ButtonStyle.Secondary)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('ai_toggle_staff').setLabel('Suggestions Staff').setStyle(settings.staffSuggestions ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('ai_set_channel').setLabel('Définir Salon').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+  );
+
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row1, row2], flags: 64 });
+}
+
+async function toggleAISetting(interaction, key) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.ai[key] = !guildConfig.ai[key];
+  saveConfig(configData);
+  return sendAIConfigPanel(interaction);
+}
+
 module.exports = {
   // Core & Tickets
   getGuildConfig,
@@ -2734,8 +2759,6 @@ module.exports = {
   sendHelpPanel,
   sendLogsConfigPanel,
   sendEntranceConfigPanel,
-  sendXPConfigPanel,
-  toggleXPStatus,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS, // Keep this one, it's a constant
   handleButtons,

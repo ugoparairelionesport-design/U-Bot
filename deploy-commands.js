@@ -104,6 +104,12 @@ const commands = [
         .setName('leaderboard')
         .setDescription('Affiche le classement des membres les plus actifs.'),
 
+    // AI System
+    new SlashCommandBuilder()
+        .setName('set_ia')
+        .setDescription('Configure les modules d\'intelligence artificielle et d\'automatisation.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
     // Help Command
     new SlashCommandBuilder()
         .setName('help')

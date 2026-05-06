@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.8.64');
+console.log('🚀 [index.js] Loading version 2.8.66');
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
@@ -15,6 +15,7 @@ const XPSystem = require('./Systems/xpsystem');
 const AntiRaidSystem = require('./Systems/antiraid');
 const AntiSpamSystem = require('./Systems/antispam');
 const DmLockSystem = require('./Systems/dmlock');
+const AISystem = require('./Systems/aisystem');
 
 const { commands, deployCommands } = require('./deploy-commands');
 
@@ -97,6 +98,7 @@ try {
   client.antiSpam = new AntiSpamSystem(client); // Correction: AntiSpamSystem était mal importé
   client.verification = new VerificationSystem(client);
   client.dmLock = new DmLockSystem(client);
+  client.aiSystem = new AISystem(client);
 } catch (err) {
   console.error('❌ Erreur lors de l\'initialisation de la maintenance:', err);
 }
@@ -186,6 +188,10 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'set_xp') {
         return client.configSystem.sendXPConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'set_ia') {
+        return client.configSystem.sendAIConfigPanel(interaction);
       }
 
       if (interaction.commandName === 'rank') {
@@ -286,6 +292,21 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.customId === 'prot_hub_antispam') {
         return client.configSystem.sendAntiSpamConfigPanel(interaction);
+      }
+
+      if (interaction.customId === 'ai_toggle_chat') return client.configSystem.toggleAISetting(interaction, 'chatEnabled');
+      if (interaction.customId === 'ai_toggle_translate') return client.configSystem.toggleAISetting(interaction, 'autoTranslate');
+      if (interaction.customId === 'ai_toggle_ortho') return client.configSystem.toggleAISetting(interaction, 'spellCheck');
+      if (interaction.customId === 'ai_toggle_staff') return client.configSystem.toggleAISetting(interaction, 'staffSuggestions');
+      
+      if (interaction.customId === 'ai_set_channel') {
+        const modal = new ModalBuilder()
+          .setCustomId('modal_ai_channel')
+          .setTitle('Salon IA & Automatisation')
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder().setCustomId('channel_id').setLabel('ID du Salon (Dédié au Chat/Logs)').setStyle(TextInputStyle.Short).setRequired(true)
+          ));
+        return interaction.showModal(modal);
       }
 
       if (interaction.customId === 'prot_hub_captcha') {
@@ -417,6 +438,13 @@ client.on('interactionCreate', async interaction => {
       if (interaction.customId === 'modal_verify_code') {
         return client.verification.handleModalSubmit(interaction);
       }
+      if (interaction.customId === 'modal_ai_channel') {
+        const guildConfig = client.configSystem.getGuildConfig(interaction.guildId);
+        guildConfig.ai.aiChannel = interaction.fields.getTextInputValue('channel_id').trim();
+        client.configSystem.saveConfig(client.configSystem.getFullConfig());
+        return client.configSystem.sendAIConfigPanel(interaction);
+      }
+
       return await client.configSystem.handleModal(interaction);
     }
 
@@ -439,6 +467,7 @@ client.on('messageCreate', async message => {
   try {
     await client.configSystem.handleMessage(message);
     await client.xpSystem?.handleMessage(message);
+    await client.aiSystem?.handleMessage(message);
     if (client.antiSpam) {
       await client.antiSpam.handleMessage(message);
     }
