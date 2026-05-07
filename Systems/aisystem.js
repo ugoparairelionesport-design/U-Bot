@@ -44,11 +44,8 @@ class AISystem {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: "Tu es U-Bot, un assistant Discord intelligent, poli et utile. Tu réponds de manière concise." }]
-          },
           contents: [{
-            parts: [{ text: prompt }]
+            parts: [{ text: `Système: Tu es U-Bot, un assistant Discord intelligent, poli et utile. Réponds de manière concise.\n\nUtilisateur: ${prompt}` }]
           }]
         })
       });
@@ -79,11 +76,8 @@ class AISystem {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: "Tu es un organisateur d'événements communautaires Discord créatif. Propose 3 idées originales et engageantes." }]
-          },
           contents: [{
-            parts: [{ text: `Génère des idées d'événements pour le serveur "${guild.name}".` }]
+            parts: [{ text: `Système: Tu es un organisateur d'événements Discord créatif. Propose 3 idées originales pour le serveur "${guild.name}".` }]
           }]
         })
       });
@@ -114,11 +108,8 @@ class AISystem {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: "Tu es un assistant Discord chargé de résumer les conversations. Sois concis, utilise des listes à puces et identifie les sujets principaux." }]
-          },
           contents: [{
-            parts: [{ text: `Résume cette discussion :\n\n${textToSummarize}` }]
+            parts: [{ text: `Système: Résume cette discussion de manière concise avec des listes à puces :\n\n${textToSummarize}` }]
           }]
         })
       });
