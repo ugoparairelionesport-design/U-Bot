@@ -38,13 +38,12 @@ class AISystem {
 
       const prompt = message.content.replace(`<@!${this.client.user.id}>`, '').replace(`<@${this.client.user.id}>`, '').trim();
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ // Gemini-pro uses 'model' field in body for v1
-          model: "gemini-pro",
+        body: JSON.stringify({
           contents: [{
             parts: [{ text: `Tu es U-Bot, un assistant Discord intelligent, poli et utile. Réponds de manière concise.\n\n${prompt}` }]
           }]
@@ -73,11 +72,10 @@ class AISystem {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return "❌ Clé API manquante.";
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ // Gemini-pro uses 'model' field in body for v1
-          model: "gemini-pro",
+        body: JSON.stringify({
           contents: [{
             parts: [{ text: `Tu es un organisateur d'événements Discord créatif. Propose 3 idées originales pour le serveur "${guild.name}".` }]
           }]
@@ -106,11 +104,10 @@ class AISystem {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey) return "❌ Clé API manquante.";
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ // Gemini-pro uses 'model' field in body for v1
-          model: "gemini-pro",
+        body: JSON.stringify({
           contents: [{
             parts: [{ text: `Résume cette discussion de manière concise avec des listes à puces :\n\n${textToSummarize}` }]
           }]
