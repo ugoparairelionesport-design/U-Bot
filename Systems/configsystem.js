@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.69...');
+console.log('🚀 [configsystem.js] Loading version 2.8.70...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
