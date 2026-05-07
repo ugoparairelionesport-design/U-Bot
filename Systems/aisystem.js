@@ -31,35 +31,32 @@ class AISystem {
     try {
       await message.channel.sendTyping();
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GROQ_API_KEY;
       if (!apiKey) {
-        return message.reply("❌ Erreur : La clé `GEMINI_API_KEY` est manquante dans les secrets du bot.");
+        return message.reply("❌ Erreur : La clé `GROQ_API_KEY` est manquante dans les secrets du bot.");
       }
 
       const prompt = message.content.replace(`<@!${this.client.user.id}>`, '').replace(`<@${this.client.user.id}>`, '').trim();
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${apiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: "Tu es U-Bot, un assistant Discord intelligent, poli et utile. Réponds de manière concise." }]
-          },
-          contents: [{
-            parts: [{ text: prompt }]
-          }]
+          model: "llama-3.1-8b-instant",
+          messages: [
+            { role: "system", content: "Tu es U-Bot, un assistant Discord intelligent, poli et utile. Réponds de manière concise." },
+            { role: "user", content: prompt }
+          ]
         })
       });
 
       const data = await response.json();
-      
-      if (data.error) throw new Error(data.error.message);
-      
-      const aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const aiReply = data.choices?.[0]?.message?.content;
 
-      if (!aiReply) throw new Error("Réponse vide de Gemini");
+      if (!aiReply) throw new Error("Réponse vide de Groq");
 
       // Discord limite les messages à 2000 caractères
       await message.reply(aiReply.length > 2000 ? aiReply.substring(0, 1997) + "..." : aiReply);
@@ -72,24 +69,26 @@ class AISystem {
 
   async generateEventIdeas(guild) {
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GROQ_API_KEY;
       if (!apiKey) return "❌ Clé API manquante.";
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: "Tu es un organisateur d'événements Discord créatif. Propose 3 idées originales et engageantes." }]
-          },
-          contents: [{
-            parts: [{ text: `Génère des idées d'événements pour le serveur "${guild.name}".` }]
-          }]
+          model: "llama-3.1-8b-instant",
+          messages: [
+            { role: "system", content: "Tu es un organisateur d'événements Discord créatif." },
+            { role: "user", content: `Génère 3 idées d'événements engageantes pour le serveur "${guild.name}".` }
+          ]
         })
       });
 
       const data = await response.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text || "❌ Échec de la génération d'idées.";
+      return data.choices?.[0]?.message?.content || "❌ Échec de la génération.";
     } catch (err) {
       console.error("AI EVENT GEN ERROR:", err);
       return "❌ Erreur lors de la génération d'idées d'événements.";
@@ -107,24 +106,26 @@ class AISystem {
 
       if (!textToSummarize) return "❌ Pas assez de messages récents pour résumer.";
 
-      const apiKey = process.env.GEMINI_API_KEY;
+      const apiKey = process.env.GROQ_API_KEY;
       if (!apiKey) return "❌ Clé API manquante.";
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: "Tu es un assistant chargé de résumer les conversations de manière concise avec des listes à puces." }]
-          },
-          contents: [{
-            parts: [{ text: `Résume cette discussion :\n\n${textToSummarize}` }]
-          }]
+          model: "llama-3.1-8b-instant",
+          messages: [
+            { role: "system", content: "Tu es un assistant chargé de résumer les conversations de manière concise avec des listes à puces." },
+            { role: "user", content: `Résume cette discussion :\n\n${textToSummarize}` }
+          ]
         })
       });
 
       const data = await response.json();
-      const summary = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const summary = data.choices?.[0]?.message?.content;
 
       return summary || "❌ Échec du résumé.";
     } catch (err) {

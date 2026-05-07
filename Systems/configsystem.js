@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.76...');
+console.log('🚀 [configsystem.js] Loading version 2.8.77...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -2759,6 +2759,10 @@ module.exports = {
   sendHelpPanel,
   sendLogsConfigPanel,
   sendEntranceConfigPanel,
+  sendXPConfigPanel,
+  toggleXPStatus,
+  sendAIConfigPanel,
+  toggleAISetting,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS, // Keep this one, it's a constant
   handleButtons,
