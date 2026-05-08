@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.78...');
+console.log('🚀 [configsystem.js] Loading version 2.8.80...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -2414,7 +2414,8 @@ async function sendHelpPanel(interaction) {
     "📈 Niveaux": ['set_xp', 'rank', 'leaderboard'],
     "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
     "🛠️ Maintenance": ['maintenance'],
-    "🤖 Configuration": ['set_config', 'help']
+    "🤖 IA & Automatisation": ['set_ia', 'annonce'],
+    "⚙️ Configuration": ['set_config', 'help']
   };
 
   const embed = new EmbedBuilder()
@@ -2454,6 +2455,8 @@ async function sendHelpPanel(interaction) {
           'rank': 'Voir son profil d\'XP.',
           'leaderboard': 'Voir le classement général.',
           'set_config': 'Changer le nom et l\'image/couleur du bot.',
+          'set_ia': 'Configurer l\'IA et les salons dédiés.',
+          'annonce': 'Générer une annonce stylisée par IA.',
           'help': 'Afficher ce menu d\'assistance.'
         };
         

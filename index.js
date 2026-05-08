@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.8.79');
+console.log('🚀 [index.js] Loading version 2.8.80');
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
@@ -192,6 +192,11 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'set_ia') {
         return client.configSystem.sendAIConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'annonce') {
+        // Ouvre le modal pour la création d'annonce
+        return client.aiSystem.showAnnouncementModal(interaction);
       }
 
       if (interaction.commandName === 'rank') {
@@ -455,6 +460,10 @@ client.on('interactionCreate', async interaction => {
         guildConfig.ai.aiChannel = interaction.fields.getTextInputValue('channel_id').trim();
         client.configSystem.saveConfig(client.configSystem.getFullConfig());
         return client.configSystem.sendAIConfigPanel(interaction);
+      }
+      if (interaction.customId === 'modal_create_announcement') {
+        // Gère la soumission du modal d'annonce
+        return client.aiSystem.handleAnnouncementModalSubmit(interaction);
       }
 
       return await client.configSystem.handleModal(interaction);
