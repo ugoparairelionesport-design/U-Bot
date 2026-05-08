@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const { fetch } = require('undici');
 const configSystem = require('./configsystem');
 
@@ -139,5 +139,93 @@ class AISystem {
     return text; // Retourne le texte corrigé
   }
 }
+
+  async showAnnouncementModal(interaction) {
+    const modal = new ModalBuilder()
+      .setCustomId('modal_create_announcement')
+      .setTitle('Créer une Annonce avec l\'IA')
+      .addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('announcement_content')
+            .setLabel('Contenu principal de l\'annonce')
+            .setPlaceholder('Ex: Nouvelle mise à jour du bot, événement à venir, etc.')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('keywords')
+            .setLabel('Mots-clés supplémentaires (optionnel)')
+            .setPlaceholder('Ex: #mise-a-jour, #event, #important')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('mention_role_id')
+            .setLabel('ID du rôle à mentionner (optionnel)')
+            .setPlaceholder('Ex: 123456789012345678 (laisser vide pour aucune mention)')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+        )
+      );
+
+    await interaction.showModal(modal);
+  }
+
+  async handleAnnouncementModalSubmit(interaction) {
+    await interaction.deferReply({ ephemeral: true });
+
+    const content = interaction.fields.getTextInputValue('announcement_content');
+    const keywords = interaction.fields.getTextInputValue('keywords');
+    const mentionRoleId = interaction.fields.getTextInputValue('mention_role_id');
+
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      return interaction.editReply("❌ Erreur : La clé `GROQ_API_KEY` est manquante dans les secrets du bot.");
+    }
+
+    let prompt = `Crée une annonce Discord très esthétique et engageante. Utilise des formats Discord comme le gras, le souligné, les italiques, les blocs de code, les citations, et des emojis pertinents. Le ton doit être professionnel mais amical.
+    Contenu principal: "${content}"`;
+
+    if (keywords) {
+      prompt += `\n\nMots-clés à intégrer: ${keywords}`;
+    }
+
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "user", content: prompt }]
+        })
+      });
+
+      const data = await response.json();
+      const aiAnnouncement = data.choices?.[0]?.message?.content;
+
+      if (!aiAnnouncement) throw new Error("Réponse vide de Groq pour l'annonce.");
+
+      let finalAnnouncement = aiAnnouncement;
+      if (mentionRoleId) {
+        finalAnnouncement = `<@&${mentionRoleId}>\n\n` + finalAnnouncement;
+      }
+
+      // Proposer l'annonce à l'utilisateur pour qu'il puisse la copier/coller
+      await interaction.editReply({
+        content: `✅ Voici l'annonce générée par l'IA. Copiez-collez-la dans le salon de votre choix :\n\n${finalAnnouncement}`,
+        ephemeral: true
+      });
+
+    } catch (err) {
+      console.error("❌ AI ANNOUNCEMENT ERROR:", err);
+      await interaction.editReply("🧠 Désolé, mon cerveau a eu une petite surchauffe lors de la création de l'annonce. Réessaie dans un instant !");
+    }
+  }
 
 module.exports = AISystem;

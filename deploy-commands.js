@@ -110,6 +110,11 @@ const commands = [
         .setDescription('Configure les modules d\'intelligence artificielle et d\'automatisation.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
+    new SlashCommandBuilder()
+        .setName('annonce')
+        .setDescription('Crée une annonce stylisée avec l\'aide de l\'IA.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
     // Help Command
     new SlashCommandBuilder()
         .setName('help')
