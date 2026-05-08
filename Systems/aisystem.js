@@ -14,16 +14,19 @@ class AISystem {
     const guildConfig = configSystem.getGuildConfig(message.guild.id);
     const settings = guildConfig.ai;
     
-    // On vérifie si le module global est activé (on considère 'enabled' comme le switch principal)
-    // Si settings.enabled n'existe pas, on se base sur chatEnabled
-    if (!settings?.chatEnabled) return;
+    // Vérification des switches d'activation
+    if (!settings?.enabled || !settings?.chatEnabled) return;
 
     // Logique de Chat IA (si mentionné ou dans le salon dédié)
     const isMentioned = message.mentions.has(this.client.user);
-    const isAiChannel = settings.aiChannel && message.channel.id === settings.aiChannel;
+    const isAiChannel = settings.aiChannel && (message.channel.id === settings.aiChannel);
 
     if (isMentioned || isAiChannel) {
-        await this.processAIChat(message);
+      // On ignore les messages vides (stickers, images sans texte)
+      if (!message.content && !isMentioned) return;
+      
+      console.log(`🤖 [IA] Message détecté dans #${message.channel.name} (Mention: ${isMentioned}, Salon Dédié: ${isAiChannel})`);
+      await this.processAIChat(message);
     }
   }
 
@@ -36,7 +39,11 @@ class AISystem {
         return message.reply("❌ Erreur : La clé `GROQ_API_KEY` est manquante dans les secrets du bot.");
       }
 
-      const prompt = message.content.replace(`<@!${this.client.user.id}>`, '').replace(`<@${this.client.user.id}>`, '').trim();
+      // Nettoyage du prompt (retrait de la mention du bot)
+      const mentionRegex = new RegExp(`<@!?${this.client.user.id}>`, 'g');
+      const prompt = message.content.replace(mentionRegex, '').trim();
+      
+      if (!prompt) return; // Ne rien faire si le message est vide après nettoyage
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
