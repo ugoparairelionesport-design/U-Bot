@@ -138,7 +138,6 @@ class AISystem {
     // Logique de correction
     return text; // Retourne le texte corrigé
   }
-}
 
   async showAnnouncementModal(interaction) {
     const modal = new ModalBuilder()
@@ -227,5 +226,6 @@ class AISystem {
       await interaction.editReply("🧠 Désolé, mon cerveau a eu une petite surchauffe lors de la création de l'annonce. Réessaie dans un instant !");
     }
   }
+}
 
 module.exports = AISystem;
