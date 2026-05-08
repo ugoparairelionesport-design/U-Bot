@@ -2,9 +2,20 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.8.81');
+console.log('🚀 [index.js] Loading version 2.8.82');
+
+// Sécurité Replit : Installation automatique de @napi-rs/canvas si manquant au démarrage
+try {
+  require.resolve('@napi-rs/canvas');
+} catch (e) {
+  console.log('📦 [DEP] @napi-rs/canvas manquant ou corrompu. Installation forcée...');
+  execSync('npm install @napi-rs/canvas');
+  console.log('✅ [DEP] @napi-rs/canvas a été réinstallé avec succès.');
+}
+
 const configSystem = require('./Systems/configsystem');
 const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
