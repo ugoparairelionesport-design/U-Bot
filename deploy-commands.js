@@ -135,20 +135,20 @@ async function deployCommands() {
     }
 
     try {
-        console.log("🧹 [1/3] PURGE TOTALE : Suppression des commandes globales...");
+        console.log("🧹 [1/3] NETTOYAGE : Suppression des commandes globales...");
         await rest.put(Routes.applicationCommands(clientId), { body: [] });
-        console.log("✅ Cache global vidé.");
+        console.log("✅ Cache global Discord vidé.");
 
         if (guildId) {
-            console.log(`🧹 [2/3] PURGE TOTALE : Suppression des commandes du serveur ${guildId}...`);
+            console.log(`🧹 [2/3] NETTOYAGE : Suppression des commandes du serveur ${guildId}...`);
             await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
-            console.log("✅ Cache du serveur vidé.");
+            console.log("✅ Cache du serveur spécifique vidé.");
         } else {
-            console.warn("⚠️ [SKIP] GUILD_ID non défini dans .env, purge du serveur ignorée.");
+            console.warn("⚠️ [SKIP] Pas de GUILD_ID détecté dans les Secrets. Les doublons au niveau serveur ne seront pas nettoyés.");
         }
 
-        console.log(`🚀 [3/3] DÉPLOIEMENT : Enregistrement de ${commands.length} commandes (Version 2.9.6)...`);
-        console.log("ℹ️ Note : Le déploiement global peut prendre jusqu'à 1h pour se rafraîchir sur Discord.");
+        console.log(`🚀 [3/3] DEPLOY : Envoi de ${commands.length} commandes (v2.9.8)...`);
+        console.log("ℹ️ Note : Si les doublons persistent, redémarrez votre application Discord (Ctrl+R).");
 
         await rest.put(
             Routes.applicationCommands(clientId),
@@ -156,8 +156,10 @@ async function deployCommands() {
         );
 
         console.log(`✅ ${commands.length} commandes slash déployées avec succès !`);
+        process.exit(0); // Force la sortie pour permettre l'exécution du kill 1
     } catch (error) {
         console.error('❌ Erreur lors du déploiement des commandes slash :', error);
+        process.exit(1);
     }
 }
 

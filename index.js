@@ -5,7 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.9.6');
+console.log('🚀 [index.js] Loading version 2.9.8');
 
 // Sécurité Replit : Installation automatique de @napi-rs/canvas si manquant au démarrage
 try {
@@ -125,6 +125,18 @@ client.once(Events.ClientReady, async () => {
   try {
     if (client.configSystem && typeof client.configSystem.resumeTicketState === 'function') {
       await client.configSystem.resumeTicketState(client);
+      if (typeof client.configSystem.cleanupLegacyTicketPanels === 'function') {
+        const deletedPanels = await client.configSystem.cleanupLegacyTicketPanels(client);
+        if (deletedPanels > 0) {
+          console.log(`🧹 ${deletedPanels} ancien(s) panel(s) ticket supprimé(s).`);
+        }
+      }
+      if (typeof client.configSystem.refreshActiveTicketControls === 'function') {
+        const updatedTickets = await client.configSystem.refreshActiveTicketControls(client);
+        if (updatedTickets > 0) {
+          console.log(`🧩 ${updatedTickets} ticket(s) actif(s) mis à jour avec les nouveaux boutons.`);
+        }
+      }
     } else {
       console.warn("⚠️ resumeTicketState n'est pas encore disponible (chargement...)");
     }
@@ -137,9 +149,9 @@ client.once(Events.ClientReady, async () => {
     client.liveSystem.checkAllLives().catch(err => console.error("❌ Erreur check live initial:", err));
   }
 
-  // Déploiement automatique des commandes au démarrage si nécessaire
-  if (process.env.AUTO_DEPLOY === 'true') {
-    await deployCommands().catch(console.error);
+  // Déploiement automatique des commandes au démarrage. Désactivable avec AUTO_DEPLOY=false.
+  if (process.env.AUTO_DEPLOY !== 'false') {
+    await deployCommands(client).catch(console.error);
   }
 });
 
