@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.9.3 (Unified & Clean)...');
+console.log('🚀 [configsystem.js] Loading version 2.9.4 (Unified & Clean)...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -700,8 +700,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
   guildConfig.stats.opened = (guildConfig.stats.opened || 0) + 1;
   const ticketId = String(guildConfig.stats.opened).padStart(4, '0');
-  // Initialisation avec l'émoji orange (nouveau ticket)
-  const channelName = `${choice}-${ticketId}-🟠`;
+  const channelName = `${choice}-${ticketId}`;
 
   const channel = await interaction.guild.channels.create({
     name: channelName,
@@ -720,16 +719,11 @@ async function executeTicketCreation(interaction, choice, openingReason) {
   saveConfig(configData);
 
   const embed = new EmbedBuilder()
-    .setTitle(`🎫 Support : ${choice}`)
-    .setDescription(
-      `Bonjour ${interaction.user},\n\n` +
-      `Merci d'avoir ouvert un ticket. Un membre de l'équipe de modération va vous prendre en charge sous peu.\n\n` +
-      `**📝 Objet :** ${openingReason || "Aucune raison spécifiée"}\n` +
-      `**ℹ️ Information :** Utilisez les boutons ci-dessous pour gérer ce ticket.`
-    )
+    .setTitle(`🎫 Ticket - ${choice}`)
+    .setDescription(`Bienvenue ${interaction.user},\n\nLe staff a été notifié de votre demande.\n\n**Raison :** ${openingReason || "Aucune raison fournie"}`)
     .addFields(
-      { name: "👤 Demandeur", value: `${interaction.user}`, inline: true },
-      { name: "🆔 Ticket ID", value: `#${ticketId}`, inline: true }
+      { name: "Utilisateur", value: `${interaction.user}`, inline: true },
+      { name: "Numéro", value: `#${ticketId}`, inline: true }
     )
     .setImage(guildConfig.globalEmbedBanner)
     .setColor(guildConfig.globalEmbedColor)

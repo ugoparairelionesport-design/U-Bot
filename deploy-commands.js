@@ -135,20 +135,20 @@ async function deployCommands() {
     }
 
     try {
-        console.log("🧹 Nettoyage des anciennes commandes globales...");
+        console.log("🧹 [CLEANUP] Suppression des commandes globales...");
         // Supprime TOUTES les commandes globales existantes
         await rest.put(Routes.applicationCommands(clientId), { body: [] });
         console.log(`✅ Cache des commandes globales vidé.`);
 
         if (guildId) {
-            console.log(`🧹 Nettoyage des anciennes commandes de la guilde ${guildId}...`);
+            console.log(`🧹 [CLEANUP] Suppression des commandes du serveur ${guildId}...`);
             await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
-            console.log(`✅ Cache du serveur ${guildId} vidé.`);
+            console.log(`✅ Cache du serveur vidé.`);
         }
 
-        console.log(`🚀 Déploiement [GLOBAL] de ${commands.length} commandes slash...`);
+        console.log(`🚀 [DEPLOY] Enregistrement de ${commands.length} commandes (Version 2.9.4)...`);
 
-        // Déploiement GLOBAL des commandes
+        // On déploie en GLOBAL par défaut pour la production
         await rest.put(
             Routes.applicationCommands(clientId),
             { body: commands.map(command => command.toJSON()) },
