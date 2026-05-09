@@ -136,18 +136,18 @@ async function deployCommands() {
 
     try {
         if (guildId) {
-            console.log(`🧹 [1/2] NETTOYAGE : Suppression des commandes locales (Serveur: ${guildId})...`);
-            await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
-            console.log("✅ Cache local vidé.");
+            console.log(`🚀 [1/2] DEPLOY : Envoi des commandes au serveur local (INSTANTANÉ: ${guildId})...`);
+            await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands.map(command => command.toJSON()) });
+            console.log("✅ Commandes serveur déployées.");
         }
 
-        console.log(`🚀 [2/2] DEPLOY : Envoi de ${commands.length} commandes en GLOBAL (v2.9.9)...`);
+        console.log(`🚀 [2/2] DEPLOY : Envoi de ${commands.length} commandes en GLOBAL (v2.9.11)...`);
         await rest.put(
             Routes.applicationCommands(clientId),
             { body: commands.map(command => command.toJSON()) },
         );
 
-        console.log(`✅ Déploiement global terminé !`);
+        console.log(`✅ Déploiement global terminé ! (Apparition sous 10-60 min)`);
         
         // Sécurité : n'éteint le processus que si lancé via "node deploy-commands.js"
         if (require.main === module) {
