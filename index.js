@@ -5,9 +5,23 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.9.12');
+console.log('🚀 [index.js] Loading version 2.9.13');
 
-// Sécurité Replit : Installation automatique de @napi-rs/canvas si manquant au démarrage
+// 🛡️ SÉCURITÉ ANTI-DOUBLON : Suppression des fichiers conflictuels (Majuscules)
+const duplicateFiles = [
+  './Systems/CONFIGSYSTEM.JS',
+  './Systems/MAINTENANCE.JS',
+  './MAINTENANCE.JS'
+];
+
+duplicateFiles.forEach(file => {
+  const fullPath = path.join(__dirname, file);
+  if (fs.existsSync(fullPath)) {
+    console.log(`🧹 [CLEANUP] Suppression du fichier conflictuel : ${file}`);
+    fs.unlinkSync(fullPath);
+  }
+});
+
 try {
   require.resolve('@napi-rs/canvas');
 } catch (e) {

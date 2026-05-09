@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.9.12 (Panel Cleanup)...');
+console.log('🚀 [configsystem.js] Loading version 2.9.13 (Aggressive Nuke)...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -672,27 +672,42 @@ async function cleanupLegacyTicketPanels(client) {
     const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
     if (!guild) continue;
 
-    // Itérer sur une copie pour pouvoir modifier l'original
-    for (const channelId in { ...guildConfig.panelMessages }) {
-      const messageId = guildConfig.panelMessages[channelId];
-      const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+    // On récupère tous les salons où un panel est censé exister
+    const panelChannelIds = Object.keys(guildConfig.panelMessages || {});
 
-      if (channel && channel.isTextBased()) {
-        try {
-          const message = await channel.messages.fetch(messageId);
-          if (message && message.author.id === client.user.id) { // Seulement les messages du bot
-            await message.delete();
-            deletedCount++;
-            console.log(`🧹 [TICKETS] Ancien panel supprimé dans #${channel.name} (${messageId}).`);
-          }
-        } catch (error) {
-          // Message non trouvé ou autre erreur, il est probablement déjà parti
-          // console.warn(`⚠️ [TICKETS] Impossible de supprimer l'ancien panel ${messageId} dans #${channel.name}: ${error.message}`);
+    for (const channelId of panelChannelIds) {
+      const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+      if (!channel || !channel.isTextBased()) continue;
+
+      try {
+        // SCAN AGRESSIF : On récupère les 50 derniers messages pour trouver des panels fantômes
+        const messages = await channel.messages.fetch({ limit: 50 });
+        const currentPanelId = guildConfig.panelMessages[channelId];
+
+        const botPanels = messages.filter(m => 
+          m.author.id === client.user.id && 
+          m.embeds.length > 0 && 
+          (m.embeds[0].title === '🎫 Tickets' || m.embeds[0].title === '🎫 Ticket System') &&
+          m.id !== currentPanelId // On ne supprime pas le panel "officiel" s'il existe
+        );
+
+        for (const [, msg] of botPanels) {
+          await msg.delete().catch(() => {});
+          deletedCount++;
         }
+
+        // Si le panel officiel stocké n'a pas été trouvé dans le scan mais existe, on le vérifie
+        if (currentPanelId) {
+          const officialMsg = await channel.messages.fetch(currentPanelId).catch(() => null);
+          if (!officialMsg) {
+            delete guildConfig.panelMessages[channelId];
+            delete guildConfig.panelOptions[channelId];
+            deletedCount++;
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Erreur lors du scan du salon ${channelId}:`, error.message);
       }
-      // Supprimer de la config, qu'il ait été trouvé ou non sur Discord
-      delete guildConfig.panelMessages[channelId];
-      delete guildConfig.panelOptions[channelId];
     }
   }
   saveConfig(configData);
