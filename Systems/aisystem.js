@@ -44,10 +44,11 @@ class AISystem {
 
   async processAIChat(message) {
     try {
-      await message.channel.sendTyping();
+      await message.channel.sendTyping().catch(() => {});
 
-      const apiKey = process.env.GROQ_API_KEY;
+      const apiKey = process.env.GROQ_API_KEY?.trim();
       if (!apiKey) {
+        console.error("❌ [IA] GROQ_API_KEY manquante dans les variables d'environnement.");
         return message.reply("❌ Erreur : La clé `GROQ_API_KEY` est manquante dans les secrets du bot.");
       }
 
@@ -56,6 +57,8 @@ class AISystem {
       const prompt = message.content.replace(mentionRegex, '').trim();
       
       if (!prompt) return; // Ne rien faire si le message est vide après nettoyage
+
+      console.log(`📡 [IA] Envoi du prompt à Groq (${prompt.length} chars)...`);
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -72,12 +75,22 @@ class AISystem {
         })
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+      
+      if (!response.ok) {
+        console.error(`❌ [IA] Erreur API Groq (${response.status}):`, JSON.stringify(data.error || data));
+        return message.reply(`❌ Erreur de l'IA : ${data.error?.message || "Le service est temporairement indisponible."}`);
+      }
+
       const aiReply = data.choices?.[0]?.message?.content;
 
-      if (!aiReply) throw new Error("Réponse vide de Groq");
+      if (!aiReply) {
+        console.error("❌ [IA] Réponse vide reçue de l'API:", JSON.stringify(data));
+        throw new Error("L'IA n'a pas renvoyé de contenu.");
+      }
 
       // Discord limite les messages à 2000 caractères
+      console.log(`✅ [IA] Réponse générée (${aiReply.length} chars).`);
       await message.reply(aiReply.length > 2000 ? aiReply.substring(0, 1997) + "..." : aiReply);
 
     } catch (err) {
