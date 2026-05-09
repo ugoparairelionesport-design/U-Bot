@@ -5,10 +5,11 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.9.13');
+console.log('🚀 [index.js] Loading version 2.9.14');
 
 // 🛡️ SÉCURITÉ ANTI-DOUBLON : Suppression des fichiers conflictuels (Majuscules)
 const duplicateFiles = [
+  './Systems/CONFIGSYSTEM.JS',
   './Systems/CONFIGSYSTEM.JS',
   './Systems/MAINTENANCE.JS',
   './MAINTENANCE.JS'
@@ -165,7 +166,7 @@ client.once(Events.ClientReady, async () => {
 
   // Déploiement automatique des commandes au démarrage. Désactivable avec AUTO_DEPLOY=false.
   if (process.env.AUTO_DEPLOY !== 'false') {
-    await deployCommands(client).catch(console.error);
+    await deployCommands().catch(console.error);
   }
 });
 

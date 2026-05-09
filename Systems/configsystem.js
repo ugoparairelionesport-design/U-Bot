@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.9.13 (Aggressive Nuke)...');
+console.log('🚀 [configsystem.js] Loading version 2.9.14 (Component-Based Purge)...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -680,18 +680,20 @@ async function cleanupLegacyTicketPanels(client) {
       if (!channel || !channel.isTextBased()) continue;
 
       try {
-        // SCAN AGRESSIF : On récupère les 50 derniers messages pour trouver des panels fantômes
+        // SCAN ULTRA-AGRESSIF : On cherche les messages contenant le menu 'ticket_select'
         const messages = await channel.messages.fetch({ limit: 50 });
         const currentPanelId = guildConfig.panelMessages[channelId];
 
         const botPanels = messages.filter(m => 
           m.author.id === client.user.id && 
-          m.embeds.length > 0 && 
-          (m.embeds[0].title === '🎫 Tickets' || m.embeds[0].title === '🎫 Ticket System') &&
+          m.components.some(row => 
+            row.components.some(c => c.customId === 'ticket_select')
+          ) &&
           m.id !== currentPanelId // On ne supprime pas le panel "officiel" s'il existe
         );
 
         for (const [, msg] of botPanels) {
+          console.log(`🧹 [PURGE] Doublon détecté et supprimé dans #${channel.name}`);
           await msg.delete().catch(() => {});
           deletedCount++;
         }
