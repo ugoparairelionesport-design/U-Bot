@@ -135,15 +135,18 @@ async function deployCommands() {
     }
 
     try {
-        console.log(`🚀 Déploiement [${guildId ? 'GUILD' : 'GLOBAL'}] de ${commands.length} commandes slash...`);
-        if (guildId) console.log(`📍 Guild ID cible : ${guildId}`);
+        console.log("🧹 Nettoyage des anciennes commandes...");
+        // Supprime TOUTES les commandes locales du serveur pour éviter les doublons avec le Global
+        if (guildId) {
+            await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
+            console.log(`✅ Cache du serveur ${guildId} vidé.`);
+        }
 
-        // Déploiement global (peut prendre jusqu'à 1 heure pour apparaître)
-        // Ou déploiement spécifique à un GUILD_ID pour un test rapide
+        console.log(`🚀 Déploiement [GLOBAL] de ${commands.length} commandes slash...`);
+
+        // On privilégie le déploiement GLOBAL pour éviter les doublons sur les nouveaux serveurs
         await rest.put(
-            guildId ?
-                Routes.applicationGuildCommands(clientId, guildId) :
-                Routes.applicationCommands(clientId),
+            Routes.applicationCommands(clientId),
             { body: commands.map(command => command.toJSON()) },
         );
 
