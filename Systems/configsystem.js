@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.9.11 (Support Actif)...');
+console.log('🚀 [configsystem.js] Loading version 2.9.12 (Panel Cleanup)...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -657,6 +657,89 @@ async function saveTicketArchive(guild, channel, requestedBy) {
   return { ok: true };
 }
 
+/**
+ * Nettoie les anciens messages de panel de tickets qui pourraient exister sur Discord
+ * mais ne sont plus référencés ou sont obsolètes.
+ * @param {Client} client Le client Discord.
+ * @returns {Promise<number>} Le nombre de panels supprimés.
+ */
+async function cleanupLegacyTicketPanels(client) {
+  let deletedCount = 0;
+  if (!configData.guilds) return deletedCount;
+
+  for (const guildId in configData.guilds) {
+    const guildConfig = configData.guilds[guildId];
+    const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+    if (!guild) continue;
+
+    // Itérer sur une copie pour pouvoir modifier l'original
+    for (const channelId in { ...guildConfig.panelMessages }) {
+      const messageId = guildConfig.panelMessages[channelId];
+      const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+
+      if (channel && channel.isTextBased()) {
+        try {
+          const message = await channel.messages.fetch(messageId);
+          if (message && message.author.id === client.user.id) { // Seulement les messages du bot
+            await message.delete();
+            deletedCount++;
+            console.log(`🧹 [TICKETS] Ancien panel supprimé dans #${channel.name} (${messageId}).`);
+          }
+        } catch (error) {
+          // Message non trouvé ou autre erreur, il est probablement déjà parti
+          // console.warn(`⚠️ [TICKETS] Impossible de supprimer l'ancien panel ${messageId} dans #${channel.name}: ${error.message}`);
+        }
+      }
+      // Supprimer de la config, qu'il ait été trouvé ou non sur Discord
+      delete guildConfig.panelMessages[channelId];
+      delete guildConfig.panelOptions[channelId];
+    }
+  }
+  saveConfig(configData);
+  return deletedCount;
+}
+
+/**
+ * Rafraîchit les contrôles (boutons) des tickets actifs pour s'assurer qu'ils sont à jour.
+ * @param {Client} client Le client Discord.
+ * @returns {Promise<number>} Le nombre de tickets mis à jour.
+ */
+async function refreshActiveTicketControls(client) {
+  let updatedCount = 0;
+  if (!configData.guilds) return updatedCount;
+
+  for (const guildId in configData.guilds) {
+    const guildConfig = configData.guilds[guildId];
+    const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+    if (!guild) continue;
+
+    // Itérer sur les tickets actifs
+    for (const channelId in guildConfig.ticketOwners) {
+      const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+      if (!channel || channel.type !== ChannelType.GuildText) continue;
+
+      try {
+        // Chercher le message du bot contenant l'embed du ticket
+        const messages = await channel.messages.fetch({ limit: 10 }); // Récupérer les messages récents
+        const botMessage = messages.find(m => m.author.id === client.user.id && m.embeds.length > 0 && m.embeds[0].title?.startsWith('🎫 Ticket'));
+
+        if (botMessage) {
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('claim_ticket').setLabel('Prendre en charge').setStyle(ButtonStyle.Primary).setEmoji('🛠️'),
+            new ButtonBuilder().setCustomId('close_ticket').setLabel('Fermer').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+          );
+          // Mettre à jour les composants du message
+          await botMessage.edit({ components: [row] });
+          updatedCount++;
+        }
+      } catch (error) {
+        console.warn(`⚠️ [TICKETS] Impossible de rafraîchir les contrôles du ticket #${channel.name}: ${error.message}`);
+      }
+    }
+  }
+  return updatedCount;
+}
+
 async function createTicketFromChoice(interaction, choice, openingReason = '') {
   const guildConfig = getGuildConfig(interaction.guildId);
   
@@ -758,6 +841,10 @@ async function resumeTicketState(client) {
     if (!channels) continue;
 
     const ticketCategoryIds = Object.values(guildConfig.categories || {});
+
+    // Appeler les fonctions de nettoyage et de rafraîchissement ici
+    await cleanupLegacyTicketPanels(client); // Nettoyer les panels obsolètes
+    await refreshActiveTicketControls(client); // Rafraîchir les contrôles des tickets actifs
     
     // 1. Analyse des salons physiques sur Discord
     for (const channel of channels.values()) {
@@ -1733,6 +1820,23 @@ async function handleModal(interaction) {
         }
       }
 
+      // Delete any existing panel messages in this channel before creating a new one
+      const existingPanelMessages = Object.entries(guildConfig.panelMessages)
+        .filter(([chanId, msgId]) => chanId === channelId)
+        .map(([, msgId]) => msgId);
+
+      for (const msgId of existingPanelMessages) {
+        try {
+          const oldPanelMessage = await channel.messages.fetch(msgId);
+          if (oldPanelMessage && oldPanelMessage.author.id === interaction.client.user.id) {
+            await oldPanelMessage.delete();
+            console.log(`🧹 [TICKETS] Ancien panel supprimé dans #${channel.name} (${msgId}) avant création du nouveau.`);
+          }
+        } catch (error) {
+          console.warn(`⚠️ [TICKETS] Impossible de supprimer l'ancien panel ${msgId} dans #${channel.name}: ${error.message}`);
+        }
+      }
+
       options.forEach((option, index) => {
         guildConfig.categories[option] = categoriesInput[index];
         guildConfig.roles[option] = roleIds;
@@ -2421,7 +2525,7 @@ async function sendHelpPanel(interaction) {
     .setTitle("📚 Centre d'Aide & Commandes")
     .setDescription(
       `### 🛰️ Guide Opérationnel\n` +
-      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.8.24\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.9.12\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
       `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
@@ -2777,6 +2881,8 @@ module.exports = {
   updateStatsMessage,
   showStaffStats,
   resumeTicketState,
+  cleanupLegacyTicketPanels, // Export de la nouvelle fonction
+  refreshActiveTicketControls, // Export de la nouvelle fonction
   sendBotNamePanel,
   startVisualTimer
 };
