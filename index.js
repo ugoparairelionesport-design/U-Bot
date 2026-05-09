@@ -5,7 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.8.89');
+console.log('🚀 [index.js] Loading version 2.8.91');
 
 // Sécurité Replit : Installation automatique de @napi-rs/canvas si manquant au démarrage
 try {

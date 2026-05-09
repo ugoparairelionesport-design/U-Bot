@@ -44,19 +44,26 @@ class AISystem {
 
   async processAIChat(message) {
     try {
-      await message.channel.sendTyping().catch(() => {});
+      console.log(`DEBUG [IA]: Début processAIChat pour ${message.author.tag}`);
+      await message.channel.sendTyping().catch(e => console.warn("⚠️ Typing error:", e.message));
 
-      const apiKey = process.env.GROQ_API_KEY?.trim();
+      const apiKey = (process.env.GROQ_API_KEY || "").trim();
       if (!apiKey) {
-        console.error("❌ [IA] GROQ_API_KEY manquante dans les variables d'environnement.");
+        console.error("❌ [IA] GROQ_API_KEY est vide ou non définie dans les Secrets.");
         return message.reply("❌ Erreur : La clé `GROQ_API_KEY` est manquante dans les secrets du bot.");
       }
 
+      console.log(`DEBUG [IA]: Clé API détectée (longueur: ${apiKey.length})`);
+
       // Nettoyage du prompt (retrait de la mention du bot)
-      const mentionRegex = new RegExp(`<@!?${this.client.user.id}>`, 'g');
+      const botId = this.client.user?.id;
+      const mentionRegex = new RegExp(`<@!?${botId}>`, 'g');
       const prompt = message.content.replace(mentionRegex, '').trim();
       
-      if (!prompt) return; // Ne rien faire si le message est vide après nettoyage
+      if (!prompt) {
+        console.log("DEBUG [IA]: Prompt vide après nettoyage, abandon.");
+        return;
+      }
 
       console.log(`📡 [IA] Envoi du prompt à Groq (${prompt.length} chars)...`);
 
