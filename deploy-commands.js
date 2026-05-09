@@ -135,31 +135,27 @@ async function deployCommands() {
     }
 
     try {
-        console.log("🧹 [1/3] NETTOYAGE : Suppression des commandes globales...");
-        await rest.put(Routes.applicationCommands(clientId), { body: [] });
-        console.log("✅ Cache global Discord vidé.");
-
         if (guildId) {
-            console.log(`🧹 [2/3] NETTOYAGE : Suppression des commandes du serveur ${guildId}...`);
+            console.log(`🧹 [1/2] NETTOYAGE : Suppression des commandes locales (Serveur: ${guildId})...`);
             await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
-            console.log("✅ Cache du serveur spécifique vidé.");
-        } else {
-            console.warn("⚠️ [SKIP] Pas de GUILD_ID détecté dans les Secrets. Les doublons au niveau serveur ne seront pas nettoyés.");
+            console.log("✅ Cache local vidé.");
         }
 
-        console.log(`🚀 [3/3] DEPLOY : Envoi de ${commands.length} commandes (v2.9.8)...`);
-        console.log("ℹ️ Note : Si les doublons persistent, redémarrez votre application Discord (Ctrl+R).");
-
+        console.log(`🚀 [2/2] DEPLOY : Envoi de ${commands.length} commandes en GLOBAL (v2.9.9)...`);
         await rest.put(
             Routes.applicationCommands(clientId),
             { body: commands.map(command => command.toJSON()) },
         );
 
-        console.log(`✅ ${commands.length} commandes slash déployées avec succès !`);
-        process.exit(0); // Force la sortie pour permettre l'exécution du kill 1
+        console.log(`✅ Déploiement global terminé !`);
+        
+        // Sécurité : n'éteint le processus que si lancé via "node deploy-commands.js"
+        if (require.main === module) {
+            setTimeout(() => process.exit(0), 2000);
+        }
     } catch (error) {
         console.error('❌ Erreur lors du déploiement des commandes slash :', error);
-        process.exit(1);
+        if (require.main === module) process.exit(1);
     }
 }
 
