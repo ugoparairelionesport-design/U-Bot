@@ -135,20 +135,21 @@ async function deployCommands() {
     }
 
     try {
-        console.log("🧹 [CLEANUP] Suppression des commandes globales...");
-        // Supprime TOUTES les commandes globales existantes
+        console.log("🧹 [1/3] PURGE TOTALE : Suppression des commandes globales...");
         await rest.put(Routes.applicationCommands(clientId), { body: [] });
-        console.log(`✅ Cache des commandes globales vidé.`);
+        console.log("✅ Cache global vidé.");
 
         if (guildId) {
-            console.log(`🧹 [CLEANUP] Suppression des commandes du serveur ${guildId}...`);
+            console.log(`🧹 [2/3] PURGE TOTALE : Suppression des commandes du serveur ${guildId}...`);
             await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
-            console.log(`✅ Cache du serveur ${guildId} vidé.`);
+            console.log("✅ Cache du serveur vidé.");
+        } else {
+            console.warn("⚠️ [SKIP] GUILD_ID non défini dans .env, purge du serveur ignorée.");
         }
 
-        console.log(`🚀 [DEPLOY] Enregistrement de ${commands.length} commandes (Version 2.9.5)...`);
+        console.log(`🚀 [3/3] DÉPLOIEMENT : Enregistrement de ${commands.length} commandes (Version 2.9.6)...`);
+        console.log("ℹ️ Note : Le déploiement global peut prendre jusqu'à 1h pour se rafraîchir sur Discord.");
 
-        // On déploie en GLOBAL par défaut pour la production
         await rest.put(
             Routes.applicationCommands(clientId),
             { body: commands.map(command => command.toJSON()) },
