@@ -1,5 +1,4 @@
 const { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
-const { fetch } = require('undici');
 const configSystem = require('./configsystem');
 
 class AISystem {
@@ -45,7 +44,10 @@ class AISystem {
   async processAIChat(message) {
     try {
       console.log(`DEBUG [IA]: Début processAIChat pour ${message.author.tag}`);
-      await message.channel.sendTyping().catch(e => console.warn("⚠️ Typing error:", e.message));
+
+      // On lance l'indicateur d'écriture sans "await" pour ne pas bloquer
+      message.channel.sendTyping().catch(e => console.warn("⚠️ Typing error:", e.message));
+      console.log(`DEBUG [IA]: sendTyping lancé.`);
 
       const apiKey = (process.env.GROQ_API_KEY || "").trim();
       if (!apiKey) {
