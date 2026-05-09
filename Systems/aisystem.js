@@ -14,14 +14,21 @@ class AISystem {
     const guildConfig = configSystem.getGuildConfig(message.guild.id);
     const settings = guildConfig.ai;
     
-    // Vérification du switch global (Master Switch)
-    if (!settings?.enabled) return;
+    // Vérification du switch global
+    if (!settings?.enabled) {
+        // console.log("DEBUG IA: Module global désactivé");
+        return;
+    }
 
     // 1. Logique de Chat IA (si mentionné ou dans le salon dédié)
     const isMentioned = message.mentions.has(this.client.user);
     const isAiChannel = settings.aiChannel && (message.channel.id === settings.aiChannel);
 
     if (settings.chatEnabled && (isMentioned || isAiChannel)) {
+      if (!message.content && !isMentioned) return;
+      
+      console.log(`🤖 [IA] Message reçu de ${message.author.tag} dans #${message.channel.name} (Mention: ${isMentioned})`);
+      
       // On ignore les messages vides (stickers, images sans texte)
       if (!message.content && !isMentioned) return;
       

@@ -66,7 +66,7 @@ class XPSystem {
 
     const userData = guildConfig.xp.users[member.id] || { xp: 0, level: 0, prestige: 0, badges: [] };
     const xpNeeded = this.getXPForLevel(userData.level);
-    const progress = userData.xp / xpNeeded;
+    const progress = Math.max(0, Math.min(1, (userData.xp || 0) / (xpNeeded || 100))) || 0;
 
     const canvas = createCanvas(900, 300);
     const ctx = canvas.getContext('2d');
@@ -112,17 +112,17 @@ class XPSystem {
     ctx.roundRect(300, 200, 500, 30, 15);
     ctx.fill();
 
-    ctx.fillStyle = String(guildConfig.globalEmbedColor || '#5865f2');
-    const barWidth = Math.max(0, Math.min(500, 500 * (progress || 0)));
+    ctx.fillStyle = String(guildConfig.globalEmbedColor || "#5865f2");
+    const barWidth = Math.max(0, Math.min(500, 500 * progress));
     ctx.roundRect(300, 200, barWidth, 30, 15);
     ctx.fill();
 
     // Texte XP
     ctx.fillStyle = '#ffffff';
     ctx.font = '20px sans-serif';
-    ctx.fillText(`${String(userData.xp || 0)} / ${String(xpNeeded)} XP`, 500, 222);
+    ctx.fillText(String(`${userData.xp || 0} / ${xpNeeded} XP`), 500, 222);
 
-    return canvas.toBuffer();
+    return canvas.toBuffer('image/png');
   }
 
   async getLeaderboard(guild) {
