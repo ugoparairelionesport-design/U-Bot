@@ -143,10 +143,10 @@ async function deployCommands() {
         if (guildId) {
             console.log(`🧹 [CLEANUP] Suppression des commandes du serveur ${guildId}...`);
             await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
-            console.log(`✅ Cache du serveur vidé.`);
+            console.log(`✅ Cache du serveur ${guildId} vidé.`);
         }
 
-        console.log(`🚀 [DEPLOY] Enregistrement de ${commands.length} commandes (Version 2.9.4)...`);
+        console.log(`🚀 [DEPLOY] Enregistrement de ${commands.length} commandes (Version 2.9.5)...`);
 
         // On déploie en GLOBAL par défaut pour la production
         await rest.put(
