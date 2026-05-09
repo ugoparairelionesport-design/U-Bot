@@ -14,19 +14,24 @@ class AISystem {
     const guildConfig = configSystem.getGuildConfig(message.guild.id);
     const settings = guildConfig.ai;
     
-    // Vérification des switches d'activation
-    if (!settings?.enabled || !settings?.chatEnabled) return;
+    // Vérification du switch global (Master Switch)
+    if (!settings?.enabled) return;
 
-    // Logique de Chat IA (si mentionné ou dans le salon dédié)
+    // 1. Logique de Chat IA (si mentionné ou dans le salon dédié)
     const isMentioned = message.mentions.has(this.client.user);
     const isAiChannel = settings.aiChannel && (message.channel.id === settings.aiChannel);
 
-    if (isMentioned || isAiChannel) {
+    if (settings.chatEnabled && (isMentioned || isAiChannel)) {
       // On ignore les messages vides (stickers, images sans texte)
       if (!message.content && !isMentioned) return;
       
       console.log(`🤖 [IA] Message détecté dans #${message.channel.name} (Mention: ${isMentioned}, Salon Dédié: ${isAiChannel})`);
-      await this.processAIChat(message);
+      return await this.processAIChat(message);
+    }
+
+    // 2. Correction Orthographique (si activé et message assez long)
+    if (settings.spellCheck && message.content.length > 20 && !message.content.startsWith('/')) {
+      await this.processSpellCheck(message);
     }
   }
 
@@ -141,9 +146,47 @@ class AISystem {
     }
   }
 
-  async checkGrammar(text) {
-    // Logique de correction
-    return text; // Retourne le texte corrigé
+  async processSpellCheck(message) {
+    try {
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) return;
+
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [
+            { role: "system", content: "Tu es un correcteur d'orthographe. Si le texte contient des fautes, renvoie uniquement la version corrigée sans aucun commentaire. Si le texte est déjà correct, renvoie le mot 'CORRECT'." },
+            { role: "user", content: message.content }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      const result = data.choices?.[0]?.message?.content;
+
+      if (result && result !== "CORRECT" && result.toLowerCase() !== message.content.toLowerCase()) {
+        // On propose la correction discrètement
+        const embed = new EmbedBuilder()
+          .setAuthor({ name: "Suggestion d'orthographe", iconURL: this.client.user.displayAvatarURL() })
+          .setDescription(`*Correction suggérée pour <@${message.author.id}> :*\n\n> ${result}`)
+          .setColor("#5865F2");
+
+        const reply = await message.reply({ embeds: [embed] });
+        // Auto-suppression après 15 secondes pour ne pas polluer
+        setTimeout(() => reply.delete().catch(() => {}), 15000);
+      }
+    } catch (err) {
+      console.error("AI SPELLCHECK ERROR:", err);
+    }
+  }
+
+  async checkGrammar(text) { // Maintenu pour compatibilité
+    return text;
   }
 
   async showAnnouncementModal(interaction) {

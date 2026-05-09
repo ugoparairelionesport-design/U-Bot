@@ -62,7 +62,7 @@ class XPSystem {
   }
 
   async generateProfileCard(member, guildConfig) {
-    if (!createCanvas) return null;
+    if (!createCanvas || !member || !member.user) return null;
 
     const userData = guildConfig.xp.users[member.id] || { xp: 0, level: 0, prestige: 0, badges: [] };
     const xpNeeded = this.getXPForLevel(userData.level);
@@ -75,9 +75,10 @@ class XPSystem {
     ctx.fillStyle = '#1e1f22';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
-    if (guildConfig.globalEmbedBanner) {
+    const bannerUrl = guildConfig.globalEmbedBanner;
+    if (bannerUrl && typeof bannerUrl === 'string') {
         try {
-            const bg = await loadImage(guildConfig.globalEmbedBanner);
+            const bg = await loadImage(bannerUrl);
             ctx.globalAlpha = 0.3;
             ctx.drawImage(bg, 0, 0, canvas.width, canvas.height);
             ctx.globalAlpha = 1.0;
@@ -85,11 +86,16 @@ class XPSystem {
     }
 
     // Avatar
-    ctx.save();
-    ctx.beginPath(); ctx.arc(150, 150, 100, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
-    const avatar = await loadImage(member.user.displayAvatarURL({ extension: 'png' }));
-    ctx.drawImage(avatar, 50, 50, 200, 200);
-    ctx.restore();
+    try {
+        const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 256 });
+        const avatar = await loadImage(avatarUrl);
+        ctx.save();
+        ctx.beginPath(); ctx.arc(150, 150, 100, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+        ctx.drawImage(avatar, 50, 50, 200, 200);
+        ctx.restore();
+    } catch (e) {
+        console.warn("⚠️ Impossible de charger l'avatar pour la carte de profil.");
+    }
 
     // Pseudo et Level
     ctx.fillStyle = '#ffffff';
@@ -99,21 +105,22 @@ class XPSystem {
     ctx.font = '30px sans-serif';
     ctx.fillStyle = guildConfig.globalEmbedColor || '#5865f2';
     ctx.fillText(`LEVEL ${String(userData.level || 0)}`, 300, 150);
-    if (userData.prestige > 0) ctx.fillText(`• PRESTIGE ${userData.prestige}`, 500, 150);
+    if (userData.prestige > 0) ctx.fillText(`• PRESTIGE ${String(userData.prestige)}`, 500, 150);
 
     // Barre d'XP
     ctx.fillStyle = '#444';
     ctx.roundRect(300, 200, 500, 30, 15);
     ctx.fill();
 
-    ctx.fillStyle = guildConfig.globalEmbedColor || '#5865f2';
-    ctx.roundRect(300, 200, 500 * progress, 30, 15);
+    ctx.fillStyle = String(guildConfig.globalEmbedColor || '#5865f2');
+    const barWidth = Math.max(0, Math.min(500, 500 * (progress || 0)));
+    ctx.roundRect(300, 200, barWidth, 30, 15);
     ctx.fill();
 
     // Texte XP
     ctx.fillStyle = '#ffffff';
     ctx.font = '20px sans-serif';
-    ctx.fillText(`${userData.xp} / ${xpNeeded} XP`, 500, 222);
+    ctx.fillText(`${String(userData.xp || 0)} / ${String(xpNeeded)} XP`, 500, 222);
 
     return canvas.toBuffer();
   }

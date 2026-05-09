@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.82...');
+console.log('🚀 [configsystem.js] Loading version 2.8.85...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -2692,6 +2692,7 @@ async function sendAIConfigPanel(interaction) {
       "### 🧠 Intelligence Artificielle Intégrée\n" +
       "> *Automatisez les tâches redondantes et améliorez l'expérience utilisateur grâce à l'IA.*\n\n" +
       "**✨ Modules Disponibles**\n" +
+      `┣ 📡 **Module Global** : ${settings.enabled ? '`🟢 ACTIVÉ`' : '`🔴 DÉSACTIVÉ`'}\n` +
       `┣ 💬 **Chat IA** : ${settings.chatEnabled ? '`🟢 ON`' : '`🔴 OFF`'}\n` +
       `┣ 🌍 **Traduction Auto** : ${settings.autoTranslate ? '`🟢 ON`' : '`🔴 OFF`'}\n` +
       `┣ ✍️ **Correction Ortho** : ${settings.spellCheck ? '`🟢 ON`' : '`🔴 OFF`'}\n` +
@@ -2700,8 +2701,13 @@ async function sendAIConfigPanel(interaction) {
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
     .setImage(guildConfig.globalEmbedBanner)
-    .setColor(guildConfig.globalEmbedColor)
+    .setColor(settings.enabled ? guildConfig.globalEmbedColor : "#2B2D31")
     .setTimestamp();
+
+  const rowMaster = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('ai_toggle_status').setLabel(settings.enabled ? 'Désactiver le module' : 'Activer le module').setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('ai_set_channel').setLabel('Définir Salon IA').setStyle(ButtonStyle.Primary)
+  );
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('ai_toggle_chat').setLabel('Chat IA').setStyle(settings.chatEnabled ? ButtonStyle.Success : ButtonStyle.Secondary),
@@ -2711,11 +2717,10 @@ async function sendAIConfigPanel(interaction) {
 
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('ai_toggle_staff').setLabel('Suggestions Staff').setStyle(settings.staffSuggestions ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('ai_set_channel').setLabel('Définir Salon').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId('prot_hub_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
   );
 
-  return replyAndAutoDelete(interaction, { embeds: [embed], components: [row1, row2], flags: 64 });
+  return replyAndAutoDelete(interaction, { embeds: [embed], components: [rowMaster, row1, row2], flags: 64 });
 }
 
 async function toggleAISetting(interaction, key) {
