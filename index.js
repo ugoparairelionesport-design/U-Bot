@@ -5,7 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.8.87');
+console.log('🚀 [index.js] Loading version 2.8.88');
 
 // Sécurité Replit : Installation automatique de @napi-rs/canvas si manquant au démarrage
 try {
@@ -310,6 +310,7 @@ client.on('interactionCreate', async interaction => {
         return client.configSystem.sendAntiSpamConfigPanel(interaction);
       }
 
+      if (interaction.customId === 'ai_toggle_status') return client.configSystem.toggleAISetting(interaction, 'enabled');
       if (interaction.customId === 'ai_toggle_chat') return client.configSystem.toggleAISetting(interaction, 'chatEnabled');
       if (interaction.customId === 'ai_toggle_translate') return client.configSystem.toggleAISetting(interaction, 'autoTranslate');
       if (interaction.customId === 'ai_toggle_ortho') return client.configSystem.toggleAISetting(interaction, 'spellCheck');
