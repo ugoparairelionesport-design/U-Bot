@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.8.95...');
+console.log('🚀 [configsystem.js] Loading version 2.9.1 (Dynamic Support)...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -885,111 +885,134 @@ function sendConfigPanel(interaction) {
 async function handleButtons(interaction) {
   try {
     const guildConfig = getGuildConfig(interaction.guildId);
-    const client = interaction.client;
 
-    // 1. Système de Maintenance
-    if (interaction.customId.startsWith('maintenance_') && client.maintenance) {
-      return await client.maintenance.handleButton(interaction);
-    }
-
-    // 2. Boutons de configuration prioritaire
+    // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
     if (interaction.customId === 'bot_name_set_btn') {
       return await handleBotNameButtonClick(interaction);
     }
 
-    // 3. Protection Hub & Toggles
     if (interaction.customId === 'logs_toggle_status') return await toggleLogsStatus(interaction);
     if (interaction.customId === 'logs_setup_channels') return await setupLogsChannels(interaction);
 
-    if (interaction.customId === 'antiraid_toggle_status') {
-      guildConfig.antiRaid.enabled = !guildConfig.antiRaid.enabled;
-      saveConfig(configData);
-      return sendAntiRaidConfigPanel(interaction);
-    }
-    if (interaction.customId === 'antiraid_setup') return interaction.showModal(buildAntiRaidModal(guildConfig.antiRaid));
-    if (interaction.customId === 'antiraid_toggle_lockdown' && client.antiRaid) return await client.antiRaid.toggleLockdown(interaction);
-
-    if (interaction.customId === 'antispam_toggle_status') {
-      guildConfig.antiSpam.enabled = !guildConfig.antiSpam.enabled;
-      saveConfig(configData);
-      return sendAntiSpamConfigPanel(interaction);
-    }
-    if (interaction.customId === 'antispam_setup') return interaction.showModal(buildAntiSpamModal(guildConfig.antiSpam));
-
-    if (interaction.customId === 'verify_toggle_status') {
-      guildConfig.verification.enabled = !guildConfig.verification.enabled;
-      saveConfig(configData);
-      return sendVerificationConfigPanel(interaction);
-    }
-    if (interaction.customId === 'verify_setup') return interaction.showModal(buildVerificationModal(guildConfig.verification));
-    if (interaction.customId === 'verify_send_panel') return sendUserVerificationPanel(interaction);
-    if (interaction.customId === 'verify_start') return client.verification.handleVerifyButtonClick(interaction);
-    if (interaction.customId === 'verify_enter_code') return client.verification.showCodeModal(interaction);
-
-    if (interaction.customId === 'dmlock_toggle_status') {
-      guildConfig.dmLock.enabled = !guildConfig.dmLock.enabled;
-      saveConfig(configData);
-      return sendDmLockConfigPanel(interaction);
-    }
-    if (interaction.customId === 'dmlock_send_panel') return sendUserDmSafetyPanel(interaction);
-
-    // 4. Système IA
-    if (interaction.customId === 'ai_toggle_status') return toggleAISetting(interaction, 'enabled');
-    if (interaction.customId === 'ai_toggle_chat') return toggleAISetting(interaction, 'chatEnabled');
-    if (interaction.customId === 'ai_toggle_translate') return toggleAISetting(interaction, 'autoTranslate');
-    if (interaction.customId === 'ai_toggle_ortho') return toggleAISetting(interaction, 'spellCheck');
-    if (interaction.customId === 'ai_toggle_staff') return toggleAISetting(interaction, 'staffSuggestions');
-    
-    if (interaction.customId === 'ai_set_channel') return interaction.showModal(buildChannelIdModal('modal_ai_channel', 'Salon IA', 'ID du Salon'));
-    if (interaction.customId === 'ai_action_summarize') {
-      await interaction.deferReply({ flags: 64 });
-      const summary = await client.aiSystem.summarizeConversation(interaction.channel);
-      return interaction.editReply({ content: `### 📝 Résumé de la conversation\n${summary}` });
-    }
-    if (interaction.customId === 'ai_action_gen_events') {
-      await interaction.deferReply({ flags: 64 });
-      const ideas = await client.aiSystem.generateEventIdeas(interaction.guild);
-      return interaction.editReply({ content: `### 💡 Idées d'événements (IA)\n${ideas}` });
-    }
-
-    // 5. Système Live
-    if (interaction.customId.startsWith('live_config_')) {
-      const platform = interaction.customId.replace('live_config_', '');
-      return interaction.showModal(buildLiveConfigModal(platform));
-    }
-    if (interaction.customId === 'live_edit_select') return handleLiveEditSelect(interaction, interaction.values[0]);
-    if (interaction.customId.startsWith('live_btn_edit_')) {
-      const url = interaction.customId.replace('live_btn_edit_', '');
-      const live = guildConfig.liveConfigs.find(l => l.url === url);
-      return interaction.showModal(buildLiveConfigModal(live.platform, live));
-    }
-    if (interaction.customId.startsWith('live_btn_del_')) return handleLiveDelete(interaction, interaction.customId.replace('live_btn_del_', ''));
-
-    // 6. Accueil & XP
     if (interaction.customId === 'entrance_toggle_status') return await toggleEntranceStatus(interaction);
     if (interaction.customId === 'entrance_toggle_rules') return await toggleEntranceRules(interaction);
     if (interaction.customId === 'entrance_toggle_image') return await toggleEntranceImage(interaction);
     if (interaction.customId === 'entrance_setup_welcome') return await interaction.showModal(buildEntranceTextModal(guildConfig.entrance));
     if (interaction.customId === 'entrance_setup_roles') return await interaction.showModal(buildEntranceRolesModal(guildConfig.entrance));
-    if (interaction.customId === 'entrance_send_rules') return await client.entranceSystem.sendRulesPanel(interaction);
+    if (interaction.customId === 'entrance_setup_rules') return await interaction.showModal(buildEntranceRulesModal(guildConfig.entrance));
+    if (interaction.customId === 'entrance_send_rules') return await interaction.client.entranceSystem.sendRulesPanel(interaction);
+
     if (interaction.customId === 'xp_toggle_status') return await toggleXPStatus(interaction);
 
-    // 7. Global Design
-    if (interaction.customId === 'prot_hub_back') return await sendProtectionConfigPanel(interaction);
-    if (interaction.customId === 'global_banner_set_btn' || interaction.customId === 'prot_banner_set_btn') {
-      return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image (Bannière large)').setPlaceholder('Collez le lien direct de votre image ici').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
+    if (interaction.customId === 'prot_hub_back') {
+      return await sendProtectionConfigPanel(interaction);
     }
-    if (interaction.customId === 'global_color_set_btn') return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code couleur HEX (ex: #FF0000)').setPlaceholder('Ex: #5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
+
+    if (interaction.customId === 'prot_hub_antiraid') {
+      return await sendAntiRaidConfigPanel(interaction);
+    }
+
+    if (interaction.customId === 'prot_hub_antispam') {
+      return await sendAntiSpamConfigPanel(interaction);
+    }
+
+    if (interaction.customId === 'prot_hub_captcha') {
+      return await sendVerificationConfigPanel(interaction);
+    }
+
+    if (interaction.customId === 'prot_hub_dmlock') {
+      return await sendDmLockConfigPanel(interaction);
+    }
+
+    if (interaction.customId === 'global_banner_set_btn' || interaction.customId === 'prot_banner_set_btn') {
+      const guildConfig = getGuildConfig(interaction.guildId);
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_set_global_banner')
+          .setTitle('Image de fond des Embeds')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('banner_url')
+                .setLabel('URL de l\'image (Bannière large)')
+                .setPlaceholder('Collez le lien direct de votre image ici')
+                .setValue(guildConfig.globalEmbedBanner || '')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+            )
+          )
+      );
+    }
+
+    if (interaction.customId === 'global_color_set_btn') {
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_set_global_color')
+          .setTitle('Couleur des Embeds')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('color_hex')
+                .setLabel('Code couleur HEX (ex: #FF0000)')
+                .setPlaceholder('Ex: #5865F2')
+                .setValue(guildConfig.globalEmbedColor || '#5865F2')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+            )
+          )
+      );
+    }
 
     // Gestion des boutons et menus de sélection spécifiques
     switch (interaction.customId) {
       case 'ticket_select': {
-        if (!interaction.isStringSelectMenu()) break;
-        return await createTicketFromChoice(interaction, interaction.values[0]);
+        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
+      const choice = interaction.values[0];
+      const categoryId = guildConfig.categories[choice];
+      const roleIds = getRoleIds(guildConfig.roles[choice]);
+
+      if (!categoryId) {
+        return replyAndAutoDelete(interaction, { content: "❌ Catégorie introuvable.", flags: 64 });
+      }
+
+      if (getTicketCount(interaction.guildId, interaction.user.id) >= 3) {
+        return replyAndAutoDelete(interaction, { content: "❌ Max 3 tickets", flags: 64 });
+      }
+
+      const category = await interaction.guild.channels.fetch(categoryId).catch(() => null);
+
+      if (!category || category.type !== ChannelType.GuildCategory) {
+        return replyAndAutoDelete(interaction, { content: `❌ Catégorie invalide pour l'option ${choice}`, flags: 64 });
+      }
+
+      if (roleIds.some(roleId => !interaction.guild.roles.cache.get(roleId))) {
+        return replyAndAutoDelete(interaction, { content: `❌ Rôle de modération invalide pour l'option ${choice}`, flags: 64 });
+      }
+
+      if (!(await ensureBotPermissions(interaction))) {
+        return;
+      }
+
+      pendingTicketCreations.set(interaction.user.id, { choice });
+
+      return interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('modal_ticket_opening')
+          .setTitle('Ouvrir ticket')
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('opening_reason')
+                .setLabel("Raison d'ouverture (optionnelle)")
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false)
+            )
+          )
+      );
       }
 
       case 'modif_select': {
-        if (!interaction.isStringSelectMenu()) break;
+        if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const selected = interaction.values[0];
       
         if (selected === 'logs') return interaction.showModal(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
@@ -1007,6 +1030,27 @@ async function handleButtons(interaction) {
         }
         break;
       }
+
+      case 'bot_name_set_btn':
+        return await handleBotNameButtonClick(interaction);
+      
+      case 'prot_hub_back':
+        return await sendProtectionConfigPanel(interaction);
+      case 'prot_hub_antiraid':
+        return await sendAntiRaidConfigPanel(interaction);
+      case 'prot_hub_antispam':
+        return await sendAntiSpamConfigPanel(interaction);
+      case 'prot_hub_captcha':
+        return await sendVerificationConfigPanel(interaction);
+      case 'prot_hub_dmlock':
+        return await sendDmLockConfigPanel(interaction);
+
+      case 'global_banner_set_btn':
+      case 'prot_banner_set_btn': // Ancien ID pour compatibilité
+        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image (Bannière large)').setPlaceholder('Collez le lien direct de votre image ici').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
+
+      case 'global_color_set_btn':
+        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code couleur HEX (ex: #FF0000)').setPlaceholder('Ex: #5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
 
       case 'refresh_stats':
       await interaction.deferUpdate();
