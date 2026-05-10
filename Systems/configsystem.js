@@ -1105,12 +1105,33 @@ async function handleButtons(interaction) {
       case 'prot_hub_dmlock':
         return await sendDmLockConfigPanel(interaction);
       case 'antiraid_toggle_status':
-        guildConfig.antiRaid.enabled = !guildConfig.antiRaid.enabled; saveConfig(configData); return sendAntiRaidConfigPanel(interaction);
+        guildConfig.antiRaid.enabled = !guildConfig.antiRaid.enabled;
+        saveConfig(configData);
+        return await sendAntiRaidConfigPanel(interaction);
       case 'antiraid_setup':
         return interaction.showModal(buildAntiRaidModal(guildConfig.antiRaid));
+      case 'antispam_toggle_status':
+        guildConfig.antiSpam.enabled = !guildConfig.antiSpam.enabled;
+        saveConfig(configData);
+        return await sendAntiSpamConfigPanel(interaction);
+      case 'verify_toggle_status':
+        guildConfig.verification.enabled = !guildConfig.verification.enabled;
+        saveConfig(configData);
+        return await sendVerificationConfigPanel(interaction);
+      case 'verify_setup':
+        return interaction.showModal(buildVerificationModal(guildConfig.verification));
+      case 'verify_send_panel':
+        return await sendUserVerificationPanel(interaction);
+      case 'dmlock_toggle_status':
+        guildConfig.dmLock.enabled = !guildConfig.dmLock.enabled;
+        saveConfig(configData);
+        return await sendDmLockConfigPanel(interaction);
+      case 'dmlock_send_panel':
+        return await sendUserDmSafetyPanel(interaction);
 
       // == LOGS & ENTRANCE ==
-      case 'logs_toggle_status': return await toggleLogsStatus(interaction);
+      case 'logs_toggle_status':
+        return await toggleLogsStatus(interaction);
       case 'logs_setup_channels': return await setupLogsChannels(interaction);
       case 'entrance_toggle_status': return await toggleEntranceStatus(interaction);
       case 'entrance_toggle_rules': return await toggleEntranceRules(interaction);
@@ -1374,6 +1395,7 @@ async function handleButtons(interaction) {
         return replyAndAutoDelete(interaction, { content: "❌ Seul le modérateur ayant lancé la fermeture peut la confirmer", flags: 64 });
       }
 
+      await interaction.deferUpdate(); // Plus de message "Fermeture...", on traite directement
       await interaction.channel.setName(getClosingChannelName(interaction.channel.name)).catch(() => {});
 
       const ownerId = guildConfig.ticketOwners[interaction.channel.id];
@@ -1679,6 +1701,7 @@ async function handleModal(interaction) {
     }
 
     if (interaction.customId === 'modal_set_global_banner') {
+      await interaction.deferReply({ flags: 64 });
       const url = interaction.fields.getTextInputValue('banner_url').trim();
       guildConfig.globalEmbedBanner = url || null;
       saveConfig(configData);
