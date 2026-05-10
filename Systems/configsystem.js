@@ -1082,86 +1082,45 @@ function sendConfigPanel(interaction) {
 async function handleButtons(interaction) {
   try {
     const guildConfig = getGuildConfig(interaction.guildId);
-
-    // RÉPONSE PRIORITAIRE : On traite le bouton AVANT toute lecture de fichier
-    if (interaction.customId === 'bot_name_set_btn') {
-      return await handleBotNameButtonClick(interaction);
-    }
-
-    if (interaction.customId === 'logs_toggle_status') return await toggleLogsStatus(interaction);
-    if (interaction.customId === 'logs_setup_channels') return await setupLogsChannels(interaction);
-
-    if (interaction.customId === 'entrance_toggle_status') return await toggleEntranceStatus(interaction);
-    if (interaction.customId === 'entrance_toggle_rules') return await toggleEntranceRules(interaction);
-    if (interaction.customId === 'entrance_toggle_image') return await toggleEntranceImage(interaction);
-    if (interaction.customId === 'entrance_setup_welcome') return await interaction.showModal(buildEntranceTextModal(guildConfig.entrance));
-    if (interaction.customId === 'entrance_setup_roles') return await interaction.showModal(buildEntranceRolesModal(guildConfig.entrance));
-    if (interaction.customId === 'entrance_setup_rules') return await interaction.showModal(buildEntranceRulesModal(guildConfig.entrance));
-    if (interaction.customId === 'entrance_send_rules') return await interaction.client.entranceSystem.sendRulesPanel(interaction);
-
-    if (interaction.customId === 'xp_toggle_status') return await toggleXPStatus(interaction);
-
-    if (interaction.customId === 'prot_hub_back') {
-      return await sendProtectionConfigPanel(interaction);
-    }
-
-    if (interaction.customId === 'prot_hub_antiraid') {
-      return await sendAntiRaidConfigPanel(interaction);
-    }
-
-    if (interaction.customId === 'prot_hub_antispam') {
-      return await sendAntiSpamConfigPanel(interaction);
-    }
-
-    if (interaction.customId === 'prot_hub_captcha') {
-      return await sendVerificationConfigPanel(interaction);
-    }
-
-    if (interaction.customId === 'prot_hub_dmlock') {
-      return await sendDmLockConfigPanel(interaction);
-    }
-
-    if (interaction.customId === 'global_banner_set_btn' || interaction.customId === 'prot_banner_set_btn') {
-      const guildConfig = getGuildConfig(interaction.guildId);
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_set_global_banner')
-          .setTitle('Image de fond des Embeds')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('banner_url')
-                .setLabel('URL de l\'image (Bannière large)')
-                .setPlaceholder('Collez le lien direct de votre image ici')
-                .setValue(guildConfig.globalEmbedBanner || '')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-            )
-          )
-      );
-    }
-
-    if (interaction.customId === 'global_color_set_btn') {
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_set_global_color')
-          .setTitle('Couleur des Embeds')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('color_hex')
-                .setLabel('Code couleur HEX (ex: #FF0000)')
-                .setPlaceholder('Ex: #5865F2')
-                .setValue(guildConfig.globalEmbedColor || '#5865F2')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true)
-            )
-          )
-      );
-    }
-
-    // Gestion des boutons et menus de sélection spécifiques
+    
     switch (interaction.customId) {
+      // == BOT CUSTOMIZATION ==
+      case 'bot_name_set_btn':
+        return await handleBotNameButtonClick(interaction);
+      case 'global_banner_set_btn':
+      case 'prot_banner_set_btn':
+        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image').setPlaceholder('Lien direct').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
+      case 'global_color_set_btn':
+        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code HEX').setPlaceholder('#5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
+
+      // == PROTECTION HUB ==
+      case 'prot_hub_back':
+        return await sendProtectionConfigPanel(interaction);
+      case 'prot_hub_antiraid':
+        return await sendAntiRaidConfigPanel(interaction);
+      case 'prot_hub_antispam':
+        return await sendAntiSpamConfigPanel(interaction);
+      case 'prot_hub_captcha':
+        return await sendVerificationConfigPanel(interaction);
+      case 'prot_hub_dmlock':
+        return await sendDmLockConfigPanel(interaction);
+      case 'antiraid_toggle_status':
+        guildConfig.antiRaid.enabled = !guildConfig.antiRaid.enabled; saveConfig(configData); return sendAntiRaidConfigPanel(interaction);
+      case 'antiraid_setup':
+        return interaction.showModal(buildAntiRaidModal(guildConfig.antiRaid));
+
+      // == LOGS & ENTRANCE ==
+      case 'logs_toggle_status': return await toggleLogsStatus(interaction);
+      case 'logs_setup_channels': return await setupLogsChannels(interaction);
+      case 'entrance_toggle_status': return await toggleEntranceStatus(interaction);
+      case 'entrance_toggle_rules': return await toggleEntranceRules(interaction);
+      case 'entrance_toggle_image': return await toggleEntranceImage(interaction);
+      case 'entrance_setup_welcome': return await interaction.showModal(buildEntranceTextModal(guildConfig.entrance));
+      case 'entrance_setup_roles': return await interaction.showModal(buildEntranceRolesModal(guildConfig.entrance));
+      case 'entrance_setup_rules': return await interaction.showModal(buildEntranceRulesModal(guildConfig.entrance));
+      case 'entrance_send_rules': return await interaction.client.entranceSystem.sendRulesPanel(interaction);
+
+      // == TICKETS ==
       case 'ticket_select': {
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const choice = interaction.values[0];
@@ -1211,7 +1170,6 @@ async function handleButtons(interaction) {
       case 'modif_select': {
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const selected = interaction.values[0];
-      
         if (selected === 'logs') return interaction.showModal(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
         if (selected === 'stats') return interaction.showModal(buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats'));
         if (selected === 'options_panel') {
@@ -1227,27 +1185,6 @@ async function handleButtons(interaction) {
         }
         break;
       }
-
-      case 'bot_name_set_btn':
-        return await handleBotNameButtonClick(interaction);
-      
-      case 'prot_hub_back':
-        return await sendProtectionConfigPanel(interaction);
-      case 'prot_hub_antiraid':
-        return await sendAntiRaidConfigPanel(interaction);
-      case 'prot_hub_antispam':
-        return await sendAntiSpamConfigPanel(interaction);
-      case 'prot_hub_captcha':
-        return await sendVerificationConfigPanel(interaction);
-      case 'prot_hub_dmlock':
-        return await sendDmLockConfigPanel(interaction);
-
-      case 'global_banner_set_btn':
-      case 'prot_banner_set_btn': // Ancien ID pour compatibilité
-        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image (Bannière large)').setPlaceholder('Collez le lien direct de votre image ici').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
-
-      case 'global_color_set_btn':
-        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code couleur HEX (ex: #FF0000)').setPlaceholder('Ex: #5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
 
       case 'refresh_stats':
       await interaction.deferUpdate();
@@ -1437,7 +1374,6 @@ async function handleButtons(interaction) {
         return replyAndAutoDelete(interaction, { content: "❌ Seul le modérateur ayant lancé la fermeture peut la confirmer", flags: 64 });
       }
 
-      await interaction.reply({ content: "🔒 Fermeture...", flags: 64 });
       await interaction.channel.setName(getClosingChannelName(interaction.channel.name)).catch(() => {});
 
       const ownerId = guildConfig.ticketOwners[interaction.channel.id];
@@ -1743,20 +1679,15 @@ async function handleModal(interaction) {
     }
 
     if (interaction.customId === 'modal_set_global_banner') {
-      await interaction.deferReply({ flags: 64 });
       const url = interaction.fields.getTextInputValue('banner_url').trim();
-
-      if (!url || url.length < 5) {
-        guildConfig.globalEmbedBanner = null;
-        saveConfig(configData);
-        return interaction.editReply({ content: "🗑️ L'image d'embed a été supprimée." });
-      }
-
+      guildConfig.globalEmbedBanner = url || null;
+      saveConfig(configData);
+      
+      // On tente une sauvegarde Replit en arrière-plan sans bloquer
       try {
-        const replName = process.env.REPL_SLUG; 
+        const replName = process.env.REPL_SLUG;
         const replOwner = process.env.REPL_OWNER;
-
-        if (replName && replOwner && url.startsWith('http')) {
+        if (url.startsWith('http') && replName) {
           const response = await fetch(url);
           if (!response.ok) throw new Error();
           const buffer = Buffer.from(await response.arrayBuffer());
@@ -1892,16 +1823,7 @@ async function handleModal(interaction) {
         }
       }
 
-      const existingPanelMessageId = guildConfig.panelMessages[channelId];
-      if (existingPanelMessageId) {
-        const existingPanel = await channel.messages.fetch(existingPanelMessageId).catch(() => null);
-
-        if (existingPanel) {
-          return replyAndAutoDelete(interaction, { content: "❌ Un panel existe déjà dans ce salon", flags: 64 });
-        }
-      }
-
-    // --- NETTOYAGE AGRESSIF : Scan du salon pour supprimer TOUT ancien panel ---
+    // --- PURGE AUTOMATIQUE : On supprime les anciens panels avant d'envoyer le nouveau ---
     try {
       const messages = await channel.messages.fetch({ limit: 50 });
       const panelsToDelete = messages.filter(m => 
@@ -2045,37 +1967,15 @@ async function handleModal(interaction) {
         SendMessages: true,
         ReadMessageHistory: true
       }).catch(() => {});
+      
+      const addLog = new EmbedBuilder()
+        .setTitle("➕ Membre ajouté")
+        .setDescription(`${member.user} a été ajouté au ticket par ${interaction.user}.`)
+        .setColor(guildConfig.globalEmbedColor)
+        .setTimestamp();
 
-      await interaction.channel.send({
-        content: `<@${member.id}>`,
-        allowedMentions: {
-          users: [member.id]
-        },
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("➕ Membre ajouté")
-            .setDescription(`${member.user} a été ajouté à ce ticket.`)
-            .setThumbnail(interaction.client.user.displayAvatarURL())
-            .setImage(guildConfig.globalEmbedBanner)
-            .setColor(guildConfig.globalEmbedColor)
-        ]
-      }).catch(() => {});
-
-      await sendLog(
-        interaction.guild,
-        new EmbedBuilder()
-          .setTitle("➕ Membre ajouté")
-          .addFields(
-            buildTicketContextFields(interaction, [
-              { name: "Membre ajouté", value: `${member.user}`, inline: true },
-              { name: "ID Membre", value: `${member.id}`, inline: true }
-            ])
-          )
-          .setColor(guildConfig.globalEmbedColor)
-          .setTimestamp()
-      );
-
-      return replyAndAutoDelete(interaction, { content: "✅ Ajouté", flags: 64 });
+      await sendLog(interaction.guild, addLog);
+      return interaction.reply({ embeds: [addLog] });
     }
 
     if (interaction.customId === 'modal_close_ticket') {
