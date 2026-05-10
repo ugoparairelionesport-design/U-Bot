@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.9.16 (Anti-Double Panel)...');
+console.log('🚀 [configsystem.js] Loading version 2.9.17 (Polishing & Fixes)...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -249,6 +249,8 @@ async function replyAndAutoDelete(interaction, payload) {
   try {
     if (interaction.deferred || interaction.replied) {
       message = await interaction.followUp(payload);
+    } else if (payload.message && payload.message.acknowledged) {
+        return; // Évite l'erreur si déjà acquitté
     } else {
       message = await interaction.reply(payload);
     }
@@ -262,7 +264,10 @@ async function replyAndAutoDelete(interaction, payload) {
 
     return message;
   } catch (err) {
-    console.warn('SAFE REPLY ERROR:', err?.message || err);
+    // On ignore silencieusement l'erreur de double réponse
+    if (err.code !== 40060 && !err.message?.includes('already been acknowledged')) {
+        console.warn('SAFE REPLY ERROR:', err?.message || err);
+    }
     // En cas d'erreur (ex: Unknown Interaction), on tente un followUp discret
     try {
       message = await interaction.followUp(payload);
@@ -859,6 +864,9 @@ async function resumeTicketState(client) {
 
     const ticketCategoryIds = Object.values(guildConfig.categories || {});
 
+    // Reset du compteur de tickets pour recomptage propre
+    guildConfig.ticketCount = {};
+
     // Appeler les fonctions de nettoyage et de rafraîchissement ici
     await cleanupLegacyTicketPanels(client); // Nettoyer les panels obsolètes
     await refreshActiveTicketControls(client); // Rafraîchir les contrôles des tickets actifs
@@ -916,6 +924,12 @@ async function resumeTicketState(client) {
             guildConfig.ticketOpenTime[channel.id] = channel.createdTimestamp;
           }
           console.log(`🛡️ [TICKETS] Adoption du ticket orphelin : #${channel.name}`);
+        }
+
+        // Recomptage des tickets par utilisateur
+        const ownerId = guildConfig.ticketOwners[channel.id];
+        if (ownerId && ownerId !== "Inconnu (Adopté)") {
+            guildConfig.ticketCount[ownerId] = (guildConfig.ticketCount[ownerId] || 0) + 1;
         }
       }
     }
@@ -1871,6 +1885,14 @@ async function handleModal(interaction) {
         embeds: [
           new EmbedBuilder()
             .setTitle("🎫 Tickets")
+          .setDescription(
+            "### 🛰️ Centre d'Assistance & Support\n" +
+            "> *Un problème ou une question ? Notre équipe est là pour vous aider. Sélectionnez la catégorie appropriée ci-dessous pour ouvrir une session de chat privée.*\n\n" +
+            "**📌 Procédure :**\n" +
+            "┣ 1️⃣ Choisissez votre motif dans le menu déroulant.\n" +
+            "┣ 2️⃣ Expliquez votre demande avec un maximum de détails.\n" +
+            "┗ 3️⃣ Un modérateur vous répondra dans les plus brefs délais."
+          )
             .setThumbnail(interaction.client.user.displayAvatarURL())
             .setImage(guildConfig.globalEmbedBanner)
             .setColor(guildConfig.globalEmbedColor)

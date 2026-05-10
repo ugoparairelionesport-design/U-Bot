@@ -5,7 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.9.16');
+console.log('🚀 [index.js] Loading version 2.9.17');
 
 // 🛡️ SÉCURITÉ ANTI-DOUBLON : Suppression des fichiers conflictuels (Majuscules)
 const duplicateFiles = [
@@ -359,6 +359,9 @@ client.on('interactionCreate', async interaction => {
 
   } catch (err) {
     console.error("❌ INTERACTION ERROR:", err);
+
+    // On ne répond pas par une erreur si l'interaction a déjà été traitée (évite le spam d'erreurs inutiles)
+    if (err.code === 40060 || err.message?.includes('already been acknowledged')) return;
 
     if (!interaction.replied && !interaction.deferred) {
       interaction.reply({
