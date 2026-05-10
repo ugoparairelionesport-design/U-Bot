@@ -164,14 +164,22 @@ function getGuildConfig(guildId) {
     configData.guilds[guildId] = JSON.parse(JSON.stringify(defaultGuildSettings));
     saveConfig(configData);
   } else {
-    // Migration : s'assure que tous les nouveaux champs de defaultGuildSettings existent
-    let modified = false;
-    for (const key in defaultGuildSettings) {
-      if (configData.guilds[guildId][key] === undefined) {
-        configData.guilds[guildId][key] = JSON.parse(JSON.stringify(defaultGuildSettings[key]));
-        modified = true;
+    // Migration Récursive : S'assure que même les sous-objets (antiRaid, ai, etc.) existent
+    const mergeDeep = (target, source) => {
+      let modified = false;
+      for (const key in source) {
+        if (source[key] instanceof Object && !Array.isArray(source[key])) {
+          if (!target[key]) { target[key] = {}; modified = true; }
+          if (mergeDeep(target[key], source[key])) modified = true;
+        } else if (target[key] === undefined) {
+          target[key] = JSON.parse(JSON.stringify(source[key]));
+          modified = true;
+        }
       }
-    }
+      return modified;
+    };
+
+    let modified = mergeDeep(configData.guilds[guildId], defaultGuildSettings);
 
     // Migration/Nettoyage automatique des URLs de Live pour éviter le crash des 100 caractères
     if (configData.guilds[guildId].liveConfigs) {
@@ -540,12 +548,26 @@ function buildTicketContextFields(interaction, extraFields = []) {
 
 function buildStatsPayload(guildId) {
   const guildConfig = getGuildConfig(guildId);
+  const total = (guildConfig.stats.opened || 0) + (guildConfig.stats.closed || 0);
+  
   const embed = new EmbedBuilder()
-    .setTitle("📊 Statistiques")
+    .setTitle("📊 CENTRE DE DONNÉES - STATISTIQUES")
+    .setDescription(`Retrouvez ici l'activité globale du système de support pour votre serveur.`)
     .addFields(
-      { name: "🎫 Ouverts", value: `${guildConfig.stats.opened || 0}`, inline: true },
-      { name: "🔒 Fermés", value: `${guildConfig.stats.closed || 0}`, inline: true }
+      { name: "🎫 Tickets Ouverts", value: `\`\`\`\n${guildConfig.stats.opened || 0}\n\`\`\``, inline: true },
+      { name: "🔒 Tickets Fermés", value: `\`\`\`\n${guildConfig.stats.closed || 0}\n\`\`\``, inline: true },
+      { name: "📈 Activité Totale", value: `\`\`\`\n${total}\n\`\`\``, inline: true }
     )
+    .addFields({
+      name: "🛡️ Top Staff",
+      value: Object.entries(guildConfig.staffStats || {})
+        .sort((a,b) => (b[1].claimed || 0) - (a[1].claimed || 0))
+        .slice(0, 3)
+        .map(([id, s]) => `<@${id}> : **${s.claimed || 0}** claims`)
+        .join('\n') || "Aucune donnée"
+    })
+    .setThumbnail("https://i.imgur.com/8Q9S66i.png")
+    .setImage(guildConfig.globalEmbedBanner)
     .setColor(guildConfig.globalEmbedColor)
     .setTimestamp();
 
@@ -874,19 +896,21 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
   const embed = new EmbedBuilder()
     .setTitle(`🎫 Ticket - ${choice}`)
-    .setDescription(`Bienvenue ${interaction.user},\n\nLe staff a été notifié de votre demande.\n\n**Raison :** ${openingReason || "Aucune raison fournie"}`)
+    .setDescription(`Bienvenue ${interaction.user},\n\nLe staff a été notifié de votre demande. Un membre de l'équipe va vous répondre sous peu.\n\n**📌 Raison du ticket :**\n> ${openingReason || "Aucune raison fournie"}`)
     .addFields(
-      { name: "Utilisateur", value: `${interaction.user}`, inline: true },
-      { name: "Ouverture", value: `<t:${Math.floor(Date.now()/1000)}:R>`, inline: true }
+      { name: "👤 Demandeur", value: `${interaction.user}`, inline: true },
+      { name: "⏰ Ouvert le", value: `<t:${Math.floor(Date.now()/1000)}:f>`, inline: true }
     )
+    .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
     .setImage(guildConfig.globalEmbedBanner)
     .setColor(guildConfig.globalEmbedColor)
+    .setFooter({ text: "Utilisez les boutons ci-dessous pour gérer le ticket." })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('claim_ticket').setLabel('Prendre en charge').setStyle(ButtonStyle.Primary).setEmoji('🛠️'),
     new ButtonBuilder().setCustomId('unclaim_ticket').setLabel('Libérer').setStyle(ButtonStyle.Secondary).setEmoji('♻️'),
-    new ButtonBuilder().setCustomId('add_user').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'),
+    new ButtonBuilder().setCustomId('add_user').setLabel('Membre').setStyle(ButtonStyle.Success).setEmoji('➕'),
     new ButtonBuilder().setCustomId('close_ticket').setLabel('Fermer').setStyle(ButtonStyle.Danger).setEmoji('🔒')
   );
 
@@ -1320,9 +1344,7 @@ async function handleButtons(interaction) {
         incrementStaffStat(interaction.guildId, interaction.user.id, 'claimed');
         saveConfig(configData);
         await setTicketStatusEmoji(interaction.channel, '🟠');
-        const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
-        await sendLog(interaction.guild, new EmbedBuilder().setTitle("🛠️ Ticket claim").addFields(buildTicketContextFields(interaction, [{ name: "Claims staff", value: `${staffStats.claimed}`, inline: true }, { name: "Tickets fermés staff", value: `${staffStats.closed}`, inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
-        return replyAndAutoDelete(interaction, {
+        return interaction.reply({
           embeds: [new EmbedBuilder().setTitle("🛠️ Claim").setDescription(`${interaction.user} a pris en charge ce ticket.\n\nUn membre de l'équipe est désormais assigné à votre demande.`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor).setFooter({ text: "Merci de patienter pendant le traitement." }).setTimestamp()]
         });
       }
@@ -1440,11 +1462,7 @@ async function handleButtons(interaction) {
       saveConfig(configData);
       await updateStatsMessage(interaction.guild);
 
-      const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
-
-      await sendMessageWithTimer(
-        interaction.channel,
-        {
+      const closeEmbed = {
           embeds: [
             new EmbedBuilder()
               .setTitle("🔒 Ticket fermé")
@@ -1456,34 +1474,26 @@ async function handleButtons(interaction) {
               .setFooter({ text: "⏱️ Suppression dans 30:00" })
               .setTimestamp()
           ]
-        },
-        TICKET_DELETE_DELAY_MS
-      );
+      };
+
+      await sendMessageWithTimer(interaction.channel, closeEmbed, TICKET_DELETE_DELAY_MS);
 
       await sendLog(
         interaction.guild,
         new EmbedBuilder()
-          .setTitle("🔒 Ticket fermé")
+          .setTitle("🔒 Log : Ticket fermé")
           .addFields(
-            { name: "Salon", value: `${interaction.channel.name}`, inline: true },
+            { name: "Salon", value: `\`${interaction.channel.name}\``, inline: true },
             { name: "Fermé par", value: `${interaction.user}`, inline: true },
-            { name: "Claim", value: claimedBy ? `<@${claimedBy}>` : "Aucun", inline: true },
             { name: "Créateur", value: ownerId ? `<@${ownerId}>` : "Inconnu", inline: true },
             { name: "Durée", value: durationMinutes ? `${durationMinutes} min` : "Inconnue", inline: true },
-            { name: "Raison", value: pendingClose.reason || "Aucune", inline: false },
-            { name: "Archive", value: pendingClose.archiveSavedAt ? `Oui par <@${pendingClose.archivedBy}>` : "Non", inline: true },
-            { name: "Claims staff", value: `${staffStats.claimed}`, inline: true },
-            { name: "Tickets fermés staff", value: `${staffStats.closed}`, inline: true }
+            { name: "Raison", value: pendingClose.reason || "Aucune", inline: false }
           )
           .setColor(guildConfig.globalEmbedColor)
           .setTimestamp()
       );
-
-      setTimeout(() => {
-        delete guildConfig.pendingDeletions[interaction.channel.id];
-        saveConfig(configData);
-        interaction.channel.delete().catch(() => {});
-      }, TICKET_DELETE_DELAY_MS);
+      
+      // Suppression gérée par le timer déjà existant
       break;
     }
 
@@ -1736,47 +1746,36 @@ async function handleModal(interaction) {
       await interaction.deferReply({ flags: 64 });
       const url = interaction.fields.getTextInputValue('banner_url').trim();
 
-      if (!url) {
+      if (!url || url.length < 5) {
         guildConfig.globalEmbedBanner = null;
         saveConfig(configData);
         return interaction.editReply({ content: "🗑️ L'image d'embed a été supprimée." });
       }
 
       try {
-        // Téléchargement de l'image
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("Impossible de télécharger l'image");
-        
-        const arrayBuffer = await response.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-
-        // Création du dossier assets pour le serveur
-        const assetsDir = path.join(__dirname, '../Data/assets', interaction.guildId);
-        if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
-
-        // Sauvegarde locale (on utilise l'extension d'origine ou .png par défaut)
-        const filePath = path.join(assetsDir, 'banner.png');
-        fs.writeFileSync(filePath, buffer);
-
-        // Construction de l'URL publique hébergée par le bot
-        // Replit fournit l'URL via les variables d'environnement
-        const replName = process.env.REPL_SLUG;
+        const replName = process.env.REPL_SLUG; 
         const replOwner = process.env.REPL_OWNER;
-        
-        if (replName && replOwner) {
+
+        if (replName && replOwner && url.startsWith('http')) {
+          const response = await fetch(url);
+          if (!response.ok) throw new Error();
+          const buffer = Buffer.from(await response.arrayBuffer());
+          const assetsDir = path.join(__dirname, '../Data/assets', interaction.guildId);
+          if (!fs.existsSync(assetsDir)) fs.mkdirSync(assetsDir, { recursive: true });
+          fs.writeFileSync(path.join(assetsDir, 'banner.png'), buffer);
+          
           const publicUrl = `https://${replName}.${replOwner}.replit.app/assets/${interaction.guildId}/banner.png?v=${Date.now()}`;
           guildConfig.globalEmbedBanner = publicUrl;
-          saveConfig(configData);
-          return interaction.editReply({ content: "✅ Image téléchargée et sauvegardée localement ! Elle ne disparaîtra plus, même si vous supprimez le message d'origine." });
         } else {
-          // Si hors Replit, on garde l'URL d'origine
           guildConfig.globalEmbedBanner = url;
-          saveConfig(configData);
-          return interaction.editReply({ content: "✅ Image enregistrée (URL directe)." });
         }
+        
+        saveConfig(configData);
+        return interaction.editReply({ content: "✅ Image enregistrée avec succès !" });
       } catch (err) {
-        console.error("❌ Erreur téléchargement bannière:", err);
-        return interaction.editReply({ content: "❌ Erreur : Impossible de récupérer l'image. Assurez-vous que le lien est direct (finit par .png, .jpg...).", flags: 64 });
+        guildConfig.globalEmbedBanner = url;
+        saveConfig(configData);
+        return interaction.editReply({ content: "⚠️ Image enregistrée via lien direct (impossible de la copier localement)." });
       }
     }
 
