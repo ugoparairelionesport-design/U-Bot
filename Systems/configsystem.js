@@ -36,6 +36,7 @@ const defaultGuildSettings = {
   ticketCount: {},
   ticketOwners: {},
   ticketOpenTime: {},
+  ticketChoices: {},
   staffStats: {},
   pendingClosures: {},
   pendingDeletions: {},
@@ -286,7 +287,52 @@ async function replyAndAutoDelete(interaction, payload) {
 /* ========================= */
 function formatDate() {
   const d = new Date();
-  return `${d.getDate()}-${d.getHours()}h${String(d.getMinutes()).padStart(2, '0')}`;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const hour = String(d.getHours()).padStart(2, '0');
+  const minute = String(d.getMinutes()).padStart(2, '0');
+  return `${day}-${month}-${hour}h${minute}`;
+}
+
+function sanitizeChannelPart(value, fallback = 'ticket') {
+  const sanitized = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+
+  return sanitized || fallback;
+}
+
+function trimChannelName(name, maxLength = 100) {
+  return name
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, maxLength)
+    .replace(/-+$/g, '');
+}
+
+function stripTicketStatusEmoji(channelName) {
+  return String(channelName || '').replace(/-?[🟠🟢]$/u, '');
+}
+
+function buildTicketChannelName(choice, user, statusEmoji = '🟠') {
+  const categoryPart = sanitizeChannelPart(choice, 'ticket');
+  const userPart = sanitizeChannelPart(user?.username || user?.displayName || user?.tag || user?.id, 'user');
+  const baseName = trimChannelName(`${categoryPart}-${userPart}-${formatDate()}`, 96);
+  return `${baseName}-${statusEmoji}`;
+}
+
+async function setTicketStatusEmoji(channel, statusEmoji) {
+  if (!channel?.setName) return;
+  const baseName = trimChannelName(stripTicketStatusEmoji(channel.name), 96);
+  const newName = `${baseName}-${statusEmoji}`;
+
+  if (newName !== channel.name) {
+    await channel.setName(newName).catch(() => {});
+  }
 }
 
 function getRoleIds(value) {
@@ -369,8 +415,11 @@ function incrementStaffStat(guildId, userId, key) {
 function getPanelOptionFromChannel(channel) {
   if (!channel || !channel.guildId) return null;
   const guildConfig = getGuildConfig(channel.guildId);
-  // On cherche l'option qui correspond au début du nom du salon (ex: "general-ticket-")
-  return Object.keys(guildConfig.categories).find(option => channel.name.startsWith(`${option}-`)) || null;
+  // Priorité au stockage explicite pour éviter les conflits
+  return guildConfig.ticketChoices?.[channel.id] ||
+    Object.keys(guildConfig.categories).find(option => guildConfig.categories[option] === channel.parentId) ||
+    Object.keys(guildConfig.categories).find(option => channel.name.startsWith(`${sanitizeChannelPart(option)}-`)) ||
+    null;
 }
 
 function hasConfiguredModRole(interaction) {
@@ -802,10 +851,8 @@ async function executeTicketCreation(interaction, choice, openingReason) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const categoryId = guildConfig.categories[choice];
   const roleIds = getRoleIds(guildConfig.roles[choice]);
-
   guildConfig.stats.opened = (guildConfig.stats.opened || 0) + 1;
-  const ticketId = String(guildConfig.stats.opened).padStart(4, '0');
-  const channelName = `${choice}-${ticketId}`;
+  const channelName = buildTicketChannelName(choice, interaction.user, '🟢');
 
   const channel = await interaction.guild.channels.create({
     name: channelName,
@@ -820,6 +867,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
   guildConfig.ticketOwners[channel.id] = interaction.user.id;
   guildConfig.ticketOpenTime[channel.id] = Date.now();
+  guildConfig.ticketChoices[channel.id] = choice;
   setTicketCount(interaction.guildId, interaction.user.id, getTicketCount(interaction.guildId, interaction.user.id) + 1);
   saveConfig(configData);
 
@@ -828,7 +876,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
     .setDescription(`Bienvenue ${interaction.user},\n\nLe staff a été notifié de votre demande.\n\n**Raison :** ${openingReason || "Aucune raison fournie"}`)
     .addFields(
       { name: "Utilisateur", value: `${interaction.user}`, inline: true },
-      { name: "Numéro", value: `#${ticketId}`, inline: true }
+      { name: "Ouverture", value: `<t:${Math.floor(Date.now()/1000)}:R>`, inline: true }
     )
     .setImage(guildConfig.globalEmbedBanner)
     .setColor(guildConfig.globalEmbedColor)
@@ -836,6 +884,8 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('claim_ticket').setLabel('Prendre en charge').setStyle(ButtonStyle.Primary).setEmoji('🛠️'),
+    new ButtonBuilder().setCustomId('unclaim_ticket').setLabel('Libérer').setStyle(ButtonStyle.Secondary).setEmoji('♻️'),
+    new ButtonBuilder().setCustomId('add_user').setLabel('Ajouter').setStyle(ButtonStyle.Success).setEmoji('➕'),
     new ButtonBuilder().setCustomId('close_ticket').setLabel('Fermer').setStyle(ButtonStyle.Danger).setEmoji('🔒')
   );
 
@@ -923,6 +973,9 @@ async function resumeTicketState(client) {
           if (!guildConfig.ticketOpenTime[channel.id]) {
             guildConfig.ticketOpenTime[channel.id] = channel.createdTimestamp;
           }
+          if (!guildConfig.ticketChoices[channel.id]) {
+            guildConfig.ticketChoices[channel.id] = getPanelOptionFromChannel(channel);
+          }
           console.log(`🛡️ [TICKETS] Adoption du ticket orphelin : #${channel.name}`);
         }
 
@@ -948,6 +1001,7 @@ async function resumeTicketState(client) {
     };
 
     const totalCleaned = cleanObj(guildConfig.ticketOwners) + 
+                         cleanObj(guildConfig.ticketChoices) +
                          cleanObj(guildConfig.claims) + 
                          cleanObj(guildConfig.pendingClosures) + 
                          cleanObj(guildConfig.pendingDeletions);
@@ -1264,6 +1318,7 @@ async function handleButtons(interaction) {
         guildConfig.ticketOpenTime[interaction.channel.id] = Date.now(); 
         incrementStaffStat(interaction.guildId, interaction.user.id, 'claimed');
         saveConfig(configData);
+        await setTicketStatusEmoji(interaction.channel, '🟠');
         const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
         await sendLog(interaction.guild, new EmbedBuilder().setTitle("🛠️ Ticket claim").addFields(buildTicketContextFields(interaction, [{ name: "Claims staff", value: `${staffStats.claimed}`, inline: true }, { name: "Tickets fermés staff", value: `${staffStats.closed}`, inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
         return replyAndAutoDelete(interaction, {
@@ -1275,8 +1330,10 @@ async function handleButtons(interaction) {
       case 'unclaim_ticket': {
         if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
         const previousClaim = guildConfig.claims[interaction.channel.id];
+        if (!previousClaim) return replyAndAutoDelete(interaction, { content: "❌ Ce ticket n'est pas pris en charge.", flags: 64 });
         delete guildConfig.claims[interaction.channel.id];
         saveConfig(configData);
+        await setTicketStatusEmoji(interaction.channel, '🟢');
         await sendLog(interaction.guild, new EmbedBuilder().setTitle("♻️ Ticket libéré").addFields(buildTicketContextFields(interaction, [{ name: "Claim précédent", value: previousClaim ? `<@${previousClaim}>` : "Aucun", inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
         return replyAndAutoDelete(interaction, {
           embeds: [new EmbedBuilder().setTitle("♻️ Libéré").setDescription(`${interaction.user}`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor)],
@@ -1378,6 +1435,7 @@ async function handleButtons(interaction) {
       delete guildConfig.claims[interaction.channel.id];
       delete guildConfig.ticketOwners[interaction.channel.id];
       delete guildConfig.ticketOpenTime[interaction.channel.id];
+      delete guildConfig.ticketChoices[interaction.channel.id];
       delete guildConfig.pendingClosures[interaction.channel.id];
       saveConfig(configData);
       await updateStatsMessage(interaction.guild);
@@ -1491,13 +1549,6 @@ async function handleButtons(interaction) {
     }
   } catch (err) {
     console.error("BUTTON ERROR:", err);
-
-    if (!interaction.replied && !interaction.deferred) {
-      replyAndAutoDelete(interaction, {
-        content: "❌ Une erreur est survenue",
-        flags: 64
-      }).catch(() => {});
-    }
   }
 }
 
@@ -2063,13 +2114,6 @@ async function handleModal(interaction) {
     }
   } catch (err) {
     console.error("MODAL ERROR:", err);
-
-    if (!interaction.replied && !interaction.deferred) {
-      replyAndAutoDelete(interaction, {
-        content: "❌ Une erreur est survenue",
-        flags: 64
-      }).catch(() => {});
-    }
   }
 }
 
@@ -2083,11 +2127,6 @@ async function handleMessage(message) {
   // On vérifie si nous sommes dans un ticket actif
   if (!ticketOwnerId) return;
 
-  const currentName = message.channel.name;
-  // On retire uniquement le cercle de statut (🟠 ou 🟢) situé à la fin du nom.
-  // On gère les tirets (-) que Discord ajoute automatiquement devant l'émoji.
-  const cleanName = currentName.replace(/[-]*[🟠🟢]$/g, '');
-
   // Identification du staff via les rôles configurés pour cette catégorie
   const option = getPanelOptionFromChannel(message.channel);
   const modRoleIds = option ? getRoleIds(guildConfig.roles[option]) : [];
@@ -2098,21 +2137,13 @@ async function handleMessage(message) {
 
   let statusEmoji = '';
   if (isOwner) {
-    statusEmoji = '🟠';
-  } else if (isMod) {
     statusEmoji = '🟢';
+  } else if (isMod) {
+    statusEmoji = '🟠';
   }
 
   if (statusEmoji) {
-    const newName = `${cleanName}-${statusEmoji}`;
-    
-    if (newName !== currentName) {
-      try {
-        await message.channel.setName(newName);
-      } catch (err) {
-        // On ignore silencieusement les Rate Limits de Discord (2 renommages / 10 min)
-      }
-    }
+    await setTicketStatusEmoji(message.channel, statusEmoji);
   }
 }
 
