@@ -5,7 +5,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 
-console.log('🚀 [index.js] Loading version 2.9.15');
+console.log('🚀 [index.js] Loading version 2.9.16');
 
 // 🛡️ SÉCURITÉ ANTI-DOUBLON : Suppression des fichiers conflictuels (Majuscules)
 const duplicateFiles = [
@@ -87,7 +87,8 @@ server.listen(8080, () => {
   console.log('🌐 Serveur HTTP prêt sur le port 8080');
 }).on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.warn('⚠️ Port 8080 déjà utilisé. Le bot continue sans démarrer un nouveau serveur HTTP.');
+    console.error('❌ CRITICAL: Le port 8080 est déjà utilisé. Une autre instance du bot est probablement en cours d\'exécution.');
+    process.exit(1); // On arrête cette instance pour éviter les doublons
   } else {
     console.error('❌ Erreur serveur HTTP:', err);
   }

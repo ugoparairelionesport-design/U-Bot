@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-console.log('🚀 [configsystem.js] Loading version 2.9.14 (Component-Based Purge)...');
+console.log('🚀 [configsystem.js] Loading version 2.9.16 (Anti-Double Panel)...');
 const { fetch } = require('undici');
 const {
   ActionRowBuilder,
@@ -1828,21 +1828,31 @@ async function handleModal(interaction) {
         }
       }
 
-      // Delete any existing panel messages in this channel before creating a new one
-      const existingPanelMessages = Object.entries(guildConfig.panelMessages)
-        .filter(([chanId, msgId]) => chanId === channelId)
-        .map(([, msgId]) => msgId);
+      const existingPanelMessageId = guildConfig.panelMessages[channelId];
+      if (existingPanelMessageId) {
+        const existingPanel = await channel.messages.fetch(existingPanelMessageId).catch(() => null);
 
-      for (const msgId of existingPanelMessages) {
-        try {
-          const oldPanelMessage = await channel.messages.fetch(msgId);
-          if (oldPanelMessage && oldPanelMessage.author.id === interaction.client.user.id) {
-            await oldPanelMessage.delete();
-            console.log(`🧹 [TICKETS] Ancien panel supprimé dans #${channel.name} (${msgId}) avant création du nouveau.`);
-          }
-        } catch (error) {
-          console.warn(`⚠️ [TICKETS] Impossible de supprimer l'ancien panel ${msgId} dans #${channel.name}: ${error.message}`);
+        if (existingPanel) {
+          return replyAndAutoDelete(interaction, { content: "❌ Un panel existe déjà dans ce salon", flags: 64 });
         }
+      }
+
+    // --- NETTOYAGE AGRESSIF : Scan du salon pour supprimer TOUT ancien panel ---
+    try {
+      const messages = await channel.messages.fetch({ limit: 50 });
+      const panelsToDelete = messages.filter(m => 
+        m.author.id === interaction.client.user.id && 
+        m.components.some(row => 
+          row.components.some(c => c.customId === 'ticket_select')
+        )
+      );
+
+      for (const [, msg] of panelsToDelete) {
+        await msg.delete().catch(() => {});
+        console.log(`🧹 [PURGE] Ancien panel détecté et supprimé dans #${channel.name}`);
+      }
+    } catch (err) {
+      console.warn("⚠️ [PURGE] Impossible de scanner le salon pour les anciens messages.");
       }
 
       options.forEach((option, index) => {
@@ -2534,7 +2544,7 @@ async function sendHelpPanel(interaction) {
     .setTitle("📚 Centre d'Aide & Commandes")
     .setDescription(
       `### 🛰️ Guide Opérationnel\n` +
-      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.9.15\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.9.16\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
       `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
