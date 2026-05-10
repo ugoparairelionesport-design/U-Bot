@@ -315,7 +315,7 @@ function trimChannelName(name, maxLength = 100) {
 }
 
 function stripTicketStatusEmoji(channelName) {
-  return String(channelName || '').replace(/-?[🟠🟢]$/u, '');
+  return String(channelName || '').replace(/-?[🟠🟢🔴]$/u, '');
 }
 
 function buildTicketChannelName(choice, user, statusEmoji = '🟠') {
@@ -326,7 +326,7 @@ function buildTicketChannelName(choice, user, statusEmoji = '🟠') {
 }
 
 async function setTicketStatusEmoji(channel, statusEmoji) {
-  if (!channel?.setName) return;
+  if (!channel?.setName || channel.name.endsWith('fermeture-en-cours')) return;
   const baseName = trimChannelName(stripTicketStatusEmoji(channel.name), 96);
   const newName = `${baseName}-${statusEmoji}`;
 
@@ -397,9 +397,10 @@ function getClosingChannelName(channelName) {
   const suffix = 'fermeture-en-cours';
   if (channelName.includes(suffix)) return channelName;
 
-  const maxLength = 100;
-  const baseName = channelName.slice(0, maxLength - suffix.length - 1).replace(/-+$/g, '');
-  return `${baseName}-${suffix}`;
+  const cleanBase = stripTicketStatusEmoji(channelName);
+  // On limite la base pour laisser de la place à la pastille et au suffixe
+  const baseName = trimChannelName(cleanBase, 78);
+  return `${baseName}-🔴-${suffix}`;
 }
 
 function incrementStaffStat(guildId, userId, key) {
@@ -1322,8 +1323,7 @@ async function handleButtons(interaction) {
         const staffStats = getStaffStats(interaction.guildId, interaction.user.id);
         await sendLog(interaction.guild, new EmbedBuilder().setTitle("🛠️ Ticket claim").addFields(buildTicketContextFields(interaction, [{ name: "Claims staff", value: `${staffStats.claimed}`, inline: true }, { name: "Tickets fermés staff", value: `${staffStats.closed}`, inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
         return replyAndAutoDelete(interaction, {
-          embeds: [new EmbedBuilder().setTitle("🛠️ Claim").setDescription(`${interaction.user} a pris en charge ce ticket.\n\nUn membre de l'équipe est désormais assigné à votre demande.`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor).setFooter({ text: "Merci de patienter pendant le traitement." }).setTimestamp()],
-          flags: 64
+          embeds: [new EmbedBuilder().setTitle("🛠️ Claim").setDescription(`${interaction.user} a pris en charge ce ticket.\n\nUn membre de l'équipe est désormais assigné à votre demande.`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor).setFooter({ text: "Merci de patienter pendant le traitement." }).setTimestamp()]
         });
       }
 

@@ -362,13 +362,6 @@ client.on('interactionCreate', async interaction => {
 
     // On ne répond pas par une erreur si l'interaction a déjà été traitée (évite le spam d'erreurs inutiles)
     if (err.code === 40060 || err.message?.includes('already been acknowledged')) return;
-
-    if (!interaction.replied && !interaction.deferred) {
-      interaction.reply({
-        content: "❌ Une erreur est survenue",
-        flags: 64
-      }).catch(() => {});
-    }
   }
 });
 
