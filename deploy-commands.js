@@ -141,7 +141,7 @@ async function deployCommands() {
             console.log("✅ Commandes serveur déployées.");
         }
 
-        console.log(`🚀 [2/2] DEPLOY : Envoi de ${commands.length} commandes en GLOBAL (v2.9.14)...`);
+        console.log(`🚀 [2/2] DEPLOY : Envoi de ${commands.length} commandes en GLOBAL (v2.9.15)...`);
         await rest.put(
             Routes.applicationCommands(clientId),
             { body: commands.map(command => command.toJSON()) },

@@ -1828,15 +1828,6 @@ async function handleModal(interaction) {
         }
       }
 
-      const existingPanelMessageId = guildConfig.panelMessages[channelId];
-      if (existingPanelMessageId) {
-        const existingPanel = await channel.messages.fetch(existingPanelMessageId).catch(() => null);
-
-        if (existingPanel) {
-          return replyAndAutoDelete(interaction, { content: "❌ Un panel existe déjà dans ce salon", flags: 64 });
-        }
-      }
-
       // Delete any existing panel messages in this channel before creating a new one
       const existingPanelMessages = Object.entries(guildConfig.panelMessages)
         .filter(([chanId, msgId]) => chanId === channelId)
@@ -2535,6 +2526,7 @@ async function sendHelpPanel(interaction) {
     "📈 Niveaux": ['set_xp', 'rank', 'leaderboard'],
     "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
     "🛠️ Maintenance": ['maintenance'],
+    "🤖 IA & Automatisation": ['set_ia', 'annonce'],
     "🤖 Configuration": ['set_config', 'help']
   };
 
@@ -2542,7 +2534,7 @@ async function sendHelpPanel(interaction) {
     .setTitle("📚 Centre d'Aide & Commandes")
     .setDescription(
       `### 🛰️ Guide Opérationnel\n` +
-      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.9.12\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
+      `> *Voici la liste complète des outils disponibles. Le bot est actuellement en version \`2.9.15\`. Chaque commande est optimisée pour une gestion fluide de votre communauté.*\n\n` +
       `**💡 Astuce :** Toutes les commandes ci-dessous sont réservées aux administrateurs.`
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
