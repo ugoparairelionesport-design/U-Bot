@@ -577,12 +577,28 @@ function withGuildBanner(guildConfig, payload, attachmentBaseName = 'embed-banne
   const bannerUrl = normalizeStoredAssetUrl(guildConfig?.globalEmbedBanner);
   if (!bannerUrl || !payload?.embeds?.length) return payload;
 
+  const localAsset = getLocalAssetAttachment(bannerUrl, attachmentBaseName);
+  const imageUrl = localAsset?.imageUrl || bannerUrl;
+  let bannerApplied = false;
+
   payload.embeds.forEach(embed => {
     const currentImage = embed?.data?.image?.url;
-    if (typeof embed?.setImage === 'function' && (!currentImage || currentImage === guildConfig?.globalEmbedBanner)) {
-      embed.setImage(bannerUrl);
+    const normalizedCurrentImage = normalizeStoredAssetUrl(currentImage);
+    const shouldApplyBanner =
+      !currentImage ||
+      currentImage === guildConfig?.globalEmbedBanner ||
+      normalizedCurrentImage === bannerUrl ||
+      currentImage === localAsset?.imageUrl;
+
+    if (typeof embed?.setImage === 'function' && shouldApplyBanner) {
+      embed.setImage(imageUrl);
+      bannerApplied = true;
     }
   });
+
+  if (localAsset?.file && bannerApplied) {
+    payload.files = [...(payload.files || []), localAsset.file];
+  }
 
   return payload;
 }
