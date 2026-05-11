@@ -365,7 +365,12 @@ async function quietlyAcknowledgeComponent(interaction) {
 async function replyAndAutoDelete(interaction, payload) {
   let message = null;
   try {
-    payload = applyInteractionEmbedDefaults(interaction, payload, 'reply-banner');
+    if (payload?.applyGuildBanner === false) {
+      payload = { ...payload, files: [], attachments: [] };
+      delete payload.applyGuildBanner;
+    } else {
+      payload = applyInteractionEmbedDefaults(interaction, payload, 'reply-banner');
+    }
 
     if (interaction.deferred && !interaction.replied) {
       message = await interaction.editReply(payload);
@@ -721,25 +726,52 @@ function getStaffStats(guildId, userId) {
   return guildConfig.staffStats[userId] || { claimed: 0, closed: 0 };
 }
 
-async function resetSelectMenuToPlaceholder(interaction) {
-  if (!interaction.isStringSelectMenu() || !interaction.message) return;
+async function resetSelectMenuMessageToPlaceholder(message) {
+  if (!message) return;
 
-  const row = interaction.message.components[0];
+  const row = message.components[0];
   const component = row?.components?.[0];
   if (!component || !component.customId) return;
+  const baseCustomId = String(component.customId).split(':')[0];
+  const nextCustomId = baseCustomId === 'modif_select' ? `modif_select:${Date.now()}` : component.customId;
+  const options = component.options || component.data?.options || [];
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(component.customId)
-    .setPlaceholder(component.placeholder || 'Choisir une option')
-    .addOptions(component.options.map(option => ({
-      label: option.label,
-      value: option.value,
-      description: option.description,
-      emoji: option.emoji,
-      default: false
-    })));
+    .setCustomId(nextCustomId)
+    .setPlaceholder(component.placeholder || component.data?.placeholder || 'Choisir une option')
+    .addOptions(options.map(option => {
+      const data = option.data || option;
+      const normalizedOption = {
+        label: data.label,
+        value: data.value,
+        default: false
+      };
+      if (data.description) normalizedOption.description = data.description;
+      if (data.emoji) normalizedOption.emoji = data.emoji;
+      return normalizedOption;
+    }));
 
-  await interaction.message.edit({ components: [new ActionRowBuilder().addComponents(menu)] }).catch(() => {});
+  await message.edit({ components: [new ActionRowBuilder().addComponents(menu)] }).catch(() => {});
+}
+
+async function resetSelectMenuToPlaceholder(interaction) {
+  if (!interaction.isStringSelectMenu() || !interaction.message) return;
+  await resetSelectMenuMessageToPlaceholder(interaction.message);
+}
+
+function getModalSourceMessageId(customId) {
+  const parts = String(customId || '').split(':');
+  const messageId = parts[1];
+  return messageId && messageId !== 'none' ? messageId : null;
+}
+
+async function resetSelectMenuFromModalSource(interaction) {
+  const messageId = getModalSourceMessageId(interaction.customId);
+  if (!messageId || !interaction.channel?.messages) return;
+
+  const sourceMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
+  if (!sourceMessage?.editable) return;
+  await resetSelectMenuMessageToPlaceholder(sourceMessage);
 }
 
 function getClosingChannelName(channelName) {
@@ -1057,9 +1089,6 @@ async function sendMessageWithTimer(channel, payload, durationMs) {
     } else if (payload.applyGuildBanner === false) {
       payload.files = [];
       payload.attachments = [];
-      payload.embeds?.forEach(embed => {
-        if (embed?.data?.image) delete embed.data.image;
-      });
     }
     delete payload.applyGuildBanner;
     const message = await channel.send(payload);
@@ -1214,25 +1243,28 @@ function buildClosingTicketRow() {
 }
 
 function buildCloseConfirmationPayload(interaction, guildConfig, reason = '') {
-  return withGuildBanner(guildConfig, {
-    embeds: [
-      new EmbedBuilder()
-        .setTitle("🔒 Confirmation de fermeture")
-        .setDescription(
-          "La fermeture du ticket nécessite une confirmation.\n\n" +
-          `${reason ? `Raison renseignée : ${reason}\n\n` : ""}` +
-          "Utilise le bouton **💾 Sauvegarder** si tu souhaites archiver le ticket avant sa suppression.\n\n" +
-          "Clique sur le bouton de confirmation ci-dessous pour finaliser la fermeture.\n\n" +
-          "Cette demande expirera automatiquement dans 10 minutes."
-        )
-        .setThumbnail(interaction.client.user.displayAvatarURL())
-        .setImage(guildConfig.globalEmbedBanner)
-        .setColor(guildConfig.globalEmbedColor)
-        .setTimestamp()
-    ],
+  const bannerUrl = normalizeStoredAssetUrl(guildConfig.globalEmbedBanner);
+  const embed = new EmbedBuilder()
+    .setTitle("🔒 Confirmation de fermeture")
+    .setDescription(
+      "La fermeture du ticket nécessite une confirmation.\n\n" +
+      `${reason ? `Raison renseignée : ${reason}\n\n` : ""}` +
+      "Utilise le bouton **💾 Sauvegarder** si tu souhaites archiver le ticket avant sa suppression.\n\n" +
+      "Clique sur le bouton de confirmation ci-dessous pour finaliser la fermeture.\n\n" +
+      "Cette demande expirera automatiquement dans 10 minutes."
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setColor(guildConfig.globalEmbedColor)
+    .setTimestamp();
+
+  if (bannerUrl) embed.setImage(bannerUrl);
+
+  return {
+    embeds: [embed],
     components: [buildCloseConfirmRow()],
-    flags: 64
-  }, 'close-confirm-banner');
+    flags: 64,
+    applyGuildBanner: false
+  };
 }
 
 function buildChannelIdModal(customId, title, label) {
@@ -1490,6 +1522,8 @@ async function refreshActiveTicketControls(client) {
         if (botMessage) {
           const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setCustomId('claim_ticket').setLabel('Prendre en charge').setStyle(ButtonStyle.Primary).setEmoji('🛠️'),
+            new ButtonBuilder().setCustomId('unclaim_ticket').setLabel('Libérer').setStyle(ButtonStyle.Secondary).setEmoji('♻️'),
+            new ButtonBuilder().setCustomId('add_user').setLabel('Membre').setStyle(ButtonStyle.Secondary).setEmoji('➕'),
             new ButtonBuilder().setCustomId('close_ticket').setLabel('Fermer').setStyle(ButtonStyle.Danger).setEmoji('🔒')
           );
           // Mettre à jour les composants du message
@@ -1822,7 +1856,9 @@ async function handleButtons(interaction) {
       return updateComponentMessage(interaction, await interaction.client.xpSystem.getLeaderboardPayload(interaction.guild));
     }
     
-    switch (interaction.customId) {
+    const actionId = interaction.customId?.startsWith('modif_select:') ? 'modif_select' : interaction.customId;
+
+    switch (actionId) {
       // == BOT CUSTOMIZATION ==
       case 'bot_name_set_btn':
         return await handleBotNameButtonClick(interaction);
@@ -1957,13 +1993,15 @@ async function handleButtons(interaction) {
       case 'modif_select': {
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
         const selected = interaction.values[0];
+        const sourceMessageId = interaction.message?.id || 'none';
+        const modalId = (baseId) => `${baseId}:${sourceMessageId}`;
         const showModalAndReset = async (modal) => {
           await interaction.showModal(modal);
-          setTimeout(() => resetSelectMenuToPlaceholder(interaction).catch(() => {}), 350);
+          setTimeout(() => resetSelectMenuToPlaceholder(interaction).catch(() => {}), 1000);
           return null;
         };
-        if (selected === 'logs') return showModalAndReset(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
-        if (selected === 'stats') return showModalAndReset(buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats'));
+        if (selected === 'logs') return showModalAndReset(buildChannelIdModal(modalId('modal_edit_logs'), 'Modifier logs', 'Nouvel ID salon logs'));
+        if (selected === 'stats') return showModalAndReset(buildChannelIdModal(modalId('modal_edit_stats'), 'Modifier stats', 'Nouvel ID salon stats'));
         if (selected === 'options_panel') {
           const embed = new EmbedBuilder().setTitle("🎫 Gestion des options").setDescription("Ajoutez ou supprimez des types de tickets.").setColor(guildConfig.globalEmbedColor);
           const row = new ActionRowBuilder().addComponents(
@@ -1974,10 +2012,10 @@ async function handleButtons(interaction) {
           return updateComponentMessage(interaction, withGuildBanner(guildConfig, { embeds: [embed], components: [row] }, 'ticket-options-banner'));
         }
         if (selected === 'category') {
-          return showModalAndReset(new ModalBuilder().setCustomId('modal_edit_category').setTitle('Modifier catégorie').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('category_id').setLabel('Nouvel ID catégorie').setStyle(TextInputStyle.Short).setRequired(true))));
+          return showModalAndReset(new ModalBuilder().setCustomId(modalId('modal_edit_category')).setTitle('Modifier catégorie').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('category_id').setLabel('Nouvel ID catégorie').setStyle(TextInputStyle.Short).setRequired(true))));
         }
         if (selected === 'role') {
-          return showModalAndReset(new ModalBuilder().setCustomId('modal_edit_role').setTitle('Modifier rôle').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roles').setLabel('Nouveaux rôles (@role ou IDs)').setStyle(TextInputStyle.Short).setRequired(false))));
+          return showModalAndReset(new ModalBuilder().setCustomId(modalId('modal_edit_role')).setTitle('Modifier rôle').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roles').setLabel('Nouveaux rôles (@role ou IDs)').setStyle(TextInputStyle.Short).setRequired(false))));
         }
         break;
       }
@@ -2216,18 +2254,20 @@ async function handleButtons(interaction) {
         ticketCountReleased: Boolean(ownerId)
       };
 
+      const closeBannerUrl = normalizeStoredAssetUrl(guildConfig.globalEmbedBanner);
+      const closedEmbed = new EmbedBuilder()
+        .setTitle("🔒 Ticket fermé")
+        .setDescription(
+          "Ce ticket va maintenant être fermé.\n\n" +
+          "Merci d'avoir utilisé le support. Nous espérons que votre demande a été traitée dans les meilleures conditions."
+        )
+        .setColor(guildConfig.globalEmbedColor)
+        .setFooter({ text: "⏱️ Suppression dans 30:00" })
+        .setTimestamp();
+      if (closeBannerUrl) closedEmbed.setImage(closeBannerUrl);
+
       const closeEmbed = {
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("🔒 Ticket fermé")
-              .setDescription(
-                "Ce ticket va maintenant être fermé.\n\n" +
-                "Merci d'avoir utilisé le support. Nous espérons que votre demande a été traitée dans les meilleures conditions."
-              )
-              .setColor(guildConfig.globalEmbedColor)
-              .setFooter({ text: "⏱️ Suppression dans 30:00" })
-              .setTimestamp()
-          ]
+          embeds: [closedEmbed]
       };
       closeEmbed.components = [buildClosingTicketRow()];
 
@@ -2709,7 +2749,7 @@ async function handleModal(interaction) {
       return replyAndAutoDelete(interaction, { content: "✅ Logs configurés", flags: 64 });
     }
 
-    if (interaction.customId === 'modal_edit_logs') {
+    if (interaction.customId.startsWith('modal_edit_logs')) {
       const channelId = interaction.fields.getTextInputValue('channel_id');
       const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
 
@@ -2719,6 +2759,7 @@ async function handleModal(interaction) {
 
       guildConfig.logsChannel = channelId;
       saveConfig(configData);
+      await resetSelectMenuFromModalSource(interaction);
       return replyAndAutoDelete(interaction, { content: "✅ Logs modifiés", flags: 64 });
     }
 
@@ -2737,7 +2778,7 @@ async function handleModal(interaction) {
       return replyAndAutoDelete(interaction, { content: "✅ Stats configurés", flags: 64 });
     }
 
-    if (interaction.customId === 'modal_edit_stats') {
+    if (interaction.customId.startsWith('modal_edit_stats')) {
       const channelId = interaction.fields.getTextInputValue('channel_id');
       const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
 
@@ -2749,6 +2790,7 @@ async function handleModal(interaction) {
       guildConfig.statsMessageId = null;
       saveConfig(configData);
       await updateStatsMessage(interaction.guild);
+      await resetSelectMenuFromModalSource(interaction);
       return replyAndAutoDelete(interaction, { content: "✅ Stats modifiées", flags: 64 });
     }
 
@@ -2857,7 +2899,7 @@ async function handleModal(interaction) {
       return replyAndAutoDelete(interaction, { content: "✅ Panel créé", flags: 64 });
     }
 
-    if (interaction.customId === 'modal_edit_category') {
+    if (interaction.customId.startsWith('modal_edit_category')) {
       const optionName = interaction.fields.getTextInputValue('option_name').trim();
       const categoryId = interaction.fields.getTextInputValue('category_id').trim();
 
@@ -2873,11 +2915,12 @@ async function handleModal(interaction) {
 
       guildConfig.categories[optionName] = categoryId;
       saveConfig(configData);
+      await resetSelectMenuFromModalSource(interaction);
 
       return replyAndAutoDelete(interaction, { content: "✅ Catégorie modifiée", flags: 64 });
     }
 
-    if (interaction.customId === 'modal_edit_role') {
+    if (interaction.customId.startsWith('modal_edit_role')) {
       const optionName = interaction.fields.getTextInputValue('option_name').trim();
       const rolesInput = interaction.fields.getTextInputValue('roles') || "";
       const roleIds = parseRoleIds(rolesInput);
@@ -2894,6 +2937,7 @@ async function handleModal(interaction) {
 
       guildConfig.roles[optionName] = roleIds;
       saveConfig(configData);
+      await resetSelectMenuFromModalSource(interaction);
 
       return replyAndAutoDelete(interaction, { content: "✅ Rôle modifié", flags: 64 });
     }
