@@ -7,29 +7,6 @@ const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, Attach
 
 console.log('🚀 [index.js] Loading version 2.9.17');
 
-// 🛡️ SÉCURITÉ ANTI-DOUBLON : Suppression des fichiers conflictuels (Majuscules)
-const duplicateFiles = [
-  './Systems/CONFIGSYSTEM.JS',
-  './Systems/MAINTENANCE.JS',
-  './MAINTENANCE.JS'
-];
-
-duplicateFiles.forEach(file => {
-  const fullPath = path.join(__dirname, file);
-  if (fs.existsSync(fullPath)) {
-    console.log(`🧹 [CLEANUP] Suppression du fichier conflictuel : ${file}`);
-    fs.unlinkSync(fullPath);
-  }
-});
-
-try {
-  require.resolve('@napi-rs/canvas');
-} catch (e) {
-  console.log('📦 [DEP] @napi-rs/canvas manquant ou corrompu. Installation forcée...');
-  execSync('npm install @napi-rs/canvas');
-  console.log('✅ [DEP] @napi-rs/canvas a été réinstallé avec succès.');
-}
-
 const configSystem = require('./Systems/configsystem');
 const LiveSystem = require('./Systems/livesystem');
 const LogSystem = require('./Systems/logsystem');
