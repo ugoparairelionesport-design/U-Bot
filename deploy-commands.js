@@ -3,26 +3,23 @@ const { REST } = require('@discordjs/rest');
 require('dotenv').config();
 
 const commands = [
-    // Protection Hub
     new SlashCommandBuilder()
         .setName('config_protection')
-        .setDescription('Ouvre le centre de configuration des modules de protection (Anti-Raid, Anti-Spam, Captcha, DM Lock).')
+        .setDescription('Ouvre le centre de configuration des modules de protection.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    // Tickets
     new SlashCommandBuilder()
         .setName('config_ticket')
-        .setDescription('Configure le système de tickets (logs, panel, stats).')
+        .setDescription('Configure le systeme de tickets.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder()
         .setName('modif_config_ticket')
-        .setDescription('Modifie les options existantes du système de tickets.')
+        .setDescription('Modifie les options existantes du systeme de tickets.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    // Live System
     new SlashCommandBuilder()
         .setName('config_live')
-        .setDescription('Configure les alertes de live (Twitch, YouTube, TikTok).')
+        .setDescription('Configure les alertes de live.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder()
         .setName('modif_config_live')
@@ -42,110 +39,121 @@ const commands = [
                 ))
         .addStringOption(option =>
             option.setName('url')
-                .setDescription('Lien du live de test (ex: https://twitch.tv/test).')
+                .setDescription('Lien du live de test.')
                 .setRequired(true))
         .addChannelOption(option =>
             option.setName('salon')
-                .setDescription('Salon où envoyer la notification de test.')
+                .setDescription('Salon ou envoyer la notification.')
                 .setRequired(true))
         .addStringOption(option =>
             option.setName('message')
-                .setDescription('Message personnalisé pour la notification.')
+                .setDescription('Message personnalise.')
                 .setRequired(false))
         .addRoleOption(option =>
             option.setName('role')
-                .setDescription('Rôle à mentionner pour la notification.')
+                .setDescription('Role a mentionner.')
                 .setRequired(false))
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    // Bot Name Customization
     new SlashCommandBuilder()
         .setName('set_config')
-        .setDescription('Permet de personnaliser le nom du bot sur ce serveur.')
+        .setDescription('Personnalise le nom et les embeds du bot.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    // Logs System
     new SlashCommandBuilder()
         .setName('set_logs')
-        .setDescription('Configure le système de logs ultra-détaillés (catégorie et salons automatiques).')
+        .setDescription('Configure le systeme de logs detailles.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    // Entrance System
     new SlashCommandBuilder()
         .setName('set_entrée')
-        .setDescription('Configure l\'accueil, les auto-roles, le règlement et les images de bienvenue.')
+        .setDescription('Configure l accueil, les auto-roles et le reglement.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    // XP System
-    // Correction: Ajout des commandes XP
     new SlashCommandBuilder()
         .setName('set_xp')
-        .setDescription('Configure le système de niveaux (niveaux, prestige, missions).')
+        .setDescription('Configure le systeme de niveaux.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
     new SlashCommandBuilder()
         .setName('rank')
-        .setDescription('Affiche votre carte de niveau ou celle d\'un membre.')
-        .addUserOption(option => option.setName('membre').setDescription('Le membre à afficher')),
+        .setDescription('Affiche votre carte de niveau ou celle d un membre.')
+        .addUserOption(option => option.setName('membre').setDescription('Le membre a afficher')),
     new SlashCommandBuilder()
         .setName('leaderboard')
         .setDescription('Affiche le classement des membres les plus actifs.'),
 
-    // AI System
     new SlashCommandBuilder()
         .setName('set_ia')
-        .setDescription('Configure les modules d\'intelligence artificielle et d\'automatisation.')
+        .setDescription('Configure les modules IA et automatisation.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
     new SlashCommandBuilder()
         .setName('annonce')
-        .setDescription('Crée une annonce stylisée avec l\'aide de l\'IA.')
+        .setDescription('Cree une annonce stylisee avec l IA.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-    // Help Command
     new SlashCommandBuilder()
         .setName('help')
-        .setDescription('Affiche la liste complète des commandes et les modules du bot.')
+        .setDescription('Affiche la liste des commandes et modules du bot.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ];
 
 const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
 const guildId = process.env.GUILD_ID;
+const deployGlobal = process.env.DEPLOY_GLOBAL === 'true' || !guildId;
+const clearGlobal = process.env.CLEAR_GLOBAL === 'true';
+const clearGuild = process.env.CLEAR_GUILD === 'true';
 
 const rest = new REST({ version: '10' }).setToken(token);
 
 async function deployCommands() {
     if (!token || !clientId) {
-        console.error("❌ Erreur : TOKEN ou CLIENT_ID manquant.");
+        console.error('Erreur : TOKEN/DISCORD_TOKEN ou CLIENT_ID manquant.');
         return;
     }
 
     try {
-        if (guildId) {
-            console.log(`🚀 [1/2] DEPLOY : Envoi des commandes au serveur local (INSTANTANÉ: ${guildId})...`);
-            await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands.map(command => command.toJSON()) });
-            console.log("✅ Commandes serveur déployées.");
+        if (clearGlobal) {
+            console.log('CLEAR : suppression des commandes globales...');
+            await rest.put(Routes.applicationCommands(clientId), { body: [] });
+            console.log('Commandes globales supprimees. Discord peut mettre jusqu a 1h a les retirer partout.');
         }
 
-        console.log(`🚀 [2/2] DEPLOY : Envoi de ${commands.length} commandes en GLOBAL (v2.9.17)...`);
-        await rest.put(
-            Routes.applicationCommands(clientId),
-            { body: commands.map(command => command.toJSON()) },
-        );
+        if (clearGuild && guildId) {
+            console.log(`CLEAR : suppression des commandes serveur (${guildId})...`);
+            await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
+            console.log('Commandes serveur supprimees.');
+        }
 
-        console.log(`✅ Déploiement global terminé ! (Apparition sous 10-60 min)`);
-        
-        // Sécurité : n'éteint le processus que si lancé via "node deploy-commands.js"
+        if (guildId) {
+            console.log(`DEPLOY : envoi des commandes au serveur local (instantane: ${guildId})...`);
+            await rest.put(
+                Routes.applicationGuildCommands(clientId, guildId),
+                { body: commands.map(command => command.toJSON()) }
+            );
+            console.log('Commandes serveur deployees.');
+        }
+
+        if (deployGlobal && !clearGlobal) {
+            console.log(`DEPLOY : envoi de ${commands.length} commandes en global...`);
+            await rest.put(
+                Routes.applicationCommands(clientId),
+                { body: commands.map(command => command.toJSON()) }
+            );
+            console.log('Deploiement global termine. Apparition sous 10-60 min.');
+        } else if (guildId) {
+            console.log('Deploiement global ignore. Utilisez DEPLOY_GLOBAL=true uniquement pour publier partout.');
+        }
+
         if (require.main === module) {
             setTimeout(() => process.exit(0), 2000);
         }
     } catch (error) {
-        console.error('❌ Erreur lors du déploiement des commandes slash :', error);
+        console.error('Erreur lors du deploiement des commandes slash :', error);
         if (require.main === module) process.exit(1);
     }
 }
 
-// Permet de lancer le déploiement manuellement avec "node deploy-commands.js"
 if (require.main === module) {
     deployCommands();
 }
