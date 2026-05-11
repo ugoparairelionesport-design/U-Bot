@@ -1,9 +1,4 @@
-# Systems/antispam.js
-
-Copiez **tout** le bloc ci-dessous, puis remplacez **tout** le contenu du fichier `Systems/antispam.js` dans Visual Studio Code.
-
-```js
-const { EmbedBuilder, PermissionsBitField } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const configSystem = require('./configsystem');
 
 class AntiSpamSystem {
@@ -15,7 +10,6 @@ class AntiSpamSystem {
 
   async handleMessage(message) {
     if (!message.guild || message.author.bot) return;
-    if (message.member?.permissions.has(PermissionsBitField.Flags.ManageMessages)) return;
 
     const guildConfig = configSystem.getGuildConfig(message.guild.id);
     const settings = guildConfig.antiSpam;
@@ -148,4 +142,3 @@ class AntiSpamSystem {
 }
 
 module.exports = AntiSpamSystem;
-```

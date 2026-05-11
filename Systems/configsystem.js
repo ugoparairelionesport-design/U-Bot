@@ -1,8 +1,3 @@
-# Systems/configsystem.js
-
-Copiez **tout** le bloc ci-dessous, puis remplacez **tout** le contenu du fichier `Systems/configsystem.js` dans Visual Studio Code.
-
-```js
 const fs = require('fs');
 const path = require('path');
 console.log('🚀 [configsystem.js] Loading version 2.9.17 (Polishing & Fixes)...');
@@ -163,27 +158,59 @@ function getFullConfig() {
   return configData;
 }
 
+function cloneDefaultGuildSettings() {
+  return JSON.parse(JSON.stringify(defaultGuildSettings));
+}
+
+function mergeDeep(target, source) {
+  let modified = false;
+  for (const key in source) {
+    if (source[key] instanceof Object && !Array.isArray(source[key])) {
+      if (!target[key]) {
+        target[key] = {};
+        modified = true;
+      }
+      if (mergeDeep(target[key], source[key])) modified = true;
+    } else if (target[key] === undefined) {
+      target[key] = JSON.parse(JSON.stringify(source[key]));
+      modified = true;
+    }
+  }
+  return modified;
+}
+
+function hasLegacyRootConfig(data) {
+  if (!data || typeof data !== 'object' || data.guilds) return false;
+  return Object.keys(defaultGuildSettings).some(key => data[key] !== undefined);
+}
+
+function migrateLegacyRootConfig(guildId) {
+  if (!hasLegacyRootConfig(configData)) return false;
+
+  const legacyConfig = { ...configData };
+  const migratedGuildConfig = cloneDefaultGuildSettings();
+
+  for (const key of Object.keys(legacyConfig)) {
+    if (key === 'guilds') continue;
+    migratedGuildConfig[key] = legacyConfig[key];
+  }
+
+  mergeDeep(migratedGuildConfig, defaultGuildSettings);
+  configData = { guilds: { [guildId]: migratedGuildConfig } };
+  saveConfig(configData);
+  console.log(`ℹ️ [CONFIG] Ancienne config racine migrée vers la guilde ${guildId}`);
+  return true;
+}
+
 function getGuildConfig(guildId) {
+  migrateLegacyRootConfig(guildId);
+
   if (!configData.guilds) configData.guilds = {};
   if (!configData.guilds[guildId]) {
-    configData.guilds[guildId] = JSON.parse(JSON.stringify(defaultGuildSettings));
+    configData.guilds[guildId] = cloneDefaultGuildSettings();
     saveConfig(configData);
   } else {
     // Migration Récursive : S'assure que même les sous-objets (antiRaid, ai, etc.) existent
-    const mergeDeep = (target, source) => {
-      let modified = false;
-      for (const key in source) {
-        if (source[key] instanceof Object && !Array.isArray(source[key])) {
-          if (!target[key]) { target[key] = {}; modified = true; }
-          if (mergeDeep(target[key], source[key])) modified = true;
-        } else if (target[key] === undefined) {
-          target[key] = JSON.parse(JSON.stringify(source[key]));
-          modified = true;
-        }
-      }
-      return modified;
-    };
-
     let modified = mergeDeep(configData.guilds[guildId], defaultGuildSettings);
 
     // Migration/Nettoyage automatique des URLs de Live pour éviter le crash des 100 caractères
@@ -196,6 +223,12 @@ function getGuildConfig(guildId) {
           } catch (e) {}
         }
       });
+    }
+
+    const normalizedBannerUrl = normalizeStoredAssetUrl(configData.guilds[guildId].globalEmbedBanner);
+    if (normalizedBannerUrl !== configData.guilds[guildId].globalEmbedBanner) {
+      configData.guilds[guildId].globalEmbedBanner = normalizedBannerUrl;
+      modified = true;
     }
 
     if (modified) saveConfig(configData);
@@ -329,7 +362,7 @@ function trimChannelName(name, maxLength = 100) {
 
 
 function getPublicBaseUrl() {
-  const replitDomains = process.env.REPLIT_DOMAINS || process.env.REPLIT_DEV_DOMAIN;
+  const replitDomains = process.env.REPLIT_DOMAINS;
   if (replitDomains) {
     const domain = String(replitDomains).split(',')[0].trim();
     if (domain) return `https://${domain}`;
@@ -338,6 +371,9 @@ function getPublicBaseUrl() {
   const replName = process.env.REPL_SLUG;
   const replOwner = process.env.REPL_OWNER;
   if (replName && replOwner) return `https://${replName}.${replOwner}.replit.app`;
+
+  const devDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (devDomain) return `https://${String(devDomain).split(',')[0].trim()}`;
 
   return null;
 }
@@ -357,6 +393,25 @@ function getImageExtensionFromBuffer(buffer) {
   if (buffer.subarray(0, 3).toString() === 'GIF') return '.gif';
   if (buffer.subarray(8, 12).toString() === 'WEBP') return '.webp';
   return null;
+}
+
+function normalizeStoredAssetUrl(url) {
+  const publicBaseUrl = getPublicBaseUrl();
+  if (!url || !publicBaseUrl) return url;
+
+  try {
+    const parsedUrl = new URL(url);
+    if (!parsedUrl.pathname.startsWith('/assets/')) return url;
+
+    const publicUrl = new URL(publicBaseUrl);
+    if (parsedUrl.origin === publicUrl.origin) return url;
+
+    parsedUrl.protocol = publicUrl.protocol;
+    parsedUrl.host = publicUrl.host;
+    return parsedUrl.toString();
+  } catch (_) {
+    return url;
+  }
 }
 
 function isTicketPanelMessage(message) {
@@ -2966,4 +3021,3 @@ module.exports = {
   sendBotNamePanel,
   startVisualTimer
 };
-```

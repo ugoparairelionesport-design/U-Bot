@@ -1,8 +1,3 @@
-# index.js
-
-Copiez **tout** le bloc ci-dessous, puis remplacez **tout** le contenu du fichier `index.js` dans Visual Studio Code.
-
-```js
 // Bot Discord - Ticket System
 const http = require('http');
 const fs = require('fs');
@@ -166,6 +161,10 @@ client.once(Events.ClientReady, async () => {
 
   try {
     if (client.configSystem && typeof client.configSystem.resumeTicketState === 'function') {
+      for (const guild of client.guilds.cache.values()) {
+        client.configSystem.getGuildConfig(guild.id);
+      }
+
       await client.configSystem.resumeTicketState(client);
       if (typeof client.configSystem.cleanupLegacyTicketPanels === 'function') {
         const deletedPanels = await client.configSystem.cleanupLegacyTicketPanels(client);
@@ -492,4 +491,3 @@ setInterval(() => {}, 1000 * 60 * 60);
 console.log('⚙️ Connexion a Discord en cours...');
 const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
 client.login(token).catch(err => console.error("❌ ECHEC LOGIN:", err));
-```
