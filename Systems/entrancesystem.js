@@ -64,7 +64,7 @@ class EntranceSystem {
             }
         }
 
-        await channel.send(payload).catch(() => {});
+        await channel.send(configSystem.withGuildBanner(guildConfig, payload, 'welcome-banner')).catch(() => {});
       }
     }
 
@@ -92,7 +92,7 @@ class EntranceSystem {
         .setDescription(`👋 ${text}`)
         .setColor("#FF4500");
 
-      await channel.send({ embeds: [embed] }).catch(() => {});
+      await channel.send(configSystem.withGuildBanner(guildConfig, { embeds: [embed] }, 'leave-banner')).catch(() => {});
     }
 
     this.updateMemberCount(member.guild);
@@ -177,7 +177,7 @@ class EntranceSystem {
         .setStyle(ButtonStyle.Success)
     );
 
-    await channel.send({ embeds: [embed], components: [row] });
+    await channel.send(configSystem.withGuildBanner(guildConfig, { embeds: [embed], components: [row] }, 'rules-banner'));
     return interaction.reply({ content: "✅ Panel de règlement envoyé !", flags: 64 });
   }
 

@@ -58,7 +58,8 @@ class DmLockSystem {
       .setColor('#2B2D31')
       .setTimestamp();
 
-    await channel.send({ embeds: [embed] });
+    const guildConfig = configSystem.getGuildConfig(channel.guild.id);
+    await channel.send(configSystem.withGuildBanner(guildConfig, { embeds: [embed] }, 'dm-safety-banner'));
   }
 }
 

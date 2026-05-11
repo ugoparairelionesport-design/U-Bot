@@ -236,8 +236,8 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'leaderboard') {
-        const embed = await client.xpSystem.getLeaderboard(interaction.guild);
-        return interaction.reply({ embeds: [embed] });
+        const payload = await client.xpSystem.getLeaderboardPayload(interaction.guild);
+        return interaction.reply(payload);
       }
 
       if (interaction.commandName === 'config_ticket') {

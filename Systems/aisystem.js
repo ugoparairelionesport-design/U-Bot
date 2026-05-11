@@ -205,7 +205,8 @@ class AISystem {
           .setDescription(`*Correction suggérée pour <@${message.author.id}> :*\n\n> ${result}`)
           .setColor("#5865F2");
 
-        const reply = await message.reply({ embeds: [embed] });
+        const guildConfig = configSystem.getGuildConfig(message.guild.id);
+        const reply = await message.reply(configSystem.withGuildBanner(guildConfig, { embeds: [embed] }, 'ai-correction-banner'));
         // Auto-suppression après 15 secondes pour ne pas polluer
         setTimeout(() => reply.delete().catch(() => {}), 15000);
       }

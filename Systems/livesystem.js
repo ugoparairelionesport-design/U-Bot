@@ -229,6 +229,77 @@ class LiveSystem {
     }
   }
 
+  async resolveProfile(platform, url, guild) {
+    const cleanUrl = this.cleanUrl(url);
+    const username = cleanUrl.match(/@([^/?#]+)/)?.[1] ||
+      cleanUrl.split('/').filter(Boolean).pop()?.replace('@', '');
+
+    if (!username) return null;
+
+    if (platform === 'twitch') {
+      const token = await this.getTwitchToken();
+      const clientID = process.env.TWITCH_CLIENT_ID;
+      if (token && clientID) {
+        const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
+          headers: { 'Client-ID': clientID, Authorization: `Bearer ${token}` }
+        }).catch(() => null);
+        const userData = userRes ? await userRes.json().catch(() => null) : null;
+        const user = userData?.data?.[0];
+        if (user) {
+          return {
+            displayName: user.display_name || username,
+            avatar: user.profile_image_url || null,
+            thumbnail: user.offline_image_url || null,
+            url: `https://www.twitch.tv/${username}`
+          };
+        }
+      }
+    }
+
+    if (platform === 'tiktok') {
+      const pageUrl = `https://www.tiktok.com/@${username}`;
+      const res = await fetch(pageUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36'
+        }
+      }).catch(() => null);
+      const html = res?.ok ? await res.text().catch(() => '') : '';
+      const stateMatch = html.match(/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application\/json">([\s\S]*?)<\/script>/);
+      if (stateMatch) {
+        const jsonData = JSON.parse(stateMatch[1]);
+        const user = jsonData?.__DEFAULT_SCOPE__?.['webapp.user-detail']?.userInfo?.user;
+        if (user) {
+          return {
+            displayName: user.nickname || user.uniqueId || username,
+            avatar: user.avatarLarger || user.avatarMedium || user.avatarThumb || null,
+            thumbnail: user.avatarLarger || user.avatarMedium || null,
+            url: pageUrl
+          };
+        }
+      }
+
+      const avatarMatch = html.match(/"avatarLarger":"([^"]+)"/) ||
+        html.match(/"avatarMedium":"([^"]+)"/) ||
+        html.match(/"avatarThumb":"([^"]+)"/);
+      const nameMatch = html.match(/"nickname":"([^"]+)"/) ||
+        html.match(/"uniqueId":"([^"]+)"/);
+      if (avatarMatch || nameMatch) {
+        return {
+          displayName: nameMatch ? nameMatch[1].replace(/\\u002F/g, '/') : username,
+          avatar: avatarMatch ? avatarMatch[1].replace(/\\u002F/g, '/') : null,
+          thumbnail: avatarMatch ? avatarMatch[1].replace(/\\u002F/g, '/') : null,
+          url: pageUrl
+        };
+      }
+    }
+
+    if (platform === 'youtube') {
+      return { displayName: username, avatar: guild.iconURL({ dynamic: true }) || null, thumbnail: null, url: cleanUrl };
+    }
+
+    return { displayName: username, avatar: null, thumbnail: null, url: cleanUrl };
+  }
+
   async sendLiveNotification(guild, live, liveTitle) {
     if (!live.channelId) {
       console.error(`[LIVE] Aucun salon de destination configure pour ${live.url}`);
@@ -245,7 +316,7 @@ class LiveSystem {
     };
 
     const data = platformData[live.platform] || platformData.twitch;
-    const info = live.tempInfo || {};
+    const info = live.tempInfo || await this.resolveProfile(live.platform, live.url, guild).catch(() => null) || {};
     const targetUrl = this.cleanUrl(info.url || live.url);
     const displayName = info.displayName || targetUrl.split('/').filter(Boolean).pop()?.replace('@', '') || 'Createur';
     const profilePic = info.avatar || data.icon;

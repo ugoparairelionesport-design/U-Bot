@@ -143,13 +143,13 @@ class AntiSpamSystem {
           break;
         default:
           embed.setDescription(`⚠️ ${author}, merci de ralentir. Le spam est interdit.\n**Raison :** ${reason}`);
-          await channel.send({ content: `${author}`, embeds: [embed] }).then(m => setTimeout(() => m.delete().catch(() => {}), 10000));
+          await channel.send(configSystem.withGuildBanner(configSystem.getGuildConfig(guild.id), { content: `${author}`, embeds: [embed] }, 'antispam-banner')).then(m => setTimeout(() => m.delete().catch(() => {}), 10000));
           await configSystem.sendLog(guild, embed, settings.logChannel);
           return;
       }
 
       await configSystem.sendLog(guild, embed, settings.logChannel);
-      await channel.send({ embeds: [embed] }).then(m => setTimeout(() => m.delete().catch(() => {}), 10000)).catch(() => {});
+      await channel.send(configSystem.withGuildBanner(configSystem.getGuildConfig(guild.id), { embeds: [embed] }, 'antispam-banner')).then(m => setTimeout(() => m.delete().catch(() => {}), 10000)).catch(() => {});
     } catch (err) {
       console.error('❌ Erreur lors de la sanction Anti-Spam:', err.message);
     }

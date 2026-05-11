@@ -27,6 +27,11 @@ class LogSystem {
       .setTimestamp();
   }
 
+  async sendEmbed(channel, embed) {
+    const guildConfig = configSystem.getGuildConfig(channel.guild.id);
+    return channel.send(configSystem.withGuildBanner(guildConfig, { embeds: [embed] }, 'detailed-log-banner')).catch(() => {});
+  }
+
   async handleMessageDelete(message) {
     if (!message.guild || message.author?.bot) return;
     const channel = this.getLogChannel(message.guild, 'message');
@@ -42,7 +47,7 @@ class LogSystem {
         { name: 'Contenu', value: this.trim(message.content), inline: false }
       );
 
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    await this.sendEmbed(channel, embed);
   }
 
   async handleMessageUpdate(oldMsg, newMsg) {
@@ -62,7 +67,7 @@ class LogSystem {
         { name: 'Apres', value: this.trim(newMsg.content), inline: false }
       );
 
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    await this.sendEmbed(channel, embed);
   }
 
   async handleMemberJoin(member) {
@@ -80,7 +85,7 @@ class LogSystem {
         { name: 'Population', value: `\`${member.guild.memberCount} membres\``, inline: true }
       );
 
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    await this.sendEmbed(channel, embed);
   }
 
   async handleMemberRemove(member) {
@@ -95,7 +100,7 @@ class LogSystem {
         { name: 'Population', value: `\`${member.guild.memberCount} membres\``, inline: true }
       );
 
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    await this.sendEmbed(channel, embed);
   }
 
   async handleGuildBan(ban) {
@@ -110,7 +115,7 @@ class LogSystem {
         { name: 'Raison', value: this.trim(ban.reason || 'Aucune raison fournie', 800), inline: false }
       );
 
-    await channel.send({ embeds: [embed] }).catch(() => {});
+    await this.sendEmbed(channel, embed);
   }
 
   async handleMemberUpdate(oldMember, newMember) {
@@ -130,7 +135,7 @@ class LogSystem {
         if (added.size) embed.addFields({ name: 'Roles ajoutes', value: added.map(r => `<@&${r.id}>`).join(', '), inline: false });
         if (removed.size) embed.addFields({ name: 'Roles retires', value: removed.map(r => `<@&${r.id}>`).join(', '), inline: false });
 
-        await channel.send({ embeds: [embed] }).catch(() => {});
+        await this.sendEmbed(channel, embed);
       }
     }
 
@@ -144,7 +149,7 @@ class LogSystem {
           { name: 'Apres', value: `\`${newMember.nickname || newMember.user.username}\``, inline: true }
         );
 
-      await channel.send({ embeds: [embed] }).catch(() => {});
+      await this.sendEmbed(channel, embed);
     }
   }
 
@@ -160,7 +165,7 @@ class LogSystem {
           { name: 'Salon', value: `<#${newChan.id}>`, inline: false }
         );
 
-      await channel.send({ embeds: [embed] }).catch(() => {});
+      await this.sendEmbed(channel, embed);
     }
   }
 
@@ -186,7 +191,7 @@ class LogSystem {
         { name: 'Cible', value: `\`${target?.id || 'Inconnue'}\``, inline: true }
       );
 
-    await logChannel.send({ embeds: [embed] }).catch(() => {});
+    await this.sendEmbed(logChannel, embed);
   }
 }
 

@@ -294,6 +294,8 @@ const pendingTicketCreations = new Map();
 async function replyAndAutoDelete(interaction, payload) {
   let message = null;
   try {
+    payload = applyInteractionEmbedDefaults(interaction, payload, 'reply-banner');
+
     if (interaction.deferred && !interaction.replied) {
       message = await interaction.editReply(payload);
     } else if (interaction.replied) {
@@ -334,6 +336,7 @@ async function replyAndAutoDelete(interaction, payload) {
 
 async function updateComponentMessage(interaction, payload) {
   try {
+    payload = applyInteractionEmbedDefaults(interaction, payload, 'component-banner');
     const editablePayload = { ...payload };
     delete editablePayload.flags;
 
@@ -366,11 +369,20 @@ async function sendOrUpdatePanel(interaction, payload) {
 
 /* ========================= */
 function formatDate() {
-  const d = new Date();
-  const day = String(d.getDate()).padStart(2, '0');
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const hour = String(d.getHours()).padStart(2, '0');
-  const minute = String(d.getMinutes()).padStart(2, '0');
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('fr-FR', {
+      timeZone: 'Europe/Paris',
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).formatToParts(new Date()).map(part => [part.type, part.value])
+  );
+  const day = parts.day;
+  const month = parts.month;
+  const hour = parts.hour;
+  const minute = parts.minute;
   return `${day}-${month}-${hour}h${minute}`;
 }
 
@@ -507,7 +519,10 @@ function withGuildBanner(guildConfig, payload, attachmentBaseName = 'embed-banne
   const imageUrl = localAsset?.imageUrl || bannerUrl;
 
   payload.embeds.forEach(embed => {
-    if (typeof embed?.setImage === 'function') embed.setImage(imageUrl);
+    const currentImage = embed?.data?.image?.url;
+    if (typeof embed?.setImage === 'function' && (!currentImage || currentImage === guildConfig?.globalEmbedBanner)) {
+      embed.setImage(imageUrl);
+    }
   });
 
   if (localAsset?.file) {
@@ -515,6 +530,12 @@ function withGuildBanner(guildConfig, payload, attachmentBaseName = 'embed-banne
   }
 
   return payload;
+}
+
+function applyInteractionEmbedDefaults(interaction, payload, attachmentBaseName = 'embed-banner') {
+  if (!interaction?.guildId || !payload?.embeds?.length) return payload;
+  const guildConfig = getGuildConfig(interaction.guildId);
+  return withGuildBanner(guildConfig, payload, attachmentBaseName);
 }
 
 function isTicketPanelMessage(message) {
@@ -738,7 +759,11 @@ async function sendLog(guild, embed, specificChannelId = null) {
   const channel = await guild.channels.fetch(targetChannelId).catch(() => null);
   if (!channel || channel.type !== ChannelType.GuildText) return;
 
-  await channel.send({ embeds: [embed] }).catch(() => {});
+  if (typeof embed?.setThumbnail === 'function' && !embed.data?.thumbnail) {
+    embed.setThumbnail(guild.client.user.displayAvatarURL());
+  }
+
+  await channel.send(withGuildBanner(guildConfig, { embeds: [embed] }, 'log-banner')).catch(() => {});
 }
 
 async function sendRolePingMessage(channel, roleIds) {
@@ -756,6 +781,9 @@ async function sendRolePingMessage(channel, roleIds) {
 
 async function sendMessageWithTimer(channel, payload, durationMs) {
   try {
+    if (channel?.guild && payload?.embeds?.length) {
+      payload = withGuildBanner(getGuildConfig(channel.guild.id), payload, 'timed-message-banner');
+    }
     const message = await channel.send(payload);
     const deleteAt = Date.now() + durationMs;
 
@@ -785,7 +813,9 @@ function buildTicketContextFields(interaction, extraFields = []) {
   ];
 }
 
-function buildStatsPayload(guildId) {
+function buildStatsPayload(guildOrId) {
+  const guildId = typeof guildOrId === 'string' ? guildOrId : guildOrId.id;
+  const guild = typeof guildOrId === 'string' ? null : guildOrId;
   const guildConfig = getGuildConfig(guildId);
   const total = (guildConfig.stats.opened || 0) + (guildConfig.stats.closed || 0);
   const closeRate = total > 0 ? Math.round(((guildConfig.stats.closed || 0) / total) * 100) : 0;
@@ -810,7 +840,7 @@ function buildStatsPayload(guildId) {
         .map(([id, s], index) => `**#${index + 1}** <@${id}> • ${s.claimed || 0} claim(s) • ${s.closed || 0} fermeture(s)`)
         .join('\n') || "Aucune donnée"
     })
-    .setThumbnail("https://i.imgur.com/8Q9S66i.png")
+    .setThumbnail(guild?.client?.user?.displayAvatarURL() || null)
     .setImage(guildConfig.globalEmbedBanner)
     .setColor(guildConfig.globalEmbedColor)
     .setFooter({ text: "U-Bot Tickets • Statistiques dynamiques" })
@@ -856,6 +886,28 @@ function buildCloseConfirmRow() {
   );
 }
 
+function buildCloseConfirmationPayload(interaction, guildConfig, reason = '') {
+  return withGuildBanner(guildConfig, {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("🔒 Confirmation de fermeture")
+        .setDescription(
+          "La fermeture du ticket nécessite une confirmation.\n\n" +
+          `${reason ? `Raison renseignée : ${reason}\n\n` : ""}` +
+          "Utilise le bouton **💾 Sauvegarder** si tu souhaites archiver le ticket avant sa suppression.\n\n" +
+          "Clique sur le bouton de confirmation ci-dessous pour finaliser la fermeture.\n\n" +
+          "Cette demande expirera automatiquement dans 10 minutes."
+        )
+        .setThumbnail(interaction.client.user.displayAvatarURL())
+        .setImage(guildConfig.globalEmbedBanner)
+        .setColor(guildConfig.globalEmbedColor)
+        .setTimestamp()
+    ],
+    components: [buildCloseConfirmRow()],
+    flags: 64
+  }, 'close-confirm-banner');
+}
+
 function buildChannelIdModal(customId, title, label) {
   return new ModalBuilder()
     .setCustomId(customId)
@@ -879,7 +931,7 @@ async function updateStatsMessage(guild) {
   const channel = await guild.channels.fetch(guildConfig.statsChannel).catch(() => null);
   if (!channel || channel.type !== ChannelType.GuildText) return;
 
-  const payload = buildStatsPayload(guild.id);
+  const payload = buildStatsPayload(guild);
   const messages = await channel.messages.fetch({ limit: 75 }).catch(() => null);
   const botStatsMessages = messages
     ? [...messages.values()]
@@ -1393,6 +1445,13 @@ async function handleButtons(interaction) {
       const url = interaction.customId.replace('live_btn_del_', '');
       return await handleLiveDelete(interaction, url);
     }
+
+    if (interaction.customId === 'xp_leaderboard_refresh') {
+      if (!interaction.client.xpSystem?.getLeaderboardPayload) {
+        return replyAndAutoDelete(interaction, { content: "❌ Leaderboard indisponible.", flags: 64 });
+      }
+      return updateComponentMessage(interaction, await interaction.client.xpSystem.getLeaderboardPayload(interaction.guild));
+    }
     
     switch (interaction.customId) {
       // == BOT CUSTOMIZATION ==
@@ -1673,28 +1732,8 @@ async function handleButtons(interaction) {
         saveConfig(configData);
         await setTicketStatusEmoji(interaction.channel, '🟢');
         await sendLog(interaction.guild, new EmbedBuilder().setTitle("♻️ Ticket libéré").addFields(buildTicketContextFields(interaction, [{ name: "Claim précédent", value: previousClaim ? `<@${previousClaim}>` : "Aucun", inline: true }])).setColor(guildConfig.globalEmbedColor).setTimestamp());
-        return replyAndAutoDelete(interaction, {
-          embeds: [new EmbedBuilder().setTitle("♻️ Libéré").setDescription(`${interaction.user}`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor)],
-          flags: 64
-        });
+        return replyAndAutoDelete(interaction, { content: "✅ Ticket libéré.", flags: 64 });
       }
-
-      case 'save_close_archive':
-        if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
-        const pendingCloseSave = guildConfig.pendingClosures[interaction.channel.id];
-        if (!pendingCloseSave) return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente.", flags: 64 });
-        if (pendingCloseSave.expiresAt && pendingCloseSave.expiresAt < Date.now()) {
-          delete guildConfig.pendingClosures[interaction.channel.id];
-          saveConfig(configData);
-          return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré.", flags: 64 });
-        }
-        if (pendingCloseSave.archiveSavedAt) return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée.", flags: 64 });
-        const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
-        if (!archiveResult.ok) return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
-        pendingCloseSave.archiveSavedAt = Date.now();
-        pendingCloseSave.archivedBy = interaction.user.id;
-        saveConfig(configData);
-        return replyAndAutoDelete(interaction, { content: "✅ Archive sauvegardée.", flags: 64 });
 
       case 'add_user':
         if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
@@ -1718,33 +1757,31 @@ async function handleButtons(interaction) {
           return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
         }
 
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_close_ticket')
-          .setTitle('Fermer ticket')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('close_reason')
-                .setLabel('Raison de fermeture (optionnelle)')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(false)
-            )
-          )
-      );
+        guildConfig.pendingClosures[interaction.channel.id] = {
+          userId: interaction.user.id,
+          reason: '',
+          expiresAt: Date.now() + PENDING_CLOSE_EXPIRE_MS
+        };
+        saveConfig(configData);
+        return replyAndAutoDelete(interaction, buildCloseConfirmationPayload(interaction, guildConfig));
 
       case 'confirm_close_ticket': {
         if (!canManageTicket(interaction)) {
           return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
         }
 
-      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
+      const ticketChannel = interaction.channel || await interaction.guild.channels.fetch(interaction.channelId).catch(() => null);
+      if (!ticketChannel) {
+        return replyAndAutoDelete(interaction, { content: "❌ Salon du ticket introuvable ou déjà supprimé.", flags: 64 });
+      }
+
+      const pendingClose = guildConfig.pendingClosures[ticketChannel.id];
       if (!pendingClose) {
         return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
       }
 
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete guildConfig.pendingClosures[interaction.channel.id];
+        delete guildConfig.pendingClosures[ticketChannel.id];
         saveConfig(configData);
         return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré.", flags: 64 });
       }
@@ -1753,28 +1790,29 @@ async function handleButtons(interaction) {
         return replyAndAutoDelete(interaction, { content: "❌ Seul le modérateur ayant lancé la fermeture peut la confirmer", flags: 64 });
       }
 
-      await interaction.deferUpdate(); // Plus de message "Fermeture...", on traite directement
-      await interaction.channel.setName(getClosingChannelName(interaction.channel.name)).catch(() => {});
+      await interaction.deferUpdate().catch(() => {});
+      await interaction.editReply({ components: [] }).catch(() => {});
+      await ticketChannel.setName(getClosingChannelName(ticketChannel.name)).catch(() => {});
 
-      const ownerId = guildConfig.ticketOwners[interaction.channel.id];
-      const claimedBy = guildConfig.claims[interaction.channel.id];
-      const openedAt = guildConfig.ticketOpenTime[interaction.channel.id];
+      const ownerId = guildConfig.ticketOwners[ticketChannel.id];
+      const claimedBy = guildConfig.claims[ticketChannel.id];
+      const openedAt = guildConfig.ticketOpenTime[ticketChannel.id];
       const deleteAt = Date.now() + TICKET_DELETE_DELAY_MS;
       const durationMinutes = openedAt ? Math.max(1, Math.round((Date.now() - openedAt) / 60000)) : null;
 
       guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
       
-      guildConfig.pendingDeletions[interaction.channel.id] = deleteAt;
+      guildConfig.pendingDeletions[ticketChannel.id] = deleteAt;
       if (ownerId) {
         setTicketCount(interaction.guildId, ownerId, getTicketCount(interaction.guildId, ownerId) - 1);
       }
 
       incrementStaffStat(interaction.guildId, interaction.user.id, 'closed');
-      delete guildConfig.claims[interaction.channel.id];
-      delete guildConfig.ticketOwners[interaction.channel.id];
-      delete guildConfig.ticketOpenTime[interaction.channel.id];
-      delete guildConfig.ticketChoices[interaction.channel.id];
-      delete guildConfig.pendingClosures[interaction.channel.id];
+      delete guildConfig.claims[ticketChannel.id];
+      delete guildConfig.ticketOwners[ticketChannel.id];
+      delete guildConfig.ticketOpenTime[ticketChannel.id];
+      delete guildConfig.ticketChoices[ticketChannel.id];
+      delete guildConfig.pendingClosures[ticketChannel.id];
       saveConfig(configData);
       await updateStatsMessage(interaction.guild);
 
@@ -1792,14 +1830,14 @@ async function handleButtons(interaction) {
           ]
       };
 
-      await sendMessageWithTimer(interaction.channel, closeEmbed, TICKET_DELETE_DELAY_MS);
+      await sendMessageWithTimer(ticketChannel, closeEmbed, TICKET_DELETE_DELAY_MS);
 
       await sendLog(
         interaction.guild,
         new EmbedBuilder()
           .setTitle("🔒 Log : Ticket fermé")
           .addFields(
-            { name: "Salon", value: `\`${interaction.channel.name}\``, inline: true },
+            { name: "Salon", value: `\`${ticketChannel.name}\``, inline: true },
             { name: "Fermé par", value: `${interaction.user}`, inline: true },
             { name: "Créateur", value: ownerId ? `<@${ownerId}>` : "Inconnu", inline: true },
             { name: "Durée", value: durationMinutes ? `${durationMinutes} min` : "Inconnue", inline: true },
@@ -1818,13 +1856,18 @@ async function handleButtons(interaction) {
         return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
       }
 
-      const pendingClose = guildConfig.pendingClosures[interaction.channel.id];
+      const ticketChannel = interaction.channel || await interaction.guild.channels.fetch(interaction.channelId).catch(() => null);
+      if (!ticketChannel) {
+        return replyAndAutoDelete(interaction, { content: "❌ Salon du ticket introuvable ou déjà supprimé.", flags: 64 });
+      }
+
+      const pendingClose = guildConfig.pendingClosures[ticketChannel.id];
       if (!pendingClose) {
         return replyAndAutoDelete(interaction, { content: "❌ Aucune fermeture en attente", flags: 64 });
       }
 
       if (pendingClose.expiresAt && pendingClose.expiresAt < Date.now()) {
-        delete guildConfig.pendingClosures[interaction.channel.id];
+        delete guildConfig.pendingClosures[ticketChannel.id];
         saveConfig(configData);
         return replyAndAutoDelete(interaction, { content: "❌ La demande de fermeture a expiré", flags: 64 });
       }
@@ -1833,7 +1876,7 @@ async function handleButtons(interaction) {
         return replyAndAutoDelete(interaction, { content: "❌ L'archive a déjà été sauvegardée", flags: 64 });
       }
 
-      const archiveResult = await saveTicketArchive(interaction.guild, interaction.channel, interaction.user);
+      const archiveResult = await saveTicketArchive(interaction.guild, ticketChannel, interaction.user);
 
       if (!archiveResult.ok) {
         return replyAndAutoDelete(interaction, { content: archiveResult.reason, flags: 64 });
@@ -2425,10 +2468,7 @@ async function handleModal(interaction) {
         .setColor(guildConfig.globalEmbedColor)
         .setTimestamp();
 
-      await interaction.channel.send({ embeds: [addLog] }).catch(() => {});
-      if (guildConfig.logsChannel && guildConfig.logsChannel !== interaction.channel.id) {
-        await sendLog(interaction.guild, addLog);
-      }
+      await interaction.channel.send(withGuildBanner(guildConfig, { embeds: [addLog] }, 'ticket-add-member-banner')).catch(() => {});
       return replyAndAutoDelete(interaction, { content: `✅ ${member.user} a été ajouté au ticket.`, flags: 64 });
     }
 
@@ -2445,25 +2485,7 @@ async function handleModal(interaction) {
       };
       saveConfig(configData);
 
-      return replyAndAutoDelete(interaction, {
-        embeds: [
-          new EmbedBuilder()
-            .setTitle("🔒 Confirmation de fermeture")
-            .setDescription(
-              "La fermeture du ticket nécessite une confirmation.\n\n" +
-              `${reason ? `Raison renseignée : ${reason}\n\n` : ""}` +
-              "Utilise le bouton **💾 Sauvegarder** si tu souhaites archiver le ticket avant sa suppression.\n\n" +
-              "Clique sur le bouton de confirmation ci-dessous pour finaliser la fermeture.\n\n" +
-              "Cette demande expirera automatiquement dans 10 minutes."
-            )
-            .setThumbnail(interaction.client.user.displayAvatarURL())
-            .setImage(guildConfig.globalEmbedBanner)
-            .setColor(guildConfig.globalEmbedColor)
-            .setTimestamp()
-        ],
-        components: [buildCloseConfirmRow()],
-        flags: 64
-      });
+      return replyAndAutoDelete(interaction, buildCloseConfirmationPayload(interaction, guildConfig, reason));
     }
   } catch (err) {
     console.error("MODAL ERROR:", err);
@@ -2891,6 +2913,18 @@ async function sendUserVerificationPanel(interaction) {
   const guildConfig = getGuildConfig(interaction.guildId);
   const channel = await interaction.guild.channels.fetch(guildConfig.verification.channelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return replyAndAutoDelete(interaction, { content: "❌ Salon introuvable ou invalide.", flags: 64 });
+
+  const oldMessages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (oldMessages) {
+    const oldPanels = oldMessages.filter(message =>
+      message.author?.id === interaction.client.user.id &&
+      message.components?.some(row => row.components?.some(component => component.customId === 'verify_start'))
+    );
+    for (const message of oldPanels.values()) {
+      await message.delete().catch(() => {});
+    }
+  }
+
   const embed = new EmbedBuilder()
     .setTitle("🛡️ Portail de Vérification")
     .setDescription(
@@ -2908,7 +2942,9 @@ async function sendUserVerificationPanel(interaction) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('verify_start').setLabel('Commencer').setEmoji('🧩').setStyle(ButtonStyle.Success)
   );
-  await channel.send(withGuildBanner(guildConfig, { embeds: [embed], components: [row] }, 'verification-panel-banner'));
+  const panelMessage = await channel.send(withGuildBanner(guildConfig, { embeds: [embed], components: [row] }, 'verification-panel-banner'));
+  guildConfig.verification.panelMessageId = panelMessage.id;
+  saveConfig(configData);
   return replyAndAutoDelete(interaction, { content: "✅ Panel envoyé.", flags: 64 });
 }
 
@@ -3298,6 +3334,7 @@ module.exports = {
   getFullConfig,
   saveConfig,
   sendLog,
+  withGuildBanner,
   sendConfigPanel,
   sendEditConfigPanel,
   buildGlobalColorModal,
