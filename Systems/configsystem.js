@@ -40,6 +40,7 @@ const defaultGuildSettings = {
   staffStats: {},
   pendingClosures: {},
   pendingDeletions: {},
+  closingTickets: {},
   securityHashtag: null, // Ajout du hashtag de sécurité par défaut
   detailedLogs: {
     enabled: false,
@@ -249,11 +250,19 @@ function saveConfig(data) {
 
 function startVisualTimer(message, deleteAt) {
   let lastSecond = -1;
+  const isDeletionStillPending = () => {
+    const guildId = message?.channel?.guild?.id;
+    const channelId = message?.channel?.id;
+    if (!guildId || !channelId) return true;
+    return Boolean(getGuildConfig(guildId).pendingDeletions?.[channelId]);
+  };
+
   const updateFooter = async () => {
     try {
       if (!message || !message.editable) return;
+      if (!isDeletionStillPending()) return;
       const timeRemaining = deleteAt - Date.now();
-      
+
       if (timeRemaining <= 0) return;
 
       const currentSecond = Math.floor(timeRemaining / 1000);
@@ -278,7 +287,7 @@ function startVisualTimer(message, deleteAt) {
   updateFooter();
 
   const timerInterval = setInterval(async () => {
-    if (Date.now() >= deleteAt) {
+    if (Date.now() >= deleteAt || !isDeletionStillPending()) {
       clearInterval(timerInterval);
       return;
     }
@@ -708,12 +717,35 @@ function getClosingChannelName(channelName) {
   return `${baseName}-🔴-${suffix}`;
 }
 
+function getReopenedChannelName(channelName, originalName = null) {
+  if (originalName && !String(originalName).includes('fermeture-en-cours')) return originalName;
+
+  const cleanBase = stripTicketStatusEmoji(
+    String(channelName || 'ticket')
+      .replace(/-?🔴-?fermeture-en-cours$/u, '')
+      .replace(/-?fermeture-en-cours$/u, '')
+  );
+
+  return `${trimChannelName(cleanBase, 96)}-🟢`;
+}
+
 function incrementStaffStat(guildId, userId, key) {
   const guildConfig = getGuildConfig(guildId);
   const current = getStaffStats(guildId, userId);
   guildConfig.staffStats[userId] = {
     ...current,
     [key]: Number(current[key] || 0) + 1
+  };
+  saveConfig(configData);
+}
+
+function decrementStaffStat(guildId, userId, key) {
+  if (!userId || !key) return;
+  const guildConfig = getGuildConfig(guildId);
+  const current = getStaffStats(guildId, userId);
+  guildConfig.staffStats[userId] = {
+    ...current,
+    [key]: Math.max(0, Number(current[key] || 0) - 1)
   };
   saveConfig(configData);
 }
@@ -755,6 +787,70 @@ function canManageTicket(interaction) {
     hasConfiguredModRole(interaction) ||
     interaction.memberPermissions?.has(PermissionsBitField.Flags.ManageChannels) ||
     interaction.memberPermissions?.has(PermissionsBitField.Flags.Administrator);
+}
+
+function capturePermissionOverwrites(channel) {
+  return [...(channel?.permissionOverwrites?.cache?.values?.() || [])].map(overwrite => ({
+    id: overwrite.id,
+    type: overwrite.type,
+    allow: overwrite.allow.bitfield.toString(),
+    deny: overwrite.deny.bitfield.toString()
+  }));
+}
+
+async function lockTicketChannelForClosing(channel, closingState = {}) {
+  if (!channel?.permissionOverwrites) return;
+
+  closingState.permissionOverwrites = capturePermissionOverwrites(channel);
+  const botId = channel.client.user?.id;
+  const targets = new Set([channel.guild.id, ...channel.permissionOverwrites.cache.keys()]);
+  const denySendPermissions = {
+    SendMessages: false,
+    SendMessagesInThreads: false,
+    CreatePublicThreads: false,
+    CreatePrivateThreads: false
+  };
+
+  for (const targetId of targets) {
+    if (!targetId || targetId === botId) continue;
+    await channel.permissionOverwrites.edit(targetId, denySendPermissions).catch(() => {});
+  }
+
+  if (botId) {
+    await channel.permissionOverwrites.edit(botId, {
+      ViewChannel: true,
+      SendMessages: true,
+      ReadMessageHistory: true
+    }).catch(() => {});
+  }
+}
+
+async function restoreTicketChannelPermissions(channel, closingState, guildConfig) {
+  if (!channel?.permissionOverwrites) return;
+
+  if (Array.isArray(closingState?.permissionOverwrites) && closingState.permissionOverwrites.length) {
+    await channel.permissionOverwrites.set(
+      closingState.permissionOverwrites.map(overwrite => ({
+        id: overwrite.id,
+        type: overwrite.type,
+        allow: BigInt(overwrite.allow || 0),
+        deny: BigInt(overwrite.deny || 0)
+      }))
+    ).catch(() => {});
+    return;
+  }
+
+  const ownerId = closingState?.ownerId || guildConfig.ticketOwners?.[channel.id];
+  const choice = closingState?.choice || guildConfig.ticketChoices?.[channel.id] || getPanelOptionFromChannel(channel);
+  const roleIds = getRoleIds(guildConfig.roles?.[choice]);
+
+  if (ownerId) {
+    await channel.permissionOverwrites.edit(ownerId, { SendMessages: true, SendMessagesInThreads: true }).catch(() => {});
+  }
+
+  for (const roleId of roleIds) {
+    await channel.permissionOverwrites.edit(roleId, { SendMessages: true, SendMessagesInThreads: true }).catch(() => {});
+  }
 }
 
 function getMissingBotPermissions(guild) {
@@ -929,6 +1025,16 @@ function buildCloseConfirmRow() {
       .setCustomId('cancel_close_ticket')
       .setLabel('❌ Annuler')
       .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+function buildClosingTicketRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('reopen_ticket')
+      .setLabel('Ré-ouvrir')
+      .setEmoji('🔓')
+      .setStyle(ButtonStyle.Success)
   );
 }
 
@@ -1372,7 +1478,13 @@ async function resumeTicketState(client) {
 
         setTimeout(() => {
           try {
+            if (!guildConfig.pendingDeletions?.[channel.id] || guildConfig.pendingDeletions[channel.id] > Date.now()) return;
             if (guildConfig.pendingDeletions) delete guildConfig.pendingDeletions[channel.id];
+            if (guildConfig.closingTickets) delete guildConfig.closingTickets[channel.id];
+            delete guildConfig.claims[channel.id];
+            delete guildConfig.ticketOwners[channel.id];
+            delete guildConfig.ticketOpenTime[channel.id];
+            delete guildConfig.ticketChoices[channel.id];
             saveConfig(configData);
             channel.delete().catch(() => {});
           } catch (_) {}
@@ -1475,6 +1587,7 @@ async function handleButtons(interaction) {
       'add_user',
       'close_ticket',
       'confirm_close_ticket',
+      'reopen_ticket',
       'save_close_archive',
       'cancel_close_ticket'
     ]);
@@ -1484,6 +1597,11 @@ async function handleButtons(interaction) {
       consumeRecentInteractionAction(interaction, interaction.customId === 'xp_leaderboard_refresh' ? 1800 : 2500)
     ) {
       return quietlyAcknowledgeComponent(interaction);
+    }
+
+    const blockedWhileClosingIds = new Set(['claim_ticket', 'unclaim_ticket', 'add_user', 'close_ticket']);
+    if (blockedWhileClosingIds.has(interaction.customId) && guildConfig.pendingDeletions?.[interaction.channelId]) {
+      return replyAndAutoDelete(interaction, { content: "🔒 Ce ticket est en cours de fermeture. Utilise le bouton **Ré-ouvrir** si tu dois reprendre la discussion.", flags: 64 });
     }
 
     if (interaction.customId?.startsWith('verify_choice_')) {
@@ -1869,11 +1987,25 @@ async function handleButtons(interaction) {
       await interaction.editReply({ components: [] }).catch(() => {});
 
       const ownerId = guildConfig.ticketOwners[ticketChannel.id];
+      const claimedBy = guildConfig.claims[ticketChannel.id];
+      const choice = guildConfig.ticketChoices[ticketChannel.id] || getPanelOptionFromChannel(ticketChannel);
       const openedAt = guildConfig.ticketOpenTime[ticketChannel.id];
       const deleteAt = Date.now() + TICKET_DELETE_DELAY_MS;
       const durationMinutes = openedAt ? Math.max(1, Math.round((Date.now() - openedAt) / 60000)) : null;
       const closeReason = pendingClose.reason || "Aucune";
       const originalChannelName = ticketChannel.name;
+      const closingState = {
+        ownerId,
+        claimedBy,
+        choice,
+        openedAt,
+        originalName: originalChannelName,
+        closedBy: interaction.user.id,
+        closeReason,
+        deleteAt,
+        statsClosedCredited: true,
+        ticketCountReleased: Boolean(ownerId)
+      };
 
       const closeEmbed = {
           embeds: [
@@ -1888,27 +2020,35 @@ async function handleButtons(interaction) {
               .setTimestamp()
           ]
       };
+      closeEmbed.components = [buildClosingTicketRow()];
 
-      await sendMessageWithTimer(ticketChannel, closeEmbed, TICKET_DELETE_DELAY_MS);
+      if (!guildConfig.pendingDeletions || typeof guildConfig.pendingDeletions !== 'object') guildConfig.pendingDeletions = {};
+      guildConfig.pendingDeletions[ticketChannel.id] = deleteAt;
+      const closingMessage = await sendMessageWithTimer(ticketChannel, closeEmbed, TICKET_DELETE_DELAY_MS);
+      if (closingMessage) closingState.messageId = closingMessage.id;
+      await lockTicketChannelForClosing(ticketChannel, closingState);
       await ticketChannel.setName(getClosingChannelName(ticketChannel.name)).catch(() => {});
 
       guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
 
-      guildConfig.pendingDeletions[ticketChannel.id] = deleteAt;
+      if (!guildConfig.closingTickets || typeof guildConfig.closingTickets !== 'object') guildConfig.closingTickets = {};
+      guildConfig.closingTickets[ticketChannel.id] = closingState;
       if (ownerId) {
         setTicketCount(interaction.guildId, ownerId, getTicketCount(interaction.guildId, ownerId) - 1);
       }
 
       incrementStaffStat(interaction.guildId, interaction.user.id, 'closed');
-      delete guildConfig.claims[ticketChannel.id];
-      delete guildConfig.ticketOwners[ticketChannel.id];
-      delete guildConfig.ticketOpenTime[ticketChannel.id];
-      delete guildConfig.ticketChoices[ticketChannel.id];
       delete guildConfig.pendingClosures[ticketChannel.id];
       saveConfig(configData);
       setTimeout(() => {
         try {
+          if (!guildConfig.pendingDeletions?.[ticketChannel.id] || guildConfig.pendingDeletions[ticketChannel.id] > Date.now()) return;
           if (guildConfig.pendingDeletions) delete guildConfig.pendingDeletions[ticketChannel.id];
+          if (guildConfig.closingTickets) delete guildConfig.closingTickets[ticketChannel.id];
+          delete guildConfig.claims[ticketChannel.id];
+          delete guildConfig.ticketOwners[ticketChannel.id];
+          delete guildConfig.ticketOpenTime[ticketChannel.id];
+          delete guildConfig.ticketChoices[ticketChannel.id];
           saveConfig(configData);
           ticketChannel.delete().catch(() => {});
         } catch (_) {}
@@ -1931,6 +2071,71 @@ async function handleButtons(interaction) {
       );
       
       // Suppression gérée par le timer déjà existant
+      break;
+    }
+
+    case 'reopen_ticket': {
+      if (!canManageTicket(interaction)) {
+        return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket", flags: 64 });
+      }
+
+      const ticketChannel = interaction.channel || await interaction.guild.channels.fetch(interaction.channelId).catch(() => null);
+      if (!ticketChannel) {
+        return replyAndAutoDelete(interaction, { content: "❌ Salon du ticket introuvable ou déjà supprimé.", flags: 64 });
+      }
+
+      const closingState = guildConfig.closingTickets?.[ticketChannel.id] || null;
+      const pendingDeleteAt = guildConfig.pendingDeletions?.[ticketChannel.id];
+      if (!closingState && !pendingDeleteAt) {
+        return replyAndAutoDelete(interaction, { content: "❌ Ce ticket n'est pas en cours de fermeture.", flags: 64 });
+      }
+
+      await interaction.deferUpdate().catch(() => {});
+
+      if (guildConfig.pendingDeletions) delete guildConfig.pendingDeletions[ticketChannel.id];
+      await restoreTicketChannelPermissions(ticketChannel, closingState, guildConfig);
+      await ticketChannel.setName(getReopenedChannelName(ticketChannel.name, closingState?.originalName)).catch(() => {});
+
+      if (closingState?.statsClosedCredited) {
+        guildConfig.stats.closed = Math.max(0, Number(guildConfig.stats.closed || 0) - 1);
+      }
+
+      if (closingState?.ticketCountReleased && closingState.ownerId) {
+        setTicketCount(interaction.guildId, closingState.ownerId, getTicketCount(interaction.guildId, closingState.ownerId) + 1);
+      }
+
+      if (closingState?.closedBy) {
+        decrementStaffStat(interaction.guildId, closingState.closedBy, 'closed');
+      }
+
+      if (guildConfig.closingTickets) delete guildConfig.closingTickets[ticketChannel.id];
+      saveConfig(configData);
+      await updateStatsMessage(interaction.guild).catch(() => {});
+
+      const reopenedEmbed = new EmbedBuilder()
+        .setTitle("🔓 Ticket réouvert")
+        .setDescription(`${interaction.user} a réouvert ce ticket. Les messages sont de nouveau autorisés.`)
+        .setThumbnail(interaction.client.user.displayAvatarURL())
+        .setColor(guildConfig.globalEmbedColor)
+        .setTimestamp();
+
+      if (interaction.message?.editable) {
+        await interaction.message.edit(withGuildBanner(guildConfig, { embeds: [reopenedEmbed], components: [] }, 'ticket-reopen-banner')).catch(() => {});
+      }
+
+      await sendLog(
+        interaction.guild,
+        new EmbedBuilder()
+          .setTitle("🔓 Ticket réouvert")
+          .addFields(
+            { name: "Salon", value: `\`${ticketChannel.name}\``, inline: true },
+            { name: "Réouvert par", value: `${interaction.user}`, inline: true },
+            { name: "Fermeture annulée", value: pendingDeleteAt ? `<t:${Math.floor(pendingDeleteAt / 1000)}:R>` : "Oui", inline: true }
+          )
+          .setColor(guildConfig.globalEmbedColor)
+          .setTimestamp()
+      );
+
       break;
     }
 
