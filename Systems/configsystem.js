@@ -412,6 +412,10 @@ async function updateComponentMessage(interaction, payload) {
     delete editablePayload.flags;
     editablePayload.attachments = [];
 
+    if (!interaction.deferred && !interaction.replied && interaction.isModalSubmit?.() && typeof interaction.update === 'function') {
+      return await interaction.update(editablePayload);
+    }
+
     if (!interaction.deferred && !interaction.replied) {
       if (typeof interaction.deferUpdate === 'function') {
         await interaction.deferUpdate();
@@ -1048,9 +1052,10 @@ async function sendRolePingMessage(channel, roleIds) {
 
 async function sendMessageWithTimer(channel, payload, durationMs) {
   try {
-    if (channel?.guild && payload?.embeds?.length) {
+    if (channel?.guild && payload?.embeds?.length && payload.applyGuildBanner !== false) {
       payload = withGuildBanner(getGuildConfig(channel.guild.id), payload, 'timed-message-banner');
     }
+    delete payload.applyGuildBanner;
     const message = await channel.send(payload);
     const deleteAt = Date.now() + durationMs;
 
@@ -1945,10 +1950,14 @@ async function handleButtons(interaction) {
 
       case 'modif_select': {
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
-      const selected = interaction.values[0];
-        await resetSelectMenuToPlaceholder(interaction);
-        if (selected === 'logs') return interaction.showModal(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
-        if (selected === 'stats') return interaction.showModal(buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats'));
+        const selected = interaction.values[0];
+        const showModalAndReset = async (modal) => {
+          await interaction.showModal(modal);
+          setTimeout(() => resetSelectMenuToPlaceholder(interaction).catch(() => {}), 350);
+          return null;
+        };
+        if (selected === 'logs') return showModalAndReset(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
+        if (selected === 'stats') return showModalAndReset(buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats'));
         if (selected === 'options_panel') {
           const embed = new EmbedBuilder().setTitle("🎫 Gestion des options").setDescription("Ajoutez ou supprimez des types de tickets.").setColor(guildConfig.globalEmbedColor);
           const row = new ActionRowBuilder().addComponents(
@@ -1959,10 +1968,10 @@ async function handleButtons(interaction) {
           return updateComponentMessage(interaction, withGuildBanner(guildConfig, { embeds: [embed], components: [row] }, 'ticket-options-banner'));
         }
         if (selected === 'category') {
-          return interaction.showModal(new ModalBuilder().setCustomId('modal_edit_category').setTitle('Modifier catégorie').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('category_id').setLabel('Nouvel ID catégorie').setStyle(TextInputStyle.Short).setRequired(true))));
+          return showModalAndReset(new ModalBuilder().setCustomId('modal_edit_category').setTitle('Modifier catégorie').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('category_id').setLabel('Nouvel ID catégorie').setStyle(TextInputStyle.Short).setRequired(true))));
         }
         if (selected === 'role') {
-          return interaction.showModal(new ModalBuilder().setCustomId('modal_edit_role').setTitle('Modifier rôle').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roles').setLabel('Nouveaux rôles (@role ou IDs)').setStyle(TextInputStyle.Short).setRequired(false))));
+          return showModalAndReset(new ModalBuilder().setCustomId('modal_edit_role').setTitle('Modifier rôle').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('option_name').setLabel('Nom exact de l’option').setStyle(TextInputStyle.Short).setRequired(true)), new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('roles').setLabel('Nouveaux rôles (@role ou IDs)').setStyle(TextInputStyle.Short).setRequired(false))));
         }
         break;
       }
@@ -2218,10 +2227,13 @@ async function handleButtons(interaction) {
 
       if (!guildConfig.pendingDeletions || typeof guildConfig.pendingDeletions !== 'object') guildConfig.pendingDeletions = {};
       guildConfig.pendingDeletions[ticketChannel.id] = deleteAt;
-      await ticketChannel.setName(getClosingChannelName(ticketChannel.name)).catch(err => console.warn('TICKET CLOSE RENAME ERROR:', err?.message || err));
-      await lockTicketChannelForClosing(ticketChannel, closingState).catch(err => console.warn('TICKET CLOSE LOCK ERROR:', err?.message || err));
-      const closingMessage = await sendMessageWithTimer(ticketChannel, closeEmbed, TICKET_DELETE_DELAY_MS);
+      const closingMessage = await sendMessageWithTimer(ticketChannel, { ...closeEmbed, applyGuildBanner: false }, TICKET_DELETE_DELAY_MS);
       if (closingMessage) closingState.messageId = closingMessage.id;
+
+      await Promise.all([
+        ticketChannel.setName(getClosingChannelName(ticketChannel.name)).catch(err => console.warn('TICKET CLOSE RENAME ERROR:', err?.message || err)),
+        lockTicketChannelForClosing(ticketChannel, closingState).catch(err => console.warn('TICKET CLOSE LOCK ERROR:', err?.message || err))
+      ]);
 
       guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
 
@@ -2602,7 +2614,11 @@ async function handleLiveDelete(interaction, url) {
 async function handleModal(interaction) {
   try {
     const guildConfig = getGuildConfig(interaction.guildId);
-    if (!interaction.deferred && !interaction.replied) {
+    const updatesSourceMessage = interaction.customId.startsWith('modal_set_bot_nickname') ||
+      interaction.customId.startsWith('modal_set_global_banner') ||
+      interaction.customId.startsWith('modal_set_global_color');
+
+    if (!updatesSourceMessage && !interaction.deferred && !interaction.replied) {
       await interaction.deferReply({ flags: 64 }).catch(() => {});
     }
     // RÉPONSE PRIORITAIRE : Traitement du formulaire de nom
@@ -2616,12 +2632,11 @@ async function handleModal(interaction) {
       if (!url) {
         guildConfig.globalEmbedBanner = null;
         saveConfig(configData);
-        await refreshBotNamePanelMessage(interaction);
-        return interaction.editReply({ content: "✅ Image des embeds supprimée." });
+        return updateComponentMessage(interaction, await buildBotNamePanelPayload(interaction));
       }
 
       if (!/^https?:\/\//i.test(url)) {
-        return interaction.editReply({ content: "❌ URL invalide : utilisez un lien direct commençant par http:// ou https://." });
+        return replyAndAutoDelete(interaction, { content: "❌ URL invalide : utilisez un lien direct commençant par http:// ou https://.", flags: 64 });
       }
       
       try {
@@ -2641,8 +2656,7 @@ async function handleModal(interaction) {
         if (!publicBaseUrl) {
           guildConfig.globalEmbedBanner = url;
           saveConfig(configData);
-          await refreshBotNamePanelMessage(interaction);
-          return interaction.editReply({ content: "⚠️ Image enregistrée via lien direct (domaine public Replit introuvable)." });
+          return updateComponentMessage(interaction, await buildBotNamePanelPayload(interaction));
         }
 
         const assetsDir = path.join(__dirname, '../Data/assets', interaction.guildId);
@@ -2653,13 +2667,11 @@ async function handleModal(interaction) {
         
         guildConfig.globalEmbedBanner = `${publicBaseUrl}/assets/${interaction.guildId}/${fileName}?v=${Date.now()}`;
         saveConfig(configData);
-        await refreshBotNamePanelMessage(interaction);
-        return interaction.editReply({ content: "✅ Image enregistrée avec succès !" });
+        return updateComponentMessage(interaction, await buildBotNamePanelPayload(interaction));
       } catch (err) {
         guildConfig.globalEmbedBanner = url;
         saveConfig(configData);
-        await refreshBotNamePanelMessage(interaction);
-        return interaction.editReply({ content: `⚠️ Image enregistrée via lien direct (copie locale impossible : ${err.message}).` });
+        return updateComponentMessage(interaction, await buildBotNamePanelPayload(interaction));
       }
     }
 
@@ -2673,8 +2685,7 @@ async function handleModal(interaction) {
 
       guildConfig.globalEmbedColor = color;
       saveConfig(configData);
-      await refreshBotNamePanelMessage(interaction);
-      return replyAndAutoDelete(interaction, { content: `✅ La couleur des embeds a été mise à jour en \`${color}\` !`, flags: 64 });
+      return updateComponentMessage(interaction, await buildBotNamePanelPayload(interaction));
     }
 
     if (interaction.customId === 'modal_logs') {
@@ -2976,25 +2987,17 @@ async function handleModal(interaction) {
       
       const addLog = new EmbedBuilder()
         .setTitle("➕ Membre ajouté")
-        .setDescription(`${member.user} a été ajouté au ticket par ${interaction.user}.`)
-        .addFields(
-          { name: "Salon", value: interaction.channel ? `${interaction.channel.name}` : "Inconnu", inline: true },
-          { name: "ID Salon", value: interaction.channel ? `${interaction.channel.id}` : "Inconnu", inline: true },
-          { name: "Action par", value: `${interaction.user}`, inline: true },
-          { name: "Membre ajouté", value: `${member.user}`, inline: true },
-          { name: "ID Membre", value: member.id, inline: true }
-        )
-        .setThumbnail(interaction.client.user.displayAvatarURL())
+        .setDescription(`${member.user} a été ajouté à ce ticket.`)
         .setColor(guildConfig.globalEmbedColor)
         .setTimestamp();
 
       saveConfig(configData);
-      const sentMessage = await interaction.channel.send(withGuildBanner(guildConfig, { embeds: [addLog] }, 'ticket-add-member-banner')).catch(() => null);
+      const sentMessage = await interaction.channel.send({ embeds: [addLog] }).catch(() => null);
       if (sentMessage) {
         const purgeLegacy = () => deleteLegacyBotEmbeds(
           interaction.channel,
           interaction.client.user.id,
-          embed => isLegacySimpleEmbed(embed, "➕ Membre ajouté"),
+          embed => (embed.title || '') === "➕ Membre ajouté",
           sentMessage.id,
           15
         );
@@ -3241,11 +3244,7 @@ async function handleSetBotNicknameModal(interaction) {
           .setTimestamp()
       );
 
-      await refreshBotNamePanelMessage(interaction);
-      return replyAndAutoDelete(interaction, { 
-        content: `✅ Le nom du bot a été mis à jour : \`${newNickname || interaction.client.user.username}\``, 
-        flags: 64 
-      });
+      return updateComponentMessage(interaction, await buildBotNamePanelPayload(interaction));
     } catch (roleErr) {
       return replyAndAutoDelete(interaction, { 
         content: "❌ Impossible de changer mon nom. Mon rôle est probablement trop bas dans la hiérarchie ou je n'ai pas les permissions suffisantes.", 
