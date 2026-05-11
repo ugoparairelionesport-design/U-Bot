@@ -1054,6 +1054,12 @@ async function sendMessageWithTimer(channel, payload, durationMs) {
   try {
     if (channel?.guild && payload?.embeds?.length && payload.applyGuildBanner !== false) {
       payload = withGuildBanner(getGuildConfig(channel.guild.id), payload, 'timed-message-banner');
+    } else if (payload.applyGuildBanner === false) {
+      payload.files = [];
+      payload.attachments = [];
+      payload.embeds?.forEach(embed => {
+        if (embed?.data?.image) delete embed.data.image;
+      });
     }
     delete payload.applyGuildBanner;
     const message = await channel.send(payload);
@@ -2229,6 +2235,9 @@ async function handleButtons(interaction) {
       guildConfig.pendingDeletions[ticketChannel.id] = deleteAt;
       const closingMessage = await sendMessageWithTimer(ticketChannel, { ...closeEmbed, applyGuildBanner: false }, TICKET_DELETE_DELAY_MS);
       if (closingMessage) closingState.messageId = closingMessage.id;
+      if (closingMessage?.attachments?.size) {
+        await closingMessage.edit({ attachments: [] }).catch(() => {});
+      }
 
       await Promise.all([
         ticketChannel.setName(getClosingChannelName(ticketChannel.name)).catch(err => console.warn('TICKET CLOSE RENAME ERROR:', err?.message || err)),
