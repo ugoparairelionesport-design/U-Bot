@@ -1,10 +1,10 @@
-const { EmbedBuilder, AuditLogEvent, Events } = require('discord.js');
+const { EmbedBuilder, AuditLogEvent } = require('discord.js');
 const configSystem = require('./configsystem');
 
 class LogSystem {
   constructor(client) {
     this.client = client;
-    console.log('📜 Système de Logs Ultra-Détaillés initialisé');
+    console.log('LogSystem initialise');
   }
 
   getLogChannel(guild, type) {
@@ -13,21 +13,34 @@ class LogSystem {
     return guild.channels.cache.get(config.detailedLogs.channels[type]);
   }
 
+  trim(value, max = 1000) {
+    const text = String(value || '').trim();
+    if (!text) return '*Aucun contenu texte*';
+    return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+  }
+
+  baseEmbed(guild, title, color) {
+    return new EmbedBuilder()
+      .setTitle(title)
+      .setColor(color)
+      .setFooter({ text: `${guild.name} • Logs detailles`, iconURL: guild.iconURL({ dynamic: true }) || undefined })
+      .setTimestamp();
+  }
+
   async handleMessageDelete(message) {
     if (!message.guild || message.author?.bot) return;
     const channel = this.getLogChannel(message.guild, 'message');
     if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setTitle('🗑️ Message Supprimé')
-      .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+    const embed = this.baseEmbed(message.guild, '🗑 Message supprime', '#ED4245')
+      .setAuthor({ name: message.author?.tag || 'Auteur inconnu', iconURL: message.author?.displayAvatarURL?.({ dynamic: true }) })
+      .setThumbnail(message.author?.displayAvatarURL?.({ dynamic: true }))
       .addFields(
-        { name: 'Auteur', value: `<@${message.author.id}>`, inline: true },
+        { name: 'Auteur', value: message.author ? `${message.author}\n\`${message.author.id}\`` : '`Inconnu`', inline: true },
         { name: 'Salon', value: `<#${message.channelId}>`, inline: true },
-        { name: 'Contenu', value: message.content?.slice(0, 1000) || '*[Fichier ou Embed]*' }
-      )
-      .setColor('#FF0000')
-      .setTimestamp();
+        { name: 'Pieces jointes', value: `\`${message.attachments?.size || 0}\``, inline: true },
+        { name: 'Contenu', value: this.trim(message.content), inline: false }
+      );
 
     await channel.send({ embeds: [embed] }).catch(() => {});
   }
@@ -37,16 +50,17 @@ class LogSystem {
     const channel = this.getLogChannel(oldMsg.guild, 'message');
     if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setTitle('📝 Message Édité')
+    const embed = this.baseEmbed(oldMsg.guild, '✏️ Message modifie', '#FEE75C')
       .setURL(newMsg.url)
-      .setAuthor({ name: oldMsg.author.tag, iconURL: oldMsg.author.displayAvatarURL() })
+      .setAuthor({ name: oldMsg.author?.tag || 'Auteur inconnu', iconURL: oldMsg.author?.displayAvatarURL?.({ dynamic: true }) })
+      .setThumbnail(oldMsg.author?.displayAvatarURL?.({ dynamic: true }))
       .addFields(
-        { name: 'Avant', value: oldMsg.content?.slice(0, 1000) || '*Vide*' },
-        { name: 'Après', value: newMsg.content?.slice(0, 1000) || '*Vide*' }
-      )
-      .setColor('#FFA500')
-      .setTimestamp();
+        { name: 'Auteur', value: oldMsg.author ? `${oldMsg.author}\n\`${oldMsg.author.id}\`` : '`Inconnu`', inline: true },
+        { name: 'Salon', value: `<#${oldMsg.channelId}>`, inline: true },
+        { name: 'Message', value: `[Ouvrir](${newMsg.url})`, inline: true },
+        { name: 'Avant', value: this.trim(oldMsg.content), inline: false },
+        { name: 'Apres', value: this.trim(newMsg.content), inline: false }
+      );
 
     await channel.send({ embeds: [embed] }).catch(() => {});
   }
@@ -55,16 +69,16 @@ class LogSystem {
     const channel = this.getLogChannel(member.guild, 'member');
     if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setTitle('📥 Nouveau Membre')
-      .setThumbnail(member.user.displayAvatarURL())
-      .setDescription(`${member.user} vient de rejoindre le serveur.`)
+    const accountAgeDays = Math.floor((Date.now() - member.user.createdTimestamp) / 86400000);
+    const embed = this.baseEmbed(member.guild, '📥 Membre rejoint', '#57F287')
+      .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
       .addFields(
-        { name: 'Compte créé le', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
-        { name: 'ID', value: `\`${member.id}\``, inline: true }
-      )
-      .setColor('#00FF00')
-      .setTimestamp();
+        { name: 'Membre', value: `${member.user}\n\`${member.id}\``, inline: true },
+        { name: 'Compte cree', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`, inline: true },
+        { name: 'Age du compte', value: `\`${accountAgeDays} jour(s)\``, inline: true },
+        { name: 'Population', value: `\`${member.guild.memberCount} membres\``, inline: true }
+      );
 
     await channel.send({ embeds: [embed] }).catch(() => {});
   }
@@ -73,13 +87,13 @@ class LogSystem {
     const channel = this.getLogChannel(member.guild, 'member');
     if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setTitle('📤 Départ Membre')
-      .setThumbnail(member.user.displayAvatarURL())
-      .setDescription(`${member.user.tag} a quitté le serveur.`)
-      .addFields({ name: 'ID', value: `\`${member.id}\`` })
-      .setColor('#FF4500')
-      .setTimestamp();
+    const embed = this.baseEmbed(member.guild, '📤 Membre parti', '#F97316')
+      .setAuthor({ name: member.user.tag, iconURL: member.user.displayAvatarURL({ dynamic: true }) })
+      .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
+      .addFields(
+        { name: 'Membre', value: `${member.user.tag}\n\`${member.id}\``, inline: true },
+        { name: 'Population', value: `\`${member.guild.memberCount} membres\``, inline: true }
+      );
 
     await channel.send({ embeds: [embed] }).catch(() => {});
   }
@@ -88,15 +102,13 @@ class LogSystem {
     const channel = this.getLogChannel(ban.guild, 'mod');
     if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setTitle('🔨 Bannissement')
-      .setAuthor({ name: ban.user.tag, iconURL: ban.user.displayAvatarURL() })
+    const embed = this.baseEmbed(ban.guild, '🔨 Membre banni', '#B91C1C')
+      .setAuthor({ name: ban.user.tag, iconURL: ban.user.displayAvatarURL({ dynamic: true }) })
+      .setThumbnail(ban.user.displayAvatarURL({ dynamic: true }))
       .addFields(
-        { name: 'Utilisateur', value: `${ban.user}`, inline: true },
-        { name: 'Raison', value: ban.reason || 'Aucune raison fournie' }
-      )
-      .setColor('#8B0000')
-      .setTimestamp();
+        { name: 'Utilisateur', value: `${ban.user}\n\`${ban.user.id}\``, inline: true },
+        { name: 'Raison', value: this.trim(ban.reason || 'Aucune raison fournie', 800), inline: false }
+      );
 
     await channel.send({ embeds: [embed] }).catch(() => {});
   }
@@ -105,37 +117,33 @@ class LogSystem {
     const channel = this.getLogChannel(newMember.guild, 'member');
     if (!channel) return;
 
-    // Rôles
     if (oldMember.roles.cache.size !== newMember.roles.cache.size) {
-      const added = newMember.roles.cache.filter(r => !oldMember.roles.cache.has(r.id));
-      const removed = oldMember.roles.cache.filter(r => !newMember.roles.cache.has(r.id));
-      
-      if (added.size || removed.size) {
-        const embed = new EmbedBuilder()
-          .setTitle('🛡️ Mise à jour Rôles')
-          .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL() })
-          .setDescription(`${newMember.user}`)
-          .setColor('#5865F2')
-          .setTimestamp();
+      const added = newMember.roles.cache.filter(role => !oldMember.roles.cache.has(role.id));
+      const removed = oldMember.roles.cache.filter(role => !newMember.roles.cache.has(role.id));
 
-        if (added.size) embed.addFields({ name: '➕ Ajouté', value: added.map(r => `<@&${r.id}>`).join(', ') });
-        if (removed.size) embed.addFields({ name: '➖ Retiré', value: removed.map(r => `<@&${r.id}>`).join(', ') });
+      if (added.size || removed.size) {
+        const embed = this.baseEmbed(newMember.guild, '🛡 Roles mis a jour', '#5865F2')
+          .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL({ dynamic: true }) })
+          .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
+          .addFields({ name: 'Membre', value: `${newMember.user}\n\`${newMember.id}\``, inline: false });
+
+        if (added.size) embed.addFields({ name: 'Roles ajoutes', value: added.map(r => `<@&${r.id}>`).join(', '), inline: false });
+        if (removed.size) embed.addFields({ name: 'Roles retires', value: removed.map(r => `<@&${r.id}>`).join(', '), inline: false });
 
         await channel.send({ embeds: [embed] }).catch(() => {});
       }
     }
 
-    // Pseudo
     if (oldMember.nickname !== newMember.nickname) {
-      const embed = new EmbedBuilder()
-        .setTitle('👤 Changement Surnom')
-        .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL() })
+      const embed = this.baseEmbed(newMember.guild, '👤 Surnom modifie', '#38BDF8')
+        .setAuthor({ name: newMember.user.tag, iconURL: newMember.user.displayAvatarURL({ dynamic: true }) })
+        .setThumbnail(newMember.user.displayAvatarURL({ dynamic: true }))
         .addFields(
-          { name: 'Ancien', value: `\`${oldMember.nickname || oldMember.user.username}\``, inline: true },
-          { name: 'Nouveau', value: `\`${newMember.nickname || newMember.user.username}\``, inline: true }
-        )
-        .setColor('#3498DB')
-        .setTimestamp();
+          { name: 'Membre', value: `${newMember.user}\n\`${newMember.id}\``, inline: false },
+          { name: 'Avant', value: `\`${oldMember.nickname || oldMember.user.username}\``, inline: true },
+          { name: 'Apres', value: `\`${newMember.nickname || newMember.user.username}\``, inline: true }
+        );
+
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
   }
@@ -145,14 +153,13 @@ class LogSystem {
     if (!channel) return;
 
     if (oldChan.name !== newChan.name) {
-      const embed = new EmbedBuilder()
-        .setTitle('📂 Salon Renommé')
+      const embed = this.baseEmbed(newChan.guild, '📁 Salon renomme', '#A855F7')
         .addFields(
-          { name: 'Ancien Nom', value: `\`${oldChan.name}\``, inline: true },
-          { name: 'Nouveau Nom', value: `\`${newChan.name}\``, inline: true }
-        )
-        .setColor('#9B59B6')
-        .setTimestamp();
+          { name: 'Avant', value: `\`${oldChan.name}\``, inline: true },
+          { name: 'Apres', value: `\`${newChan.name}\``, inline: true },
+          { name: 'Salon', value: `<#${newChan.id}>`, inline: false }
+        );
+
       await channel.send({ embeds: [embed] }).catch(() => {});
     }
   }
@@ -162,34 +169,22 @@ class LogSystem {
     if (!logChannel) return;
 
     const { action, executor, target } = entry;
-    
-    // On ne log que les actions staff spécifiques demandées
-    const importantActions = [
-        AuditLogEvent.ChannelDelete,
-        AuditLogEvent.RoleDelete,
-        AuditLogEvent.WebhookDelete,
-        AuditLogEvent.MemberKick,
-        AuditLogEvent.MemberPrune
-    ];
-
-    if (!importantActions.includes(action)) return;
-
     const actionNames = {
-        [AuditLogEvent.ChannelDelete]: '🗑️ Salon Supprimé',
-        [AuditLogEvent.RoleDelete]: '🗑️ Rôle Supprimé',
-        [AuditLogEvent.WebhookDelete]: '⚓ Webhook Supprimé',
-        [AuditLogEvent.MemberKick]: '👢 Membre Expulsé',
-        [AuditLogEvent.MemberPrune]: '🧹 Purge Inactifs'
+      [AuditLogEvent.ChannelDelete]: '🗑 Salon supprime',
+      [AuditLogEvent.RoleDelete]: '🗑 Role supprime',
+      [AuditLogEvent.WebhookDelete]: '⚓ Webhook supprime',
+      [AuditLogEvent.MemberKick]: '👢 Membre expulse',
+      [AuditLogEvent.MemberPrune]: '🧹 Purge membres inactifs'
     };
 
-    const embed = new EmbedBuilder()
-        .setTitle(actionNames[action])
-        .addFields(
-            { name: 'Action par', value: `${executor}`, inline: true },
-            { name: 'Cible', value: `\`${target?.id || 'Inconnu'}\``, inline: true }
-        )
-        .setColor('#2F3136')
-        .setTimestamp();
+    if (!actionNames[action]) return;
+
+    const embed = this.baseEmbed(guild, actionNames[action], '#2B2D31')
+      .setAuthor({ name: executor?.tag || 'Action systeme', iconURL: executor?.displayAvatarURL?.({ dynamic: true }) })
+      .addFields(
+        { name: 'Action par', value: executor ? `${executor}\n\`${executor.id}\`` : '`Inconnu`', inline: true },
+        { name: 'Cible', value: `\`${target?.id || 'Inconnue'}\``, inline: true }
+      );
 
     await logChannel.send({ embeds: [embed] }).catch(() => {});
   }

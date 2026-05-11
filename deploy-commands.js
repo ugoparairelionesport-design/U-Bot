@@ -3,12 +3,6 @@ const { REST } = require('@discordjs/rest');
 require('dotenv').config();
 
 const commands = [
-    // Maintenance
-    new SlashCommandBuilder()
-        .setName('maintenance')
-        .setDescription('Affiche le panneau de maintenance du bot.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
     // Protection Hub
     new SlashCommandBuilder()
         .setName('config_protection')
@@ -23,14 +17,6 @@ const commands = [
     new SlashCommandBuilder()
         .setName('modif_config_ticket')
         .setDescription('Modifie les options existantes du système de tickets.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-    new SlashCommandBuilder()
-        .setName('stats')
-        .setDescription('Affiche les statistiques générales des tickets.')
-        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-    new SlashCommandBuilder()
-        .setName('staff_stats')
-        .setDescription('Affiche les statistiques du staff sur les tickets.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     // Live System
@@ -87,7 +73,7 @@ const commands = [
     // Entrance System
     new SlashCommandBuilder()
         .setName('set_entrée')
-        .setDescription('Configure l\'accueil, les auto-roles, le règlement et les statistiques membres.')
+        .setDescription('Configure l\'accueil, les auto-roles, le règlement et les images de bienvenue.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     // XP System

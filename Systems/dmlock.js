@@ -21,9 +21,10 @@ class DmLockSystem {
         `**Pourquoi ?**\n` +
         `Les arnaqueurs utilisent les DMs pour envoyer des liens de phishing, de faux bots, des offres Nitro ou des arnaques crypto.\n\n` +
         `**Comment faire ?**\n` +
-        `1. Ouvrez le menu du serveur.\n` +
-        `2. Allez dans **Paramètres de confidentialité**.\n` +
-        `3. Désactivez **Messages privés** pour ce serveur.`
+        `1. Cliquez sur le nom du serveur en haut à gauche.\n` +
+        `2. Ouvrez **Paramètres de confidentialité**.\n` +
+        `3. Décochez **Messages privés**.\n` +
+        `4. Décochez aussi **Demandes de messages** si l'option est visible.`
       )
       .setColor('#ED4245')
       .setThumbnail(member.guild.iconURL({ dynamic: true }))
@@ -52,7 +53,7 @@ class DmLockSystem {
         '• ❌ Le staff ne vous demandera jamais votre mot de passe ou un code 2FA.\n' +
         '• ❌ Ne cliquez jamais sur des liens promettant du Nitro gratuit.\n' +
         '• ❌ Méfiez-vous des offres crypto, recrutement ou cadeaux reçues en MP.\n\n' +
-        'Pour une sécurité maximale, désactivez les DMs dans les paramètres de confidentialité du serveur.'
+        'Pour une sécurité maximale : cliquez sur le nom du serveur, ouvrez **Paramètres de confidentialité**, puis décochez **Messages privés** et **Demandes de messages** si l\'option est visible.'
       )
       .setColor('#2B2D31')
       .setTimestamp();

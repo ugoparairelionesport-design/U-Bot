@@ -31,7 +31,6 @@ try {
 }
 
 const configSystem = require('./Systems/configsystem');
-const MaintenanceSystem = require('./Systems/maintenance');
 const LiveSystem = require('./Systems/livesystem');
 const LogSystem = require('./Systems/logsystem');
 const EntranceSystem = require('./Systems/entrancesystem');
@@ -135,9 +134,7 @@ const client = new Client({ // Ligne 71
 client.commands = new Map();
 client.configSystem = configSystem;
 
-// Initialisation de la maintenance AVANT tout le reste (important pour le redémarrage rapide)
 try {
-  client.maintenance = new MaintenanceSystem(client);
   client.logSystem = new LogSystem(client);
   client.entranceSystem = new EntranceSystem(client);
   client.xpSystem = new XPSystem(client);
@@ -148,7 +145,7 @@ try {
   client.dmLock = new DmLockSystem(client);
   client.aiSystem = new AISystem(client);
 } catch (err) {
-  console.error('❌ Erreur lors de l\'initialisation de la maintenance:', err);
+  console.error('❌ Erreur lors de l\'initialisation des systèmes:', err);
 }
 
 /* ========================= */
@@ -210,7 +207,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['maintenance', 'config_ticket', 'modif_config_ticket', 'stats', 'config_live', 'modif_config_live', 'test_live', 'staff_stats', 'config_protection', 'set_config', 'help'];
+      const adminCommands = ['config_ticket', 'modif_config_ticket', 'config_live', 'modif_config_live', 'test_live', 'config_protection', 'set_config', 'help'];
       console.log(`⚡ Command: /${interaction.commandName} by ${interaction.user.tag}`);
       
       if (adminCommands.includes(interaction.commandName)) {
@@ -220,17 +217,6 @@ client.on('interactionCreate', async interaction => {
             flags: 64
           });
           return setTimeout(() => interaction.deleteReply().catch(() => {}), 300000);
-        }
-      }
-
-      if (interaction.commandName === 'maintenance') {
-        if (client.maintenance) {
-          return client.maintenance.handleMaintenanceCommand(interaction);
-        } else {
-          return await interaction.reply({
-            content: "❌ Système de maintenance non initialisé.",
-            flags: 64
-          });
         }
       }
 
@@ -279,18 +265,6 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'config_ticket') {
         return client.configSystem.sendConfigPanel(interaction);
-      }
-
-      if (interaction.commandName === 'stats') {
-        await interaction.deferReply({ flags: 64 });
-        await client.configSystem.updateStatsMessage(interaction.guild);
-        return interaction.editReply({
-          content: "📊 Stats mises à jour",
-        });
-      }
-
-      if (interaction.commandName === 'staff_stats') {
-        return client.configSystem.showStaffStats(interaction);
       }
 
       if (interaction.commandName === 'modif_config_ticket') {
@@ -469,7 +443,6 @@ process.on('uncaughtException', err => {
 process.on('SIGINT', () => {
   console.log('\n🛑 Arrêt du bot demandé...');
   server.close();
-  if (client.maintenance) client.maintenance.cleanup();
   client.destroy();
   process.exit(0);
 });
@@ -477,7 +450,6 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => {
   console.log('\n🛑 Arrêt du bot demandé...');
   server.close();
-  if (client.maintenance) client.maintenance.cleanup();
   client.destroy();
   process.exit(0);
 });

@@ -150,18 +150,8 @@ class EntranceSystem {
   }
 
   async updateMemberCount(guild) {
-    const guildConfig = configSystem.getGuildConfig(guild.id);
-    const statsChanId = guildConfig.entrance.statsChannel;
-    if (!statsChanId) return;
-
-    const channel = guild.channels.cache.get(statsChanId);
-    if (channel) {
-      // On utilise un format propre pour le nom du salon
-      const name = `👥 Membres: ${guild.memberCount}`;
-      if (channel.name !== name) {
-        await channel.setName(name).catch(() => {});
-      }
-    }
+    // Fonction volontairement desactivee : l'ancien compteur vocal n'est plus utilise.
+    return null;
   }
 
   async sendRulesPanel(interaction) {
