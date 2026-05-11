@@ -309,6 +309,7 @@ const CONFIG_MESSAGE_DELETE_DELAY_MS = 5 * 60 * 1000; // Passage à 5 minutes po
 const PENDING_CLOSE_EXPIRE_MS = 10 * 60 * 1000;
 const pendingTicketCreations = new Map();
 const recentInteractionActions = new Map();
+const closingMessageWarnings = new Map();
 const TICKET_ACTION_LOCK_MS = 8 * 1000;
 
 function cleanupRecentInteractionActions(now = Date.now()) {
@@ -669,7 +670,10 @@ function isDetailedTicketPanelMessage(message) {
 }
 
 function stripTicketStatusEmoji(channelName) {
-  return String(channelName || '').replace(/-?[🟠🟢🔴]$/u, '');
+  return String(channelName || '')
+    .replace(/-?fermeture-en-cours$/u, '')
+    .replace(/-?[🟠🟢🔴]$/u, '')
+    .replace(/-?(?:ðŸŸ |ðŸŸ¢|ðŸ”´)$/u, '');
 }
 
 function buildTicketChannelName(choice, user, statusEmoji = '🟠') {
@@ -779,9 +783,9 @@ function getClosingChannelName(channelName) {
   if (channelName.includes(suffix)) return channelName;
 
   const cleanBase = stripTicketStatusEmoji(channelName);
-  // On limite la base pour laisser de la place à la pastille et au suffixe
+  // Nom ASCII uniquement : Discord refuse parfois les renames avec certains emojis de statut.
   const baseName = trimChannelName(cleanBase, 78);
-  return `${baseName}-🔴-${suffix}`;
+  return `${baseName}-${suffix}`;
 }
 
 function getReopenedChannelName(channelName, originalName = null) {
@@ -790,6 +794,7 @@ function getReopenedChannelName(channelName, originalName = null) {
   const cleanBase = stripTicketStatusEmoji(
     String(channelName || 'ticket')
       .replace(/-?🔴-?fermeture-en-cours$/u, '')
+      .replace(/-?ðŸ”´-?fermeture-en-cours$/u, '')
       .replace(/-?fermeture-en-cours$/u, '')
   );
 
@@ -940,9 +945,11 @@ function capturePermissionOverwrites(channel) {
 }
 
 async function lockTicketChannelForClosing(channel, closingState = {}) {
-  if (!channel?.permissionOverwrites) return;
+  if (!channel?.permissionOverwrites) return false;
 
-  closingState.permissionOverwrites = capturePermissionOverwrites(channel);
+  if (!Array.isArray(closingState.permissionOverwrites) || closingState.permissionOverwrites.length === 0) {
+    closingState.permissionOverwrites = capturePermissionOverwrites(channel);
+  }
   const botId = channel.client.user?.id;
   const guildConfig = getGuildConfig(channel.guild.id);
   const roleIds = getRoleIds(guildConfig.roles?.[closingState.choice]);
@@ -957,21 +964,33 @@ async function lockTicketChannelForClosing(channel, closingState = {}) {
     SendMessages: false,
     SendMessagesInThreads: false,
     CreatePublicThreads: false,
-    CreatePrivateThreads: false
+    CreatePrivateThreads: false,
+    AddReactions: false
   };
 
-  await Promise.all([...targets].map(targetId => {
-    if (!targetId || targetId === botId) return Promise.resolve();
-    return channel.permissionOverwrites.edit(targetId, denySendPermissions).catch(() => {});
-  }));
+  const failures = [];
+  for (const targetId of targets) {
+    if (!targetId || targetId === botId) continue;
+    try {
+      await channel.permissionOverwrites.edit(targetId, denySendPermissions);
+    } catch (err) {
+      failures.push(`${targetId}: ${err?.message || err}`);
+    }
+  }
 
   if (botId) {
     await channel.permissionOverwrites.edit(botId, {
       ViewChannel: true,
       SendMessages: true,
       ReadMessageHistory: true
-    }).catch(() => {});
+    }).catch(err => failures.push(`${botId}: ${err?.message || err}`));
   }
+
+  if (failures.length) {
+    console.warn(`⚠️ [TICKETS] Verrouillage partiel de #${channel.name}: ${failures.join(' | ')}`);
+  }
+
+  return failures.length === 0;
 }
 
 async function restoreTicketChannelPermissions(channel, closingState, guildConfig) {
@@ -1655,12 +1674,12 @@ async function resumeTicketState(client) {
     for (const channel of channels.values()) {
       if (channel.type !== ChannelType.GuildText) continue;
 
-      const isClosing = channel.name.endsWith('fermeture-en-cours');
+      const storedDeleteAt = guildConfig.pendingDeletions?.[channel.id];
+      const isClosing = channel.name.endsWith('fermeture-en-cours') || Boolean(storedDeleteAt);
       const isTicket = ticketCategoryIds.includes(channel.parentId) || guildConfig.ticketOwners[channel.id];
 
       if (isClosing) {
         // REPRISE DE FERMETURE : On recalcule le temps restant
-        const storedDeleteAt = guildConfig.pendingDeletions?.[channel.id];
         const deleteAt = storedDeleteAt || (Date.now() + TICKET_DELETE_DELAY_MS);
         const delay = Math.max(5000, deleteAt - Date.now()); 
 
@@ -1669,6 +1688,15 @@ async function resumeTicketState(client) {
           if (!guildConfig.pendingDeletions) guildConfig.pendingDeletions = {};
           guildConfig.pendingDeletions[channel.id] = deleteAt;
         }
+
+        if (!guildConfig.closingTickets || typeof guildConfig.closingTickets !== 'object') guildConfig.closingTickets = {};
+        const closingState = guildConfig.closingTickets[channel.id] || {};
+        guildConfig.closingTickets[channel.id] = closingState;
+        const closingName = getClosingChannelName(channel.name);
+        if (channel.name !== closingName) {
+          await channel.setName(closingName).catch(err => console.warn(`TICKET RESUME RENAME ERROR (${channel.name} -> ${closingName}):`, err?.message || err));
+        }
+        await lockTicketChannelForClosing(channel, closingState).catch(err => console.warn('TICKET RESUME LOCK ERROR:', err?.message || err));
 
         console.log(`⏳ [TICKETS] Reprise de la suppression pour #${channel.name} dans ${Math.round(delay/60000)} min.`);
 
@@ -2279,10 +2307,23 @@ async function handleButtons(interaction) {
         await closingMessage.edit({ attachments: [] }).catch(() => {});
       }
 
-      await Promise.all([
-        ticketChannel.setName(getClosingChannelName(ticketChannel.name)).catch(err => console.warn('TICKET CLOSE RENAME ERROR:', err?.message || err)),
-        lockTicketChannelForClosing(ticketChannel, closingState).catch(err => console.warn('TICKET CLOSE LOCK ERROR:', err?.message || err))
+      const closingChannelName = getClosingChannelName(ticketChannel.name);
+      const [renamed, locked] = await Promise.all([
+        ticketChannel.setName(closingChannelName)
+          .then(() => true)
+          .catch(err => {
+            console.warn(`TICKET CLOSE RENAME ERROR (${ticketChannel.name} -> ${closingChannelName}):`, err?.message || err);
+            return false;
+          }),
+        lockTicketChannelForClosing(ticketChannel, closingState)
+          .catch(err => {
+            console.warn('TICKET CLOSE LOCK ERROR:', err?.message || err);
+            return false;
+          })
       ]);
+      closingState.renamed = Boolean(renamed);
+      closingState.lockApplied = Boolean(locked);
+      closingState.closingName = closingChannelName;
 
       guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
 
@@ -3085,6 +3126,26 @@ async function handleMessage(message) {
   if (!message.guild || message.author.bot) return;
 
   const guildConfig = getGuildConfig(message.guild.id);
+  if (guildConfig.pendingDeletions?.[message.channel.id]) {
+    await message.delete().catch(err => {
+      if (err?.code !== 10008) console.warn(`⚠️ [TICKETS] Message impossible à supprimer dans ticket fermé: ${err?.message || err}`);
+    });
+
+    const warningKey = `${message.guild.id}:${message.channel.id}:${message.author.id}`;
+    const now = Date.now();
+    if (!closingMessageWarnings.get(warningKey) || now - closingMessageWarnings.get(warningKey) > 7000) {
+      closingMessageWarnings.set(warningKey, now);
+      message.channel.send({
+        content: `🔒 ${message.author}, ce ticket est en cours de fermeture. Utilise le bouton **Ré-ouvrir** si la discussion doit reprendre.`,
+        allowedMentions: { users: [message.author.id] }
+      }).then(warning => {
+        setTimeout(() => warning.delete().catch(() => {}), 7000);
+      }).catch(() => {});
+    }
+
+    return true;
+  }
+
   const ticketOwnerId = guildConfig.ticketOwners[message.channel.id];
 
   // On vérifie si nous sommes dans un ticket actif

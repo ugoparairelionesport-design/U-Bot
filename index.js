@@ -347,7 +347,7 @@ client.on('interactionCreate', async interaction => {
 
 client.on('messageCreate', async message => {
   try {
-    await client.configSystem.handleMessage(message);
+    if (await client.configSystem.handleMessage(message)) return;
     await client.xpSystem?.handleMessage(message);
     await client.aiSystem?.handleMessage(message);
     if (client.antiSpam) {
