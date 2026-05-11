@@ -256,6 +256,8 @@ function saveConfig(data) {
 }
 
 function startVisualTimer(message, deleteAt) {
+  if (message?.attachments?.size > 0) return;
+
   let lastSecond = -1;
   const isDeletionStillPending = () => {
     const guildId = message?.channel?.guild?.id;
@@ -408,9 +410,14 @@ async function updateComponentMessage(interaction, payload) {
     payload = applyInteractionEmbedDefaults(interaction, payload, 'component-banner');
     const editablePayload = { ...payload };
     delete editablePayload.flags;
+    editablePayload.attachments = [];
 
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferUpdate();
+      if (typeof interaction.deferUpdate === 'function') {
+        await interaction.deferUpdate();
+      } else {
+        await interaction.deferReply({ flags: 64 }).catch(() => {});
+      }
     }
 
     return await interaction.editReply(editablePayload);
@@ -422,6 +429,7 @@ async function updateComponentMessage(interaction, payload) {
     if (interaction.message?.editable) {
       const editablePayload = { ...payload };
       delete editablePayload.flags;
+      editablePayload.attachments = [];
       return interaction.message.edit(editablePayload).catch(() => null);
     }
     return null;
@@ -900,7 +908,15 @@ async function lockTicketChannelForClosing(channel, closingState = {}) {
 
   closingState.permissionOverwrites = capturePermissionOverwrites(channel);
   const botId = channel.client.user?.id;
-  const targets = new Set([channel.guild.id, ...channel.permissionOverwrites.cache.keys()]);
+  const guildConfig = getGuildConfig(channel.guild.id);
+  const roleIds = getRoleIds(guildConfig.roles?.[closingState.choice]);
+  const targets = new Set([
+    channel.guild.id,
+    closingState.ownerId,
+    closingState.claimedBy,
+    ...roleIds,
+    ...channel.permissionOverwrites.cache.keys()
+  ].filter(Boolean));
   const denySendPermissions = {
     SendMessages: false,
     SendMessagesInThreads: false,
@@ -908,10 +924,10 @@ async function lockTicketChannelForClosing(channel, closingState = {}) {
     CreatePrivateThreads: false
   };
 
-  for (const targetId of targets) {
-    if (!targetId || targetId === botId) continue;
-    await channel.permissionOverwrites.edit(targetId, denySendPermissions).catch(() => {});
-  }
+  await Promise.all([...targets].map(targetId => {
+    if (!targetId || targetId === botId) return Promise.resolve();
+    return channel.permissionOverwrites.edit(targetId, denySendPermissions).catch(() => {});
+  }));
 
   if (botId) {
     await channel.permissionOverwrites.edit(botId, {
@@ -1002,7 +1018,19 @@ async function sendLog(guild, embed, specificChannelId = null) {
     embed.setThumbnail(guild.client.user.displayAvatarURL());
   }
 
-  await channel.send(withGuildBanner(guildConfig, { embeds: [embed] }, 'log-banner')).catch(() => {});
+  const sentMessage = await channel.send(withGuildBanner(guildConfig, { embeds: [embed] }, 'log-banner')).catch(() => null);
+  if (sentMessage) {
+    const title = embed.data?.title;
+    const purgeLegacy = () => deleteLegacyBotEmbeds(
+      channel,
+      guild.client.user.id,
+      legacyEmbed => isLegacySimpleEmbed(legacyEmbed, title),
+      sentMessage.id,
+      15
+    );
+    await purgeLegacy();
+    setTimeout(() => purgeLegacy().catch(() => {}), 1500);
+  }
 }
 
 async function sendRolePingMessage(channel, roleIds) {
@@ -1109,9 +1137,12 @@ function buildStatsPayload(guildOrId) {
 }
 
 function isStatsMessage(message) {
-  return Boolean(message?.components?.some(row =>
-    row.components?.some(component => component.customId === 'refresh_stats')
-  ));
+  const embed = message?.embeds?.[0];
+  return Boolean(
+    message?.components?.some(row => row.components?.some(component => component.customId === 'refresh_stats')) ||
+    embed?.title?.includes('Statistiques') ||
+    embed?.title?.includes('Centre de Données')
+  );
 }
 
 function isDetailedStatsMessage(message) {
@@ -1119,6 +1150,29 @@ function isDetailedStatsMessage(message) {
   const title = embed?.title || '';
   const description = embed?.description || '';
   return title.includes('Centre de Données') || description.includes('Activité du support');
+}
+
+async function deleteLegacyBotEmbeds(channel, botUserId, matcher, keepMessageId = null, limit = 25) {
+  if (!channel?.messages || !botUserId || typeof matcher !== 'function') return 0;
+
+  const messages = await channel.messages.fetch({ limit }).catch(() => null);
+  if (!messages) return 0;
+
+  let deleted = 0;
+  for (const message of messages.values()) {
+    if (message.id === keepMessageId || message.author?.id !== botUserId) continue;
+    const embed = message.embeds?.[0];
+    if (!embed || !matcher(embed, message)) continue;
+    await message.delete().catch(() => {});
+    deleted++;
+  }
+  return deleted;
+}
+
+function isLegacySimpleEmbed(embed, expectedTitle = null) {
+  const title = embed?.title || '';
+  if (expectedTitle && title !== expectedTitle) return false;
+  return !embed?.thumbnail && !embed?.image;
 }
 
 function buildCloseConfirmRow() {
@@ -1210,6 +1264,7 @@ async function updateStatsMessage(guild) {
       for (const message of botStatsMessages) {
         if (message.id !== existingMessage.id) await message.delete().catch(() => {});
       }
+      await deleteLegacyBotEmbeds(channel, guild.client.user.id, embed => embed.title?.includes('Statistiques') && !embed.title?.includes('Centre de Données'), existingMessage.id, 100);
       return;
     }
   }
@@ -1221,6 +1276,7 @@ async function updateStatsMessage(guild) {
     for (const message of botStatsMessages) {
       if (message.id !== reusableMessage.id) await message.delete().catch(() => {});
     }
+    await deleteLegacyBotEmbeds(channel, guild.client.user.id, embed => embed.title?.includes('Statistiques') && !embed.title?.includes('Centre de Données'), reusableMessage.id, 100);
     saveConfig(configData);
     return;
   }
@@ -1230,6 +1286,7 @@ async function updateStatsMessage(guild) {
   if (message) {
     guildConfig.statsMessageId = message.id;
     saveConfig(configData);
+    await deleteLegacyBotEmbeds(channel, guild.client.user.id, embed => embed.title?.includes('Statistiques') && !embed.title?.includes('Centre de Données'), message.id, 100);
   }
 }
 
@@ -1760,9 +1817,9 @@ async function handleButtons(interaction) {
         return await handleBotNameButtonClick(interaction);
       case 'global_banner_set_btn':
       case 'prot_banner_set_btn':
-        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_banner').setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image').setPlaceholder('Lien direct').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
+        return interaction.showModal(new ModalBuilder().setCustomId(`modal_set_global_banner:${interaction.message?.id || 'none'}`).setTitle('Image de fond des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('banner_url').setLabel('URL de l\'image').setPlaceholder('Lien direct').setValue(guildConfig.globalEmbedBanner || '').setStyle(TextInputStyle.Short).setRequired(false))));
       case 'global_color_set_btn':
-        return interaction.showModal(new ModalBuilder().setCustomId('modal_set_global_color').setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code HEX').setPlaceholder('#5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
+        return interaction.showModal(new ModalBuilder().setCustomId(`modal_set_global_color:${interaction.message?.id || 'none'}`).setTitle('Couleur des Embeds').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('color_hex').setLabel('Code HEX').setPlaceholder('#5865F2').setValue(guildConfig.globalEmbedColor || '#5865F2').setStyle(TextInputStyle.Short).setRequired(true))));
 
       // == PROTECTION HUB ==
       case 'prot_hub_back':
@@ -1889,6 +1946,7 @@ async function handleButtons(interaction) {
       case 'modif_select': {
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
       const selected = interaction.values[0];
+        await resetSelectMenuToPlaceholder(interaction);
         if (selected === 'logs') return interaction.showModal(buildChannelIdModal('modal_edit_logs', 'Modifier logs', 'Nouvel ID salon logs'));
         if (selected === 'stats') return interaction.showModal(buildChannelIdModal('modal_edit_stats', 'Modifier stats', 'Nouvel ID salon stats'));
         if (selected === 'options_panel') {
@@ -1937,18 +1995,31 @@ async function handleButtons(interaction) {
       case 'panel_opt_remove':
       const options = getConfiguredTicketOptions(guildConfig);
       if (options.length === 0) return replyAndAutoDelete(interaction, { content: "❌ Aucune option à supprimer.", flags: 64 });
+      const removeEmbed = new EmbedBuilder()
+        .setTitle("🧹 Suppression d'option")
+        .setDescription(
+          "Sélectionne ci-dessous l'option de ticket à retirer du panel.\n\n" +
+          "Cette action supprime l'option de la configuration active, mais ne supprime aucun salon déjà existant."
+        )
+        .setThumbnail(interaction.client.user.displayAvatarURL())
+        .setColor(guildConfig.globalEmbedColor)
+        .setTimestamp();
       const menu = new StringSelectMenuBuilder()
         .setCustomId('panel_opt_remove_select')
         .setPlaceholder('Sélectionnez l\'option à supprimer')
         .addOptions(options.map(opt => ({ label: opt, value: opt })));
-      return updateComponentMessage(interaction, {
-        content: "Sélectionnez l'option à supprimer définitivement :",
-        embeds: [],
-        components: [new ActionRowBuilder().addComponents(menu)]
-      });
+      const backRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('modif_back').setLabel('Retour').setStyle(ButtonStyle.Secondary)
+      );
+      return updateComponentMessage(interaction, withGuildBanner(guildConfig, {
+        content: '',
+        embeds: [removeEmbed],
+        components: [new ActionRowBuilder().addComponents(menu), backRow]
+      }, 'ticket-option-remove-banner'));
 
       case 'panel_opt_remove_select': {
         if (!interaction.isStringSelectMenu()) break; // S'assurer que c'est bien un menu
+      await resetSelectMenuToPlaceholder(interaction);
       const optionToRemove = interaction.values[0];
       delete guildConfig.categories[optionToRemove];
       delete guildConfig.roles[optionToRemove];
@@ -2021,9 +2092,9 @@ async function handleButtons(interaction) {
         saveConfig(configData);
         await updateStatsMessage(interaction.guild).catch(() => {});
         await setTicketStatusEmoji(interaction.channel, '🟠');
-        return interaction.reply({
+        return replyAndAutoDelete(interaction, withGuildBanner(guildConfig, {
           embeds: [new EmbedBuilder().setTitle("🛠️ Claim").setDescription(`${interaction.user} a pris en charge ce ticket.\n\nUn membre de l'équipe est désormais assigné à votre demande.`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor).setFooter({ text: "Merci de patienter pendant le traitement." }).setTimestamp()]
-        });
+        }, 'ticket-claim-banner'));
       }
 
       case 'unclaim_ticket': {
@@ -2147,10 +2218,10 @@ async function handleButtons(interaction) {
 
       if (!guildConfig.pendingDeletions || typeof guildConfig.pendingDeletions !== 'object') guildConfig.pendingDeletions = {};
       guildConfig.pendingDeletions[ticketChannel.id] = deleteAt;
+      await ticketChannel.setName(getClosingChannelName(ticketChannel.name)).catch(err => console.warn('TICKET CLOSE RENAME ERROR:', err?.message || err));
+      await lockTicketChannelForClosing(ticketChannel, closingState).catch(err => console.warn('TICKET CLOSE LOCK ERROR:', err?.message || err));
       const closingMessage = await sendMessageWithTimer(ticketChannel, closeEmbed, TICKET_DELETE_DELAY_MS);
       if (closingMessage) closingState.messageId = closingMessage.id;
-      await lockTicketChannelForClosing(ticketChannel, closingState);
-      await ticketChannel.setName(getClosingChannelName(ticketChannel.name)).catch(() => {});
 
       guildConfig.stats.closed = (guildConfig.stats.closed || 0) + 1;
 
@@ -2245,9 +2316,17 @@ async function handleButtons(interaction) {
 
       const reopenedEmbed = new EmbedBuilder()
         .setTitle("🔓 Ticket réouvert")
-        .setDescription(`${interaction.user} a réouvert ce ticket. Les messages sont de nouveau autorisés.`)
+        .setDescription(
+          "Ce ticket vient d'être remis en service.\n\n" +
+          "La discussion est de nouveau ouverte et l'équipe peut reprendre le suivi de la demande."
+        )
+        .addFields(
+          { name: "Réouvert par", value: `${interaction.user}`, inline: true },
+          { name: "Statut", value: "Messages autorisés", inline: true }
+        )
         .setThumbnail(interaction.client.user.displayAvatarURL())
         .setColor(guildConfig.globalEmbedColor)
+        .setFooter({ text: "U-Bot Tickets • Ticket actif" })
         .setTimestamp();
 
       if (interaction.message?.editable) {
@@ -2527,16 +2606,17 @@ async function handleModal(interaction) {
       await interaction.deferReply({ flags: 64 }).catch(() => {});
     }
     // RÉPONSE PRIORITAIRE : Traitement du formulaire de nom
-    if (interaction.customId === 'modal_set_bot_nickname') {
+    if (interaction.customId.startsWith('modal_set_bot_nickname')) {
       return await handleSetBotNicknameModal(interaction);
     }
 
-    if (interaction.customId === 'modal_set_global_banner') {
+    if (interaction.customId.startsWith('modal_set_global_banner')) {
       const url = interaction.fields.getTextInputValue('banner_url').trim();
 
       if (!url) {
         guildConfig.globalEmbedBanner = null;
         saveConfig(configData);
+        await refreshBotNamePanelMessage(interaction);
         return interaction.editReply({ content: "✅ Image des embeds supprimée." });
       }
 
@@ -2561,6 +2641,7 @@ async function handleModal(interaction) {
         if (!publicBaseUrl) {
           guildConfig.globalEmbedBanner = url;
           saveConfig(configData);
+          await refreshBotNamePanelMessage(interaction);
           return interaction.editReply({ content: "⚠️ Image enregistrée via lien direct (domaine public Replit introuvable)." });
         }
 
@@ -2572,15 +2653,17 @@ async function handleModal(interaction) {
         
         guildConfig.globalEmbedBanner = `${publicBaseUrl}/assets/${interaction.guildId}/${fileName}?v=${Date.now()}`;
         saveConfig(configData);
+        await refreshBotNamePanelMessage(interaction);
         return interaction.editReply({ content: "✅ Image enregistrée avec succès !" });
       } catch (err) {
         guildConfig.globalEmbedBanner = url;
         saveConfig(configData);
+        await refreshBotNamePanelMessage(interaction);
         return interaction.editReply({ content: `⚠️ Image enregistrée via lien direct (copie locale impossible : ${err.message}).` });
       }
     }
 
-    if (interaction.customId === 'modal_set_global_color') {
+    if (interaction.customId.startsWith('modal_set_global_color')) {
       const color = interaction.fields.getTextInputValue('color_hex').trim();
 
       // Validation simple du format HEX
@@ -2590,6 +2673,7 @@ async function handleModal(interaction) {
 
       guildConfig.globalEmbedColor = color;
       saveConfig(configData);
+      await refreshBotNamePanelMessage(interaction);
       return replyAndAutoDelete(interaction, { content: `✅ La couleur des embeds a été mise à jour en \`${color}\` !`, flags: 64 });
     }
 
@@ -2905,7 +2989,18 @@ async function handleModal(interaction) {
         .setTimestamp();
 
       saveConfig(configData);
-      await interaction.channel.send(withGuildBanner(guildConfig, { embeds: [addLog] }, 'ticket-add-member-banner')).catch(() => {});
+      const sentMessage = await interaction.channel.send(withGuildBanner(guildConfig, { embeds: [addLog] }, 'ticket-add-member-banner')).catch(() => null);
+      if (sentMessage) {
+        const purgeLegacy = () => deleteLegacyBotEmbeds(
+          interaction.channel,
+          interaction.client.user.id,
+          embed => isLegacySimpleEmbed(embed, "➕ Membre ajouté"),
+          sentMessage.id,
+          15
+        );
+        await purgeLegacy();
+        setTimeout(() => purgeLegacy().catch(() => {}), 1500);
+      }
       return replyAndAutoDelete(interaction, { content: `✅ ${member.user} a été ajouté au ticket.`, flags: 64 });
     }
 
@@ -3031,7 +3126,7 @@ async function sendEditConfigPanel(interaction) {
 /* ========================= */
 // PERSONNALISATION DU NOM
 
-async function sendBotNamePanel(interaction) {
+async function buildBotNamePanelPayload(interaction) {
   const botMember = await interaction.guild.members.fetchMe().catch(() => null);
   const currentNickname = botMember?.nickname || interaction.client.user.username;
   const guildConfig = getGuildConfig(interaction.guildId);
@@ -3068,16 +3163,37 @@ async function sendBotNamePanel(interaction) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  return replyAndAutoDelete(interaction, { 
+  return withGuildBanner(guildConfig, {
     embeds: [embed], 
     components: [row],
     flags: 64
-  });
+  }, 'bot-config-banner');
+}
+
+async function refreshBotNamePanelMessage(interaction) {
+  let message = interaction.message?.editable ? interaction.message : null;
+  if (!message && interaction.customId?.includes(':') && interaction.channel?.messages) {
+    const messageId = interaction.customId.split(':')[1];
+    if (messageId && messageId !== 'none') {
+      message = await interaction.channel.messages.fetch(messageId).catch(() => null);
+    }
+  }
+  if (!message?.editable) return null;
+  const payload = await buildBotNamePanelPayload(interaction);
+  const editablePayload = { ...payload };
+  delete editablePayload.flags;
+  editablePayload.attachments = [];
+  return message.edit(editablePayload).catch(() => null);
+}
+
+async function sendBotNamePanel(interaction) {
+  const payload = await buildBotNamePanelPayload(interaction);
+  return sendOrUpdatePanel(interaction, payload);
 }
 
 async function handleBotNameButtonClick(interaction) {
   const modal = new ModalBuilder()
-    .setCustomId('modal_set_bot_nickname')
+    .setCustomId(`modal_set_bot_nickname:${interaction.message?.id || 'none'}`)
     .setTitle('Changer le nom du bot')
     .addComponents(
       new ActionRowBuilder().addComponents(
@@ -3125,6 +3241,7 @@ async function handleSetBotNicknameModal(interaction) {
           .setTimestamp()
       );
 
+      await refreshBotNamePanelMessage(interaction);
       return replyAndAutoDelete(interaction, { 
         content: `✅ Le nom du bot a été mis à jour : \`${newNickname || interaction.client.user.username}\``, 
         flags: 64 
