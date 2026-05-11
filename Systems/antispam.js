@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, PermissionsBitField } = require('discord.js');
 const configSystem = require('./configsystem');
 
 class AntiSpamSystem {
@@ -21,7 +21,12 @@ class AntiSpamSystem {
     let userData = this.users.get(key) || { messages: [], lastContent: '', duplicateCount: 0 };
 
     const windowMs = Math.max(1, settings.window || 5) * 1000;
-    const cleanContent = String(message.content || '').trim().toLowerCase();
+    const rawContent = String(message.content || '').trim();
+    const cleanContent = rawContent
+      .toLowerCase()
+      .replace(/[*_`~|>]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
 
     userData.messages = userData.messages.filter(m => now - m.time < windowMs);
     userData.messages.push({ time: now, content: cleanContent, messageId: message.id });
@@ -43,6 +48,19 @@ class AntiSpamSystem {
     }
 
     userData.lastContent = cleanContent;
+
+    const lines = rawContent
+      .split(/\n+/)
+      .map(line => line.toLowerCase().replace(/[*_`~|>]/g, '').trim())
+      .filter(line => line.length > 1);
+
+    if (lines.length >= (settings.maxDuplicates || 3)) {
+      const counts = new Map();
+      for (const line of lines) counts.set(line, (counts.get(line) || 0) + 1);
+      if ([...counts.values()].some(count => count >= (settings.maxDuplicates || 3))) {
+        violation = 'Répétition excessive dans un message';
+      }
+    }
 
     const links = message.content.match(/https?:\/\/[^\s]+/gi);
     if (links && links.length > (settings.maxLinks || 2)) {
@@ -131,6 +149,7 @@ class AntiSpamSystem {
       }
 
       await configSystem.sendLog(guild, embed, settings.logChannel);
+      await channel.send({ embeds: [embed] }).then(m => setTimeout(() => m.delete().catch(() => {}), 10000)).catch(() => {});
     } catch (err) {
       console.error('❌ Erreur lors de la sanction Anti-Spam:', err.message);
     }

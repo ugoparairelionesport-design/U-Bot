@@ -1,4 +1,4 @@
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { EmbedBuilder } = require('discord.js');
 const configSystem = require('./configsystem');
 
 class DmLockSystem {
@@ -14,49 +14,48 @@ class DmLockSystem {
     if (!settings?.enabled) return;
 
     const embed = new EmbedBuilder()
-      .setTitle(`🛡️ Sécurité : Protégez vos MPs sur ${member.guild.name}`)
+      .setTitle(`🛡️ Sécurité : protégez vos MPs sur ${member.guild.name}`)
       .setDescription(
         `Bonjour **${member.user.username}**,\n\n` +
-        `Pour votre sécurité sur notre communauté, nous vous recommandons de **désactiver vos messages privés** pour les membres de ce serveur.\n\n` +
+        `Discord ne permet pas aux bots de couper automatiquement les MPs entre membres. Pour votre sécurité, désactivez manuellement les messages privés provenant de ce serveur.\n\n` +
         `**Pourquoi ?**\n` +
-        `Les arnaqueurs utilisent les DMs pour envoyer des liens de phishing, des faux bots ou des arnaques crypto en se faisant passer pour le staff.\n\n` +
+        `Les arnaqueurs utilisent les DMs pour envoyer des liens de phishing, de faux bots, des offres Nitro ou des arnaques crypto.\n\n` +
         `**Comment faire ?**\n` +
-        `1. Faites un clic droit sur l'icône du serveur.\n` +
+        `1. Ouvrez le menu du serveur.\n` +
         `2. Allez dans **Paramètres de confidentialité**.\n` +
-        `3. Désactivez **"Messages privés"**.`
+        `3. Désactivez **Messages privés** pour ce serveur.`
       )
-      .setColor('#FF0000')
-      .setThumbnail(member.guild.iconURL())
-      .setFooter({ text: "U-Bot Security Protocol • Protection DM" })
+      .setColor('#ED4245')
+      .setThumbnail(member.guild.iconURL({ dynamic: true }))
+      .setFooter({ text: 'U-Bot Security Protocol • Protection DM' })
       .setTimestamp();
 
     try {
       await member.send({ embeds: [embed] });
       const logEmbed = new EmbedBuilder()
-        .setTitle("📩 DM Lock : Alerte envoyée")
+        .setTitle('📩 DM Lock : alerte envoyée')
         .setDescription(`Un message de prévention a été envoyé à ${member.user} (${member.user.tag}).`)
-        .setColor("#5865F2")
+        .setColor('#5865F2')
         .setTimestamp();
-      
+
       await configSystem.sendLog(member.guild, logEmbed, settings.logChannel);
-    } catch (err) {
-      // Si l'envoi échoue, c'est que l'utilisateur a déjà ses DMs fermés (parfait)
-      console.log(`ℹ️ [DM-LOCK] Message non envoyé à ${member.user.tag} (DMs déjà fermés).`);
+    } catch (_) {
+      console.log(`ℹ️ [DM-LOCK] Message non envoyé à ${member.user.tag} (DMs déjà fermés ou bloqués).`);
     }
   }
 
   async sendSafetyPanel(channel) {
     const embed = new EmbedBuilder()
-      .setTitle("🛡️ Centre de Prévention des Arnaques (DMs)")
+      .setTitle('🛡️ Centre de Prévention des Arnaques (DMs)')
       .setDescription(
-        "**Attention aux messages privés suspects !**\n\n" +
-        "• ❌ Le Staff ne vous demandera **JAMAIS** votre mot de passe ou un code 2FA.\n" +
-        "• ❌ Ne cliquez jamais sur des liens promettant du **Nitro Gratuit**.\n" +
-        "• ❌ Méfiez-vous des offres d'investissement ou de \"travail\" reçues en MP.\n\n" +
-        "Pour une sécurité maximale, désactivez vos DMs dans les paramètres de confidentialité du serveur."
+        '**Attention aux messages privés suspects !**\n\n' +
+        '• ❌ Le staff ne vous demandera jamais votre mot de passe ou un code 2FA.\n' +
+        '• ❌ Ne cliquez jamais sur des liens promettant du Nitro gratuit.\n' +
+        '• ❌ Méfiez-vous des offres crypto, recrutement ou cadeaux reçues en MP.\n\n' +
+        'Pour une sécurité maximale, désactivez les DMs dans les paramètres de confidentialité du serveur.'
       )
-      .setColor("#2B2D31")
-      .setImage("https://i.imgur.com/mY7j2Wj.png"); // Image illustrative optionnelle
+      .setColor('#2B2D31')
+      .setTimestamp();
 
     await channel.send({ embeds: [embed] });
   }
