@@ -36,7 +36,14 @@ const defaultGuildSettings = {
   ticketCount: {},
   ticketOwners: {},
   ticketOpenTime: {},
+  ticketCreatedAt: {},
   ticketChoices: {},
+  ticketFirstResponses: {},
+  responseStats: {
+    totalMs: 0,
+    count: 0,
+    staff: {}
+  },
   staffStats: {},
   pendingClosures: {},
   pendingDeletions: {},
@@ -766,6 +773,80 @@ function decrementStaffStat(guildId, userId, key) {
   saveConfig(configData);
 }
 
+function ensureResponseStats(guildConfig) {
+  if (!guildConfig.responseStats || typeof guildConfig.responseStats !== 'object') {
+    guildConfig.responseStats = { totalMs: 0, count: 0, staff: {} };
+  }
+  if (!guildConfig.responseStats.staff || typeof guildConfig.responseStats.staff !== 'object') {
+    guildConfig.responseStats.staff = {};
+  }
+  if (!guildConfig.ticketFirstResponses || typeof guildConfig.ticketFirstResponses !== 'object') {
+    guildConfig.ticketFirstResponses = {};
+  }
+  if (!guildConfig.ticketCreatedAt || typeof guildConfig.ticketCreatedAt !== 'object') {
+    guildConfig.ticketCreatedAt = {};
+  }
+  return guildConfig.responseStats;
+}
+
+function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms < 0) return "Non mesuré";
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+  if (minutes > 0) return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+  return `${seconds}s`;
+}
+
+function getAverageResponseMs(stats) {
+  return stats?.count ? Number(stats.totalMs || 0) / Number(stats.count || 1) : null;
+}
+
+function getStaffAverageResponseMs(guildConfig, userId) {
+  const stats = ensureResponseStats(guildConfig).staff[userId];
+  return stats?.count ? Number(stats.totalMs || 0) / Number(stats.count || 1) : null;
+}
+
+function recordTicketFirstResponse(guildId, channelId, staffUserId, timestamp = Date.now()) {
+  if (!guildId || !channelId || !staffUserId) return false;
+  const guildConfig = getGuildConfig(guildId);
+  const ownerId = guildConfig.ticketOwners?.[channelId];
+  if (!ownerId || ownerId === staffUserId) return false;
+
+  const responseStats = ensureResponseStats(guildConfig);
+  if (guildConfig.ticketFirstResponses[channelId]) return false;
+
+  const openedAt = Number(guildConfig.ticketCreatedAt?.[channelId] || guildConfig.ticketOpenTime?.[channelId] || timestamp);
+  const responseMs = Math.max(0, timestamp - openedAt);
+  guildConfig.ticketFirstResponses[channelId] = {
+    userId: staffUserId,
+    at: timestamp,
+    responseMs
+  };
+
+  responseStats.totalMs = Number(responseStats.totalMs || 0) + responseMs;
+  responseStats.count = Number(responseStats.count || 0) + 1;
+
+  if (!responseStats.staff[staffUserId]) {
+    responseStats.staff[staffUserId] = { totalMs: 0, count: 0 };
+  }
+  responseStats.staff[staffUserId].totalMs = Number(responseStats.staff[staffUserId].totalMs || 0) + responseMs;
+  responseStats.staff[staffUserId].count = Number(responseStats.staff[staffUserId].count || 0) + 1;
+
+  const staffStats = getStaffStats(guildId, staffUserId);
+  guildConfig.staffStats[staffUserId] = {
+    ...staffStats,
+    responseTotalMs: Number(staffStats.responseTotalMs || 0) + responseMs,
+    responseCount: Number(staffStats.responseCount || 0) + 1
+  };
+
+  saveConfig(configData);
+  return true;
+}
+
 function getPanelOptionFromChannel(channel) {
   if (!channel || !channel.guildId) return null;
   const guildConfig = getGuildConfig(channel.guildId);
@@ -975,6 +1056,17 @@ function buildStatsPayload(guildOrId) {
   const guildId = typeof guildOrId === 'string' ? guildOrId : guildOrId.id;
   const guild = typeof guildOrId === 'string' ? null : guildOrId;
   const guildConfig = getGuildConfig(guildId);
+  const responseStats = ensureResponseStats(guildConfig);
+  const averageResponseMs = getAverageResponseMs(responseStats);
+  const topStaffLines = Object.entries(guildConfig.staffStats || {})
+    .sort((a,b) => (b[1].claimed || 0) - (a[1].claimed || 0))
+    .slice(0, 5)
+    .map(([id, s], index) => {
+      const averageMs = getStaffAverageResponseMs(guildConfig, id);
+      const responseLabel = averageMs !== null ? formatDuration(averageMs) : "Non mesuré";
+      const responseCount = responseStats.staff?.[id]?.count || s.responseCount || 0;
+      return `**#${index + 1}** <@${id}> • ${s.claimed || 0} claim(s) • ${s.closed || 0} fermeture(s) • rép. moy. **${responseLabel}**${responseCount ? ` (${responseCount})` : ""}`;
+    });
   const total = (guildConfig.stats.opened || 0) + (guildConfig.stats.closed || 0);
   const closeRate = total > 0 ? Math.round(((guildConfig.stats.closed || 0) / total) * 100) : 0;
   
@@ -991,12 +1083,14 @@ function buildStatsPayload(guildOrId) {
       { name: "📈 Total", value: `\`\`\`\n${total}\n\`\`\``, inline: true }
     )
     .addFields({
+      name: "⏱️ Réactivité Modération",
+      value:
+        `Moyenne globale : **${averageResponseMs !== null ? formatDuration(averageResponseMs) : "Non mesurée"}**\n` +
+        `Tickets mesurés : **${responseStats.count || 0}**`
+    })
+    .addFields({
       name: "🛡️ Top Staff",
-      value: Object.entries(guildConfig.staffStats || {})
-        .sort((a,b) => (b[1].claimed || 0) - (a[1].claimed || 0))
-        .slice(0, 5)
-        .map(([id, s], index) => `**#${index + 1}** <@${id}> • ${s.claimed || 0} claim(s) • ${s.closed || 0} fermeture(s)`)
-        .join('\n') || "Aucune donnée"
+      value: topStaffLines.join('\n') || "Aucune donnée"
     })
     .setThumbnail(guild?.client?.user?.displayAvatarURL() || null)
     .setImage(guildConfig.globalEmbedBanner)
@@ -1398,6 +1492,7 @@ async function executeTicketCreation(interaction, choice, openingReason) {
 
   guildConfig.ticketOwners[channel.id] = interaction.user.id;
   guildConfig.ticketOpenTime[channel.id] = Date.now();
+  guildConfig.ticketCreatedAt[channel.id] = guildConfig.ticketOpenTime[channel.id];
   guildConfig.ticketChoices[channel.id] = choice;
   setTicketCount(interaction.guildId, interaction.user.id, getTicketCount(interaction.guildId, interaction.user.id) + 1);
   saveConfig(configData);
@@ -1500,6 +1595,8 @@ async function resumeTicketState(client) {
             delete guildConfig.claims[channel.id];
             delete guildConfig.ticketOwners[channel.id];
             delete guildConfig.ticketOpenTime[channel.id];
+            delete guildConfig.ticketCreatedAt[channel.id];
+            delete guildConfig.ticketFirstResponses[channel.id];
             delete guildConfig.ticketChoices[channel.id];
             saveConfig(configData);
             channel.delete().catch(() => {});
@@ -1511,6 +1608,9 @@ async function resumeTicketState(client) {
           guildConfig.ticketOwners[channel.id] = "Inconnu (Adopté)";
           if (!guildConfig.ticketOpenTime[channel.id]) {
             guildConfig.ticketOpenTime[channel.id] = channel.createdTimestamp;
+          }
+          if (!guildConfig.ticketCreatedAt[channel.id]) {
+            guildConfig.ticketCreatedAt[channel.id] = guildConfig.ticketOpenTime[channel.id] || channel.createdTimestamp;
           }
           if (!guildConfig.ticketChoices[channel.id]) {
             guildConfig.ticketChoices[channel.id] = getPanelOptionFromChannel(channel);
@@ -1540,10 +1640,14 @@ async function resumeTicketState(client) {
     };
 
     const totalCleaned = cleanObj(guildConfig.ticketOwners) + 
+                         cleanObj(guildConfig.ticketOpenTime) +
+                         cleanObj(guildConfig.ticketCreatedAt) +
+                         cleanObj(guildConfig.ticketFirstResponses) +
                          cleanObj(guildConfig.ticketChoices) +
                          cleanObj(guildConfig.claims) + 
                          cleanObj(guildConfig.pendingClosures) + 
-                         cleanObj(guildConfig.pendingDeletions);
+                         cleanObj(guildConfig.pendingDeletions) +
+                         cleanObj(guildConfig.closingTickets);
 
     if (totalCleaned > 0) console.log(`🧹 [TICKETS] ${totalCleaned} données obsolètes nettoyées.`);
   }
@@ -1911,10 +2015,11 @@ async function handleButtons(interaction) {
       case 'claim_ticket': {
         if (!canManageTicket(interaction)) return replyAndAutoDelete(interaction, { content: "❌ Tu n'es pas autorisé à gérer ce ticket.", flags: 64 });
         if (guildConfig.claims[interaction.channel.id]) return replyAndAutoDelete(interaction, { content: "❌ Ce ticket est déjà pris en charge.", flags: 64 });
+        recordTicketFirstResponse(interaction.guildId, interaction.channel.id, interaction.user.id);
         guildConfig.claims[interaction.channel.id] = interaction.user.id;
-        guildConfig.ticketOpenTime[interaction.channel.id] = Date.now(); 
         incrementStaffStat(interaction.guildId, interaction.user.id, 'claimed');
         saveConfig(configData);
+        await updateStatsMessage(interaction.guild).catch(() => {});
         await setTicketStatusEmoji(interaction.channel, '🟠');
         return interaction.reply({
           embeds: [new EmbedBuilder().setTitle("🛠️ Claim").setDescription(`${interaction.user} a pris en charge ce ticket.\n\nUn membre de l'équipe est désormais assigné à votre demande.`).setThumbnail(interaction.user.displayAvatarURL({ dynamic: true })).setImage(guildConfig.globalEmbedBanner).setColor(guildConfig.globalEmbedColor).setFooter({ text: "Merci de patienter pendant le traitement." }).setTimestamp()]
@@ -2006,6 +2111,7 @@ async function handleButtons(interaction) {
       const claimedBy = guildConfig.claims[ticketChannel.id];
       const choice = guildConfig.ticketChoices[ticketChannel.id] || getPanelOptionFromChannel(ticketChannel);
       const openedAt = guildConfig.ticketOpenTime[ticketChannel.id];
+      const createdAt = guildConfig.ticketCreatedAt?.[ticketChannel.id] || openedAt;
       const deleteAt = Date.now() + TICKET_DELETE_DELAY_MS;
       const durationMinutes = openedAt ? Math.max(1, Math.round((Date.now() - openedAt) / 60000)) : null;
       const closeReason = pendingClose.reason || "Aucune";
@@ -2015,6 +2121,7 @@ async function handleButtons(interaction) {
         claimedBy,
         choice,
         openedAt,
+        createdAt,
         originalName: originalChannelName,
         closedBy: interaction.user.id,
         closeReason,
@@ -2064,6 +2171,8 @@ async function handleButtons(interaction) {
           delete guildConfig.claims[ticketChannel.id];
           delete guildConfig.ticketOwners[ticketChannel.id];
           delete guildConfig.ticketOpenTime[ticketChannel.id];
+          delete guildConfig.ticketCreatedAt[ticketChannel.id];
+          delete guildConfig.ticketFirstResponses[ticketChannel.id];
           delete guildConfig.ticketChoices[ticketChannel.id];
           saveConfig(configData);
           ticketChannel.delete().catch(() => {});
@@ -2111,6 +2220,12 @@ async function handleButtons(interaction) {
       if (guildConfig.pendingDeletions) delete guildConfig.pendingDeletions[ticketChannel.id];
       await restoreTicketChannelPermissions(ticketChannel, closingState, guildConfig);
       await ticketChannel.setName(getReopenedChannelName(ticketChannel.name, closingState?.originalName)).catch(() => {});
+
+      if (closingState?.ownerId) guildConfig.ticketOwners[ticketChannel.id] = closingState.ownerId;
+      if (closingState?.openedAt) guildConfig.ticketOpenTime[ticketChannel.id] = closingState.openedAt;
+      if (closingState?.createdAt) guildConfig.ticketCreatedAt[ticketChannel.id] = closingState.createdAt;
+      if (closingState?.choice) guildConfig.ticketChoices[ticketChannel.id] = closingState.choice;
+      if (closingState?.claimedBy) guildConfig.claims[ticketChannel.id] = closingState.claimedBy;
 
       if (closingState?.statsClosedCredited) {
         guildConfig.stats.closed = Math.max(0, Number(guildConfig.stats.closed || 0) - 1);
@@ -2830,6 +2945,7 @@ async function handleMessage(message) {
 
   const isOwner = message.author.id === ticketOwnerId;
   const isMod = message.member.roles.cache.some(role => modRoleIds.includes(role.id)) || 
+                message.member.permissions.has(PermissionsBitField.Flags.ManageChannels) ||
                 message.member.permissions.has(PermissionsBitField.Flags.Administrator);
 
   let statusEmoji = '';
@@ -2837,6 +2953,9 @@ async function handleMessage(message) {
     statusEmoji = '🟢';
   } else if (isMod) {
     statusEmoji = '🟠';
+    if (recordTicketFirstResponse(message.guild.id, message.channel.id, message.author.id, message.createdTimestamp || Date.now())) {
+      await updateStatsMessage(message.guild).catch(() => {});
+    }
   }
 
   if (statusEmoji) {
