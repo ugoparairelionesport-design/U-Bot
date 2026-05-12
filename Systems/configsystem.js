@@ -495,6 +495,12 @@ function trimChannelName(name, maxLength = 100) {
 
 
 function getPublicBaseUrl() {
+  const explicitPublicUrl = process.env.PUBLIC_BASE_URL || process.env.APP_URL;
+  if (explicitPublicUrl) return String(explicitPublicUrl).replace(/\/+$/, '');
+
+  const koyebPublicDomain = process.env.KOYEB_PUBLIC_DOMAIN;
+  if (koyebPublicDomain) return `https://${String(koyebPublicDomain).replace(/^https?:\/\//i, '').replace(/\/+$/, '')}`;
+
   const replitDomains = process.env.REPLIT_DOMAINS;
   if (replitDomains) {
     const domain = String(replitDomains).split(',')[0].trim();

@@ -24,7 +24,10 @@ require('dotenv').config();
 
 console.log('🚀 Lancement du bot en cours...');
 
-// Serveur de maintien en vie pour Replit (24/7)
+const HTTP_PORT = Number(process.env.PORT || 8080);
+const HTTP_HOST = process.env.HOST || '0.0.0.0';
+
+// Serveur de maintien en vie pour Replit/Koyeb/UptimeRobot (24/7)
 const server = http.createServer((req, res) => {
   // Route pour servir les images (assets)
   if (req.url.startsWith('/assets/')) {
@@ -68,8 +71,6 @@ const server = http.createServer((req, res) => {
   // Petit log pour confirmer le ping d'UptimeRobot dans la console
   console.log(`📶 Ping reçu d'UptimeRobot à ${new Date().toLocaleTimeString()}`);
   const uptime = Math.floor(process.uptime());
-  console.log(`DEBUG: REPL_SLUG = ${process.env.REPL_SLUG}`);
-  console.log(`DEBUG: REPL_OWNER = ${process.env.REPL_OWNER}`);
   const minutes = Math.floor(uptime / 60);
   const hours = Math.floor(minutes / 60);
   
@@ -81,11 +82,11 @@ Uptime : ${hours}h ${minutes % 60}m ${uptime % 60}s`);
   res.end();
 });
 
-server.listen(8080, () => {
-  console.log('🌐 Serveur HTTP prêt sur le port 8080');
+server.listen(HTTP_PORT, HTTP_HOST, () => {
+  console.log(`🌐 Serveur HTTP prêt sur ${HTTP_HOST}:${HTTP_PORT}`);
 }).on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error('❌ CRITICAL: Le port 8080 est déjà utilisé. Une autre instance du bot est probablement en cours d\'exécution.');
+    console.error(`❌ CRITICAL: Le port ${HTTP_PORT} est déjà utilisé. Une autre instance du bot est probablement en cours d'exécution.`);
     process.exit(1); // On arrête cette instance pour éviter les doublons
   } else {
     console.error('❌ Erreur serveur HTTP:', err);
