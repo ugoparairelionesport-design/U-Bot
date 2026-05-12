@@ -87,6 +87,22 @@ const defaultGuildSettings = {
     spellCheck: false,
     staffSuggestions: false,
     aiChannel: null
+  },
+  music: {
+    enabled: false,
+    djRoleId: null,
+    announceChannelId: null,
+    defaultVolume: 70,
+    maxQueue: 50,
+    allowYouTube: true,
+    allowSpotify: true,
+    allowRadio: true,
+    voteSkip: true,
+    voteSkipRatio: 0.5,
+    autoplay: false,
+    lyrics: true,
+    individualVolume: false,
+    clipsDiscord: false
   }
 };
 
@@ -1930,6 +1946,10 @@ async function handleButtons(interaction) {
 
     const actionId = getBaseComponentCustomId(interaction.customId);
 
+    if (actionId.startsWith('music_player_')) {
+      return await interaction.client.musicSystem?.handleButton(interaction);
+    }
+
     if (actionId === 'live_edit_select' && interaction.isStringSelectMenu()) {
       return await handleLiveEditSelect(interaction, interaction.values[0]);
     }
@@ -2024,6 +2044,22 @@ async function handleButtons(interaction) {
         return await toggleAISetting(interaction, 'staffSuggestions');
       case 'ai_set_channel':
         return interaction.showModal(new ModalBuilder().setCustomId('modal_ai_channel').setTitle('Salon IA').addComponents(new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId('channel_id').setLabel('ID Salon IA').setStyle(TextInputStyle.Short).setRequired(false))));
+      case 'music_toggle_status':
+        return await toggleMusicSetting(interaction, 'enabled');
+      case 'music_toggle_youtube':
+        return await toggleMusicSetting(interaction, 'allowYouTube');
+      case 'music_toggle_spotify':
+        return await toggleMusicSetting(interaction, 'allowSpotify');
+      case 'music_toggle_radio':
+        return await toggleMusicSetting(interaction, 'allowRadio');
+      case 'music_toggle_voteskip':
+        return await toggleMusicSetting(interaction, 'voteSkip');
+      case 'music_toggle_autoplay':
+        return await toggleMusicSetting(interaction, 'autoplay');
+      case 'music_toggle_lyrics':
+        return await toggleMusicSetting(interaction, 'lyrics');
+      case 'music_settings':
+        return interaction.showModal(buildMusicSettingsModal(guildConfig.music));
 
       // == LOGS & ENTRANCE ==
       case 'logs_toggle_status':
@@ -3759,6 +3795,7 @@ async function sendHelpPanel(interaction) {
     "👋 Accueil": ['set_entrée'],
     "📈 Niveaux": ['set_xp', 'rank', 'leaderboard'],
     "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
+    "🎵 Musique": ['config_musique', 'musique'],
     "🤖 IA & Automatisation": ['set_ia', 'annonce'],
     "🤖 Configuration": ['set_config', 'help']
   };
@@ -3791,6 +3828,8 @@ async function sendHelpPanel(interaction) {
           'config_live': 'Ajouter des alertes Twitch/YT/TikTok.',
           'modif_config_live': 'Gérer les chaînes surveillées.',
           'test_live': 'Simuler une alerte en direct.',
+          'config_musique': 'Configurer la lecture vocale et le rôle DJ.',
+          'musique': 'Lire, gérer la queue, radio, skip, volume.',
           'set_logs': 'Activer les logs ultra-détaillés.',
           'set_entrée': 'Configurer l\'accueil et les membres.',
           'set_xp': 'Gérer le système d\'XP et niveaux.',
@@ -4072,6 +4111,163 @@ async function toggleAISetting(interaction, key) {
   return sendAIConfigPanel(interaction);
 }
 
+async function sendMusicConfigPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.music;
+  const enabledText = settings.enabled ? '`ON`' : '`OFF`';
+  const djText = settings.djRoleId ? `<@&${settings.djRoleId}>` : '`Aucun role DJ`';
+  const announceText = settings.announceChannelId ? `<#${settings.announceChannelId}>` : '`Salon de commande`';
+  const sourcesText = [
+    `YouTube ${settings.allowYouTube ? '`ON`' : '`OFF`'}`,
+    `Spotify ${settings.allowSpotify ? '`ON`' : '`OFF`'}`,
+    `Radio ${settings.allowRadio ? '`ON`' : '`OFF`'}`
+  ].join('  ');
+
+  const embed = new EmbedBuilder()
+    .setTitle('U-BOT | Audio Protocol')
+    .setDescription(
+      '**Centre musique du serveur**\n' +
+      'Configure la lecture audio, les permissions DJ, les votes et les ambiances radio.\n\n' +
+      '**Etat du module**\n' +
+      `- Systeme : ${enabledText}\n` +
+      `- Role DJ : ${djText}\n` +
+      `- Annonces : ${announceText}\n` +
+      `- Volume serveur : \`${settings.defaultVolume}%\`\n` +
+      `- Queue max : \`${settings.maxQueue} titres\`\n\n` +
+      '**Sources autorisees**\n' +
+      `${sourcesText}\n\n` +
+      '**Options de lecture**\n' +
+      `- Vote skip : ${settings.voteSkip ? '`ON`' : '`OFF`'} (${Math.round(settings.voteSkipRatio * 100)}%)\n` +
+      `- Autoplay : ${settings.autoplay ? '`ON`' : '`OFF`'}\n` +
+      `- Lyrics : ${settings.lyrics ? '`ON`' : '`OFF`'}\n` +
+      '- Volume individuel : `Discord gere deja le volume cote utilisateur`\n' +
+      '- Clips via stream Discord : `Non disponible via API bot`'
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setFooter({ text: 'U-Bot Music - Lecture vocale et ambiances' })
+    .setTimestamp();
+
+  const rowMaster = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('music_toggle_status')
+      .setLabel(settings.enabled ? 'Desactiver' : 'Activer')
+      .setStyle(settings.enabled ? ButtonStyle.Danger : ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('music_settings')
+      .setLabel('Parametres')
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('music_toggle_voteskip')
+      .setLabel(`Vote skip: ${settings.voteSkip ? 'ON' : 'OFF'}`)
+      .setStyle(settings.voteSkip ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('music_toggle_autoplay')
+      .setLabel(`Autoplay: ${settings.autoplay ? 'ON' : 'OFF'}`)
+      .setStyle(settings.autoplay ? ButtonStyle.Success : ButtonStyle.Secondary)
+  );
+
+  const rowSources = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('music_toggle_youtube')
+      .setLabel(`YouTube: ${settings.allowYouTube ? 'ON' : 'OFF'}`)
+      .setStyle(settings.allowYouTube ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('music_toggle_spotify')
+      .setLabel(`Spotify: ${settings.allowSpotify ? 'ON' : 'OFF'}`)
+      .setStyle(settings.allowSpotify ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('music_toggle_radio')
+      .setLabel(`Radio: ${settings.allowRadio ? 'ON' : 'OFF'}`)
+      .setStyle(settings.allowRadio ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('music_toggle_lyrics')
+      .setLabel(`Lyrics: ${settings.lyrics ? 'ON' : 'OFF'}`)
+      .setStyle(settings.lyrics ? ButtonStyle.Success : ButtonStyle.Secondary)
+  );
+
+  return sendOrUpdatePanel(interaction, withGuildBanner(guildConfig, {
+    embeds: [embed],
+    components: [rowMaster, rowSources],
+    flags: 64
+  }, 'music-banner'));
+}
+
+function buildMusicSettingsModal(settings) {
+  return new ModalBuilder()
+    .setCustomId('modal_music_settings')
+    .setTitle('Configuration musique')
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('dj_role_id')
+          .setLabel('ID role DJ (optionnel)')
+          .setValue(settings.djRoleId || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('announce_channel_id')
+          .setLabel('ID salon annonces musique (optionnel)')
+          .setValue(settings.announceChannelId || '')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('default_volume')
+          .setLabel('Volume par defaut 1-150')
+          .setValue(String(settings.defaultVolume || 70))
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('max_queue')
+          .setLabel('Queue maximum 1-100')
+          .setValue(String(settings.maxQueue || 50))
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId('vote_ratio')
+          .setLabel('Vote skip % requis 10-100')
+          .setValue(String(Math.round((settings.voteSkipRatio || 0.5) * 100)))
+          .setStyle(TextInputStyle.Short)
+          .setRequired(true)
+      )
+    );
+}
+
+async function saveMusicSettings(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const settings = guildConfig.music;
+  const roleInput = interaction.fields.getTextInputValue('dj_role_id').trim();
+  const channelInput = interaction.fields.getTextInputValue('announce_channel_id').trim();
+  const volume = Math.max(1, Math.min(150, parseInt(interaction.fields.getTextInputValue('default_volume'), 10) || 70));
+  const maxQueue = Math.max(1, Math.min(100, parseInt(interaction.fields.getTextInputValue('max_queue'), 10) || 50));
+  const ratioPercent = Math.max(10, Math.min(100, parseInt(interaction.fields.getTextInputValue('vote_ratio'), 10) || 50));
+
+  settings.djRoleId = roleInput.match(/\d{17,20}/)?.[0] || null;
+  settings.announceChannelId = channelInput.match(/\d{17,20}/)?.[0] || null;
+  settings.defaultVolume = volume;
+  settings.maxQueue = maxQueue;
+  settings.voteSkipRatio = ratioPercent / 100;
+
+  saveConfig(configData);
+  return sendMusicConfigPanel(interaction);
+}
+
+async function toggleMusicSetting(interaction, key) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  guildConfig.music[key] = !guildConfig.music[key];
+  saveConfig(configData);
+  return sendMusicConfigPanel(interaction);
+}
+
 module.exports = {
   // Core & Tickets
   getGuildConfig,
@@ -4112,6 +4308,10 @@ module.exports = {
   toggleXPStatus,
   sendAIConfigPanel,
   toggleAISetting,
+  sendMusicConfigPanel,
+  buildMusicSettingsModal,
+  saveMusicSettings,
+  toggleMusicSetting,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS, // Keep this one, it's a constant
   handleButtons,

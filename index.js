@@ -17,6 +17,7 @@ const AntiRaidSystem = require('./Systems/antiraid');
 const AntiSpamSystem = require('./Systems/antispam');
 const DmLockSystem = require('./Systems/dmlock');
 const AISystem = require('./Systems/aisystem');
+const MusicSystem = require('./Systems/musicsystem');
 
 const { commands, deployCommands } = require('./deploy-commands');
 
@@ -104,6 +105,7 @@ const client = new Client({ // Ligne 71
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.GuildInvites // Nécessaire pour l'Anti-Raid Pro
   ],
   partials: [Partials.Channel, Partials.Message]
@@ -122,6 +124,7 @@ try {
   client.verification = new VerificationSystem(client);
   client.dmLock = new DmLockSystem(client);
   client.aiSystem = new AISystem(client);
+  client.musicSystem = new MusicSystem(client);
 } catch (err) {
   console.error('❌ Erreur lors de l\'initialisation des systèmes:', err);
 }
@@ -185,7 +188,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['config_ticket', 'modif_config_ticket', 'config_live', 'modif_config_live', 'test_live', 'config_protection', 'set_config', 'help'];
+      const adminCommands = ['config_ticket', 'modif_config_ticket', 'config_live', 'modif_config_live', 'test_live', 'config_protection', 'set_config', 'help', 'config_musique'];
       console.log(`⚡ Command: /${interaction.commandName} by ${interaction.user.tag}`);
       
       if (adminCommands.includes(interaction.commandName)) {
@@ -220,6 +223,14 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'set_ia') {
         return client.configSystem.sendAIConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'config_musique') {
+        return client.configSystem.sendMusicConfigPanel(interaction);
+      }
+
+      if (interaction.commandName === 'musique') {
+        return client.musicSystem.handleCommand(interaction);
       }
 
       if (interaction.commandName === 'annonce') {
@@ -326,6 +337,9 @@ client.on('interactionCreate', async interaction => {
         guildConfig.ai.aiChannel = interaction.fields.getTextInputValue('channel_id').trim();
         client.configSystem.saveConfig(client.configSystem.getFullConfig());
         return client.configSystem.sendAIConfigPanel(interaction);
+      }
+      if (interaction.customId === 'modal_music_settings') {
+        return client.configSystem.saveMusicSettings(interaction);
       }
       if (interaction.customId === 'modal_create_announcement') {
         // Gère la soumission du modal d'annonce

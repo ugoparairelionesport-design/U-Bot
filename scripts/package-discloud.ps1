@@ -95,7 +95,7 @@ if (Test-Path $envPath) {
   }
 
   if (-not $seen.ContainsKey('DEPLOY_GLOBAL')) {
-    $lines.Add('DEPLOY_GLOBAL=false')
+    $lines.Add('DEPLOY_GLOBAL=true')
   }
 
   Set-Content -LiteralPath $envPath -Value $lines -Encoding UTF8

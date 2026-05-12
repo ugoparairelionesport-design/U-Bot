@@ -56,6 +56,78 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
+        .setName('config_musique')
+        .setDescription('Configure le module musique du serveur.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    new SlashCommandBuilder()
+        .setName('musique')
+        .setDescription('Controle la lecture musique du serveur.')
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('play')
+                .setDescription('Lance ou ajoute un lien/recherche YouTube, Spotify ou audio.')
+                .addStringOption(option =>
+                    option.setName('requete')
+                        .setDescription('Lien ou recherche')
+                        .setRequired(true)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('radio')
+                .setDescription('Lance une radio ambiance.')
+                .addStringOption(option =>
+                    option.setName('ambiance')
+                        .setDescription('Ambiance a lancer')
+                        .setRequired(true)
+                        .addChoices(
+                            { name: 'Lo-fi Focus', value: 'lofi' },
+                            { name: 'Chillout', value: 'chill' },
+                            { name: 'Synthwave', value: 'synthwave' },
+                            { name: 'Jazz', value: 'jazz' }
+                        )))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('queue')
+                .setDescription('Affiche la file d attente.'))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('skip')
+                .setDescription('Vote ou force le passage du titre.'))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('stop')
+                .setDescription('Stoppe la lecture et vide la queue.'))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('pause')
+                .setDescription('Met la lecture en pause.'))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('resume')
+                .setDescription('Reprend la lecture.'))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('volume')
+                .setDescription('Regle le volume serveur.')
+                .addIntegerOption(option =>
+                    option.setName('niveau')
+                        .setDescription('Volume entre 1 et 150')
+                        .setRequired(true)
+                        .setMinValue(1)
+                        .setMaxValue(150)))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('now')
+                .setDescription('Affiche le titre en cours.'))
+        .addSubcommand(subcommand =>
+            subcommand
+                .setName('lyrics')
+                .setDescription('Recherche les paroles du titre.')
+                .addStringOption(option =>
+                    option.setName('requete')
+                        .setDescription('Titre optionnel')
+                        .setRequired(false))),
+
+    new SlashCommandBuilder()
         .setName('set_config')
         .setDescription('Personnalise le nom et les embeds du bot.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
