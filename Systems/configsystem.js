@@ -642,7 +642,7 @@ function applyInteractionEmbedDefaults(interaction, payload, attachmentBaseName 
 
 function isTicketPanelMessage(message) {
   return Boolean(message?.components?.some(row =>
-    row.components?.some(component => component.customId === 'ticket_select')
+    row.components?.some(component => getBaseComponentCustomId(component.customId) === 'ticket_select')
   ));
 }
 
@@ -738,37 +738,84 @@ function getStaffStats(guildId, userId) {
   return guildConfig.staffStats[userId] || { claimed: 0, closed: 0 };
 }
 
+function getBaseComponentCustomId(customId) {
+  return String(customId || '').split(':')[0];
+}
+
+function isResettableSelectMenuId(customId) {
+  return [
+    'ticket_select',
+    'modif_select',
+    'panel_opt_remove_select',
+    'live_edit_select'
+  ].includes(getBaseComponentCustomId(customId));
+}
+
+function buildResetSelectMenuRows(message) {
+  const rows = [];
+  let changed = false;
+
+  for (const row of message?.components || []) {
+    const rowJson = typeof row.toJSON === 'function' ? row.toJSON() : row;
+    const nextRow = new ActionRowBuilder();
+
+    for (const componentJson of rowJson.components || []) {
+      const customId = componentJson.custom_id || componentJson.customId;
+      const isStringSelect = componentJson.type === 3 && isResettableSelectMenuId(customId);
+
+      if (isStringSelect) {
+        const baseCustomId = getBaseComponentCustomId(customId);
+        const menu = StringSelectMenuBuilder.from(componentJson)
+          .setCustomId(`${baseCustomId}:${Date.now()}`);
+
+        if (Array.isArray(componentJson.options)) {
+          menu.setOptions(componentJson.options.map(option => ({
+            ...option,
+            default: false
+          })));
+        }
+
+        nextRow.addComponents(menu);
+        changed = true;
+      } else if (componentJson.type === 2) {
+        nextRow.addComponents(ButtonBuilder.from(componentJson));
+      }
+    }
+
+    if ((nextRow.components?.length || 0) > 0) rows.push(nextRow);
+  }
+
+  return changed ? rows : null;
+}
+
 async function resetSelectMenuMessageToPlaceholder(message) {
-  if (!message) return;
+  if (!message) return false;
 
-  const row = message.components[0];
-  const component = row?.components?.[0];
-  if (!component || !component.customId) return;
-  const baseCustomId = String(component.customId).split(':')[0];
-  const nextCustomId = baseCustomId === 'modif_select' ? `modif_select:${Date.now()}` : component.customId;
-  const options = component.options || component.data?.options || [];
+  const components = buildResetSelectMenuRows(message);
+  if (!components) return false;
 
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(nextCustomId)
-    .setPlaceholder(component.placeholder || component.data?.placeholder || 'Choisir une option')
-    .addOptions(options.map(option => {
-      const data = option.data || option;
-      const normalizedOption = {
-        label: data.label,
-        value: data.value,
-        default: false
-      };
-      if (data.description) normalizedOption.description = data.description;
-      if (data.emoji) normalizedOption.emoji = data.emoji;
-      return normalizedOption;
-    }));
-
-  await message.edit({ components: [new ActionRowBuilder().addComponents(menu)] }).catch(() => {});
+  return message.edit({ components })
+    .then(() => true)
+    .catch(() => false);
 }
 
 async function resetSelectMenuToPlaceholder(interaction) {
   if (!interaction.isStringSelectMenu() || !interaction.message) return;
-  await resetSelectMenuMessageToPlaceholder(interaction.message);
+  const components = buildResetSelectMenuRows(interaction.message);
+  if (!components) return;
+
+  const edited = await interaction.message.edit({ components }).then(() => true).catch(() => false);
+  if (!edited && interaction.webhook?.editMessage) {
+    await interaction.webhook.editMessage(interaction.message.id, { components }).catch(() => {});
+  }
+}
+
+async function resetSelectMenuByMessageId(interaction, messageId) {
+  if (!messageId || !interaction.channel?.messages) return;
+
+  const sourceMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
+  if (!sourceMessage?.editable) return;
+  await resetSelectMenuMessageToPlaceholder(sourceMessage);
 }
 
 function getModalSourceMessageId(customId) {
@@ -779,11 +826,7 @@ function getModalSourceMessageId(customId) {
 
 async function resetSelectMenuFromModalSource(interaction) {
   const messageId = getModalSourceMessageId(interaction.customId);
-  if (!messageId || !interaction.channel?.messages) return;
-
-  const sourceMessage = await interaction.channel.messages.fetch(messageId).catch(() => null);
-  if (!sourceMessage?.editable) return;
-  await resetSelectMenuMessageToPlaceholder(sourceMessage);
+  await resetSelectMenuByMessageId(interaction, messageId);
 }
 
 function getClosingChannelName(channelName) {
@@ -1869,7 +1912,9 @@ async function handleButtons(interaction) {
       return await interaction.client.verification?.handleVerifyButtonClick(interaction);
     }
 
-    if (interaction.customId === 'live_edit_select' && interaction.isStringSelectMenu()) {
+    const actionId = getBaseComponentCustomId(interaction.customId);
+
+    if (actionId === 'live_edit_select' && interaction.isStringSelectMenu()) {
       return await handleLiveEditSelect(interaction, interaction.values[0]);
     }
 
@@ -1892,8 +1937,6 @@ async function handleButtons(interaction) {
       return updateComponentMessage(interaction, await interaction.client.xpSystem.getLeaderboardPayload(interaction.guild));
     }
     
-    const actionId = interaction.customId?.startsWith('modif_select:') ? 'modif_select' : interaction.customId;
-
     switch (actionId) {
       // == BOT CUSTOMIZATION ==
       case 'bot_name_set_btn':
@@ -2008,22 +2051,27 @@ async function handleButtons(interaction) {
         return;
       }
 
-      pendingTicketCreations.set(interaction.user.id, { choice });
+      pendingTicketCreations.set(interaction.user.id, {
+        choice,
+        sourceMessageId: interaction.message?.id || null
+      });
 
-      return interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('modal_ticket_opening')
-          .setTitle('Ouvrir ticket')
-          .addComponents(
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('opening_reason')
-                .setLabel("Raison d'ouverture (optionnelle)")
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(false)
-            )
+      const modal = new ModalBuilder()
+        .setCustomId('modal_ticket_opening')
+        .setTitle('Ouvrir ticket')
+        .addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('opening_reason')
+              .setLabel("Raison d'ouverture (optionnelle)")
+              .setStyle(TextInputStyle.Paragraph)
+              .setRequired(false)
           )
-      );
+        );
+
+      await interaction.showModal(modal);
+      setTimeout(() => resetSelectMenuToPlaceholder(interaction).catch(() => {}), 500);
+      return null;
       }
 
       case 'modif_select': {
@@ -3016,6 +3064,7 @@ async function handleModal(interaction) {
 
       pendingTicketCreations.delete(interaction.user.id);
       const openingReason = interaction.fields.getTextInputValue('opening_reason').trim();
+      await resetSelectMenuByMessageId(interaction, pendingCreation.sourceMessageId);
 
       return executeTicketCreation(interaction, pendingCreation.choice, openingReason);
     }
