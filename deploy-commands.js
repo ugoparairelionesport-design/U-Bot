@@ -101,6 +101,7 @@ const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
 const guildId = process.env.GUILD_ID;
 const deployGlobal = process.env.DEPLOY_GLOBAL === 'true' || !guildId;
+const deployGuild = !!guildId && (!deployGlobal || process.env.DEPLOY_GUILD === 'true');
 const clearGlobal = process.env.CLEAR_GLOBAL === 'true';
 const clearGuild = process.env.CLEAR_GUILD === 'true';
 
@@ -119,19 +120,21 @@ async function deployCommands() {
             console.log('Commandes globales supprimees. Discord peut mettre jusqu a 1h a les retirer partout.');
         }
 
-        if (clearGuild && guildId) {
+        if ((clearGuild || (deployGlobal && guildId && process.env.KEEP_GUILD_COMMANDS !== 'true')) && guildId) {
             console.log(`CLEAR : suppression des commandes serveur (${guildId})...`);
             await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: [] });
             console.log('Commandes serveur supprimees.');
         }
 
-        if (guildId) {
+        if (deployGuild) {
             console.log(`DEPLOY : envoi des commandes au serveur local (instantane: ${guildId})...`);
             await rest.put(
                 Routes.applicationGuildCommands(clientId, guildId),
                 { body: commands.map(command => command.toJSON()) }
             );
             console.log('Commandes serveur deployees.');
+        } else if (guildId && deployGlobal) {
+            console.log('Deploiement serveur local ignore: mode global actif pour eviter les doublons.');
         }
 
         if (deployGlobal && !clearGlobal) {
