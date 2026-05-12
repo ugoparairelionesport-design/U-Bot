@@ -677,6 +677,8 @@ function isDetailedTicketPanelMessage(message) {
 
 function stripTicketStatusEmoji(channelName) {
   return String(channelName || '')
+    .replace(/^🔴-?/u, '')
+    .replace(/-?🔴-?fermeture-en-cours$/u, '')
     .replace(/-?fermeture-en-cours$/u, '')
     .replace(/-?[🟠🟢🔴]$/u, '')
     .replace(/-?(?:ðŸŸ |ðŸŸ¢|ðŸ”´)$/u, '');
@@ -786,12 +788,9 @@ async function resetSelectMenuFromModalSource(interaction) {
 
 function getClosingChannelName(channelName) {
   const suffix = 'fermeture-en-cours';
-  if (channelName.includes(suffix)) return channelName;
-
   const cleanBase = stripTicketStatusEmoji(channelName);
-  // Nom ASCII uniquement : Discord refuse parfois les renames avec certains emojis de statut.
-  const baseName = trimChannelName(cleanBase, 78);
-  return `${baseName}-${suffix}`;
+  const baseName = trimChannelName(cleanBase, 74);
+  return `🔴-${baseName}-${suffix}`;
 }
 
 function getReopenedChannelName(channelName, originalName = null) {
@@ -799,6 +798,7 @@ function getReopenedChannelName(channelName, originalName = null) {
 
   const cleanBase = stripTicketStatusEmoji(
     String(channelName || 'ticket')
+      .replace(/^🔴-?/u, '')
       .replace(/-?🔴-?fermeture-en-cours$/u, '')
       .replace(/-?ðŸ”´-?fermeture-en-cours$/u, '')
       .replace(/-?fermeture-en-cours$/u, '')
@@ -963,6 +963,7 @@ async function lockTicketChannelForClosing(channel, closingState = {}) {
     channel.guild.id,
     closingState.ownerId,
     closingState.claimedBy,
+    closingState.closedBy,
     ...roleIds,
     ...channel.permissionOverwrites.cache.keys()
   ].filter(Boolean));
@@ -1035,6 +1036,7 @@ function getMissingBotPermissions(guild) {
     PermissionsBitField.Flags.ViewChannel,
     PermissionsBitField.Flags.SendMessages,
     PermissionsBitField.Flags.ReadMessageHistory,
+    PermissionsBitField.Flags.ManageMessages,
     PermissionsBitField.Flags.ManageChannels,
     PermissionsBitField.Flags.ManageRoles,
     PermissionsBitField.Flags.MentionEveryone
@@ -2307,26 +2309,26 @@ async function handleButtons(interaction) {
 
       if (!guildConfig.pendingDeletions || typeof guildConfig.pendingDeletions !== 'object') guildConfig.pendingDeletions = {};
       guildConfig.pendingDeletions[ticketChannel.id] = deleteAt;
+      const closingChannelName = getClosingChannelName(ticketChannel.name);
+      const renamePromise = ticketChannel.setName(closingChannelName)
+        .then(() => true)
+        .catch(err => {
+          console.warn(`TICKET CLOSE RENAME ERROR (${ticketChannel.name} -> ${closingChannelName}):`, err?.message || err);
+          return false;
+        });
+      const lockPromise = lockTicketChannelForClosing(ticketChannel, closingState)
+        .catch(err => {
+          console.warn('TICKET CLOSE LOCK ERROR:', err?.message || err);
+          return false;
+        });
+
       const closingMessage = await sendMessageWithTimer(ticketChannel, { ...closeEmbed, applyGuildBanner: false }, TICKET_DELETE_DELAY_MS);
       if (closingMessage) closingState.messageId = closingMessage.id;
       if (closingMessage?.attachments?.size) {
         await closingMessage.edit({ attachments: [] }).catch(() => {});
       }
 
-      const closingChannelName = getClosingChannelName(ticketChannel.name);
-      const [renamed, locked] = await Promise.all([
-        ticketChannel.setName(closingChannelName)
-          .then(() => true)
-          .catch(err => {
-            console.warn(`TICKET CLOSE RENAME ERROR (${ticketChannel.name} -> ${closingChannelName}):`, err?.message || err);
-            return false;
-          }),
-        lockTicketChannelForClosing(ticketChannel, closingState)
-          .catch(err => {
-            console.warn('TICKET CLOSE LOCK ERROR:', err?.message || err);
-            return false;
-          })
-      ]);
+      const [renamed, locked] = await Promise.all([renamePromise, lockPromise]);
       closingState.renamed = Boolean(renamed);
       closingState.lockApplied = Boolean(locked);
       closingState.closingName = closingChannelName;
