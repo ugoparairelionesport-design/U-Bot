@@ -3,8 +3,12 @@ node_modules/
 .github/
 .cache/
 Infos/
+Data/config.json
+Data/assets/
 *.log
 package-lock.json
+u-bot-discloud.zip
+discloud-package/
 REPLIT_GUIDE.md
 REPLIT_UPDATE.md
 SYNC_REPLIT.md
