@@ -306,6 +306,7 @@ function startVisualTimer(message, deleteAt) {
 
 const TICKET_DELETE_DELAY_MS = 30 * 60 * 1000;
 const CONFIG_MESSAGE_DELETE_DELAY_MS = 5 * 60 * 1000; // Passage à 5 minutes pour la configuration
+const QUICK_CONFIRM_DELETE_MS = 12 * 1000;
 const PENDING_CLOSE_EXPIRE_MS = 10 * 60 * 1000;
 const pendingTicketCreations = new Map();
 const recentInteractionActions = new Map();
@@ -366,6 +367,11 @@ async function quietlyAcknowledgeComponent(interaction) {
 async function replyAndAutoDelete(interaction, payload) {
   let message = null;
   try {
+    const deleteAfter = Number(payload?.deleteAfter || 0);
+    const hasPersistentUi = Boolean(payload?.components?.length || payload?.embeds?.length);
+    const autoDeleteDelay = deleteAfter || (hasPersistentUi ? CONFIG_MESSAGE_DELETE_DELAY_MS : QUICK_CONFIRM_DELETE_MS);
+    delete payload.deleteAfter;
+
     if (payload?.applyGuildBanner === false) {
       payload = { ...payload, files: [], attachments: [] };
       delete payload.applyGuildBanner;
@@ -387,7 +393,7 @@ async function replyAndAutoDelete(interaction, payload) {
     if (payload && payload.flags === 64) {
       setTimeout(() => {
         interaction.deleteReply().catch(() => {});
-      }, CONFIG_MESSAGE_DELETE_DELAY_MS);
+      }, autoDeleteDelay);
     }
 
     return message;
@@ -398,11 +404,16 @@ async function replyAndAutoDelete(interaction, payload) {
     }
     // En cas d'erreur (ex: Unknown Interaction), on tente un followUp discret
     try {
+      const deleteAfter = Number(payload?.deleteAfter || 0);
+      const hasPersistentUi = Boolean(payload?.components?.length || payload?.embeds?.length);
+      const autoDeleteDelay = deleteAfter || (hasPersistentUi ? CONFIG_MESSAGE_DELETE_DELAY_MS : QUICK_CONFIRM_DELETE_MS);
+      delete payload.deleteAfter;
+
       message = await interaction.followUp(payload);
       if (payload && payload.flags === 64) {
         setTimeout(() => {
           interaction.deleteReply().catch(() => {});
-        }, CONFIG_MESSAGE_DELETE_DELAY_MS);
+        }, autoDeleteDelay);
       }
       return message;
     } catch (_) {
@@ -1697,7 +1708,12 @@ async function executeTicketCreation(interaction, choice, openingReason) {
     .setColor(guildConfig.globalEmbedColor).setTimestamp());
 
   await updateStatsMessage(interaction.guild);
-  return interaction.editReply({ content: `✅ Votre ticket a été créé : ${channel}`, flags: 64 });
+  return replyAndAutoDelete(interaction, {
+    content: "✅ Ticket créé.",
+    flags: 64,
+    applyGuildBanner: false,
+    deleteAfter: QUICK_CONFIRM_DELETE_MS
+  });
 }
 
 async function resumeTicketState(client) {
