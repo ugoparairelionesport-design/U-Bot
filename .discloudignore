@@ -1,0 +1,13 @@
+node_modules/
+.git/
+.github/
+.cache/
+Infos/
+*.log
+package-lock.json
+REPLIT_GUIDE.md
+REPLIT_UPDATE.md
+SYNC_REPLIT.md
+MAINTENANCE_README.md
+.replit
+replit.nix
