@@ -3,5 +3,6 @@ node_modules
 .DS_Store
 *.log
 u-bot-discloud.zip
+u-bot-share.zip
 Data/
 Infos/
