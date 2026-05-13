@@ -16,7 +16,9 @@ const {
   PermissionsBitField,
 } = require('discord.js');
 const configPath = path.join(__dirname, '../Data/config.json');
+const backupDir = path.join(__dirname, '../Data/backups');
 let lastSavedContent = ""; // Cache mémoire pour optimiser les I/O
+let lastBackupDay = null;
 
 // Default config for a new guild
 const defaultConfig = {
@@ -147,12 +149,15 @@ function loadConfig() {
   }
 
   if (!fs.existsSync(configPath)) {
-    fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2));
+    const initialContent = JSON.stringify(defaultConfig, null, 2);
+    fs.writeFileSync(configPath, initialContent);
+    lastSavedContent = initialContent;
     return { ...defaultConfig };
   }
 
   try {
     const content = fs.readFileSync(configPath, 'utf8');
+    lastSavedContent = content;
     if (!content.trim()) return { ...defaultConfig };
     const parsedConfig = JSON.parse(content);
 
@@ -263,9 +268,48 @@ function getGuildConfig(guildId) {
 /**
  * Sauvegarde "World Class" : utilise un cache mémoire pour éviter les lectures disque
  */
+function getParisBackupDay() {
+  return new Intl.DateTimeFormat('fr-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date());
+}
+
+function cleanupOldConfigBackups(maxBackups = 14) {
+  if (!fs.existsSync(backupDir)) return;
+
+  const backups = fs.readdirSync(backupDir)
+    .filter(file => /^config-\d{4}-\d{2}-\d{2}\.json$/.test(file))
+    .sort()
+    .reverse();
+
+  for (const file of backups.slice(maxBackups)) {
+    fs.rmSync(path.join(backupDir, file), { force: true });
+  }
+}
+
+function backupConfigBeforeWrite() {
+  const today = getParisBackupDay();
+  if (lastBackupDay === today || !fs.existsSync(configPath)) return;
+
+  const currentContent = fs.readFileSync(configPath, 'utf8');
+  if (!currentContent.trim()) return;
+
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
+  }
+
+  fs.writeFileSync(path.join(backupDir, `config-${today}.json`), currentContent);
+  lastBackupDay = today;
+  cleanupOldConfigBackups();
+}
+
 function saveConfig(data) {
   const content = JSON.stringify(data, null, 2);
   if (content !== lastSavedContent) {
+    backupConfigBeforeWrite();
     fs.writeFileSync(configPath, content);
     lastSavedContent = content;
   }
@@ -631,9 +675,37 @@ function getLocalAssetAttachment(url, attachmentBaseName = 'embed-banner') {
   }
 }
 
+function getEmbedColor(guildConfig) {
+  return guildConfig?.globalEmbedColor || defaultGuildSettings.globalEmbedColor || '#5865F2';
+}
+
+function applyEmbedStyle(guildConfig, embed, options = {}) {
+  if (!embed || typeof embed.setColor !== 'function') return embed;
+
+  if (!embed.data?.color) embed.setColor(getEmbedColor(guildConfig));
+  if (options.thumbnailUrl && !embed.data?.thumbnail?.url && typeof embed.setThumbnail === 'function') {
+    embed.setThumbnail(options.thumbnailUrl);
+  }
+  if (options.footerText && !embed.data?.footer?.text && typeof embed.setFooter === 'function') {
+    embed.setFooter({
+      text: options.footerText,
+      iconURL: options.footerIconUrl || undefined
+    });
+  }
+  if (options.timestamp !== false && !embed.data?.timestamp && typeof embed.setTimestamp === 'function') {
+    embed.setTimestamp();
+  }
+
+  return embed;
+}
+
 function withGuildBanner(guildConfig, payload, attachmentBaseName = 'embed-banner') {
+  if (!payload?.embeds?.length) return payload;
+
+  payload.embeds.forEach(embed => applyEmbedStyle(guildConfig, embed));
+
   const bannerUrl = normalizeStoredAssetUrl(guildConfig?.globalEmbedBanner);
-  if (!bannerUrl || !payload?.embeds?.length) return payload;
+  if (!bannerUrl) return payload;
 
   const localAsset = getLocalAssetAttachment(bannerUrl, attachmentBaseName);
   const imageUrl = localAsset?.imageUrl || bannerUrl;
@@ -664,6 +736,14 @@ function withGuildBanner(guildConfig, payload, attachmentBaseName = 'embed-banne
 function applyInteractionEmbedDefaults(interaction, payload, attachmentBaseName = 'embed-banner') {
   if (!interaction?.guildId || !payload?.embeds?.length) return payload;
   const guildConfig = getGuildConfig(interaction.guildId);
+  const botAvatar = interaction.client?.user?.displayAvatarURL?.();
+
+  payload.embeds.forEach(embed => applyEmbedStyle(guildConfig, embed, {
+    thumbnailUrl: botAvatar,
+    footerText: 'U-Bot System',
+    footerIconUrl: botAvatar
+  }));
+
   return withGuildBanner(guildConfig, payload, attachmentBaseName);
 }
 
@@ -4352,6 +4432,7 @@ module.exports = {
   saveConfig,
   sendLog,
   withGuildBanner,
+  applyEmbedStyle,
   sendConfigPanel,
   sendEditConfigPanel,
   buildGlobalColorModal,

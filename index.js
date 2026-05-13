@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const { Client, GatewayIntentBits, Partials, Events, PermissionsBitField, AttachmentBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+require('dotenv').config();
+require('./Systems/logger').installConsoleFilter();
 
 console.log('🚀 [index.js] Loading version 2.9.17');
 
@@ -20,8 +22,6 @@ const AISystem = require('./Systems/aisystem');
 const MusicSystem = require('./Systems/musicsystem');
 
 const { commands, deployCommands } = require('./deploy-commands');
-
-require('dotenv').config();
 
 console.log('🚀 Lancement du bot en cours...');
 
@@ -188,7 +188,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['config_ticket', 'modif_config_ticket', 'config_live', 'modif_config_live', 'test_live', 'config_protection', 'set_config', 'help', 'config_musique', 'status'];
+      const adminCommands = ['config_ticket', 'modif_config_ticket', 'config_live', 'modif_config_live', 'test_live', 'config_protection', 'set_config', 'set_logs', 'set_entrée', 'set_xp', 'set_ia', 'annonce', 'help', 'config_musique', 'status'];
       console.log(`⚡ Command: /${interaction.commandName} by ${interaction.user.tag}`);
       
       if (adminCommands.includes(interaction.commandName)) {

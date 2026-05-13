@@ -17,6 +17,7 @@ New-Item -ItemType Directory -Path $staging | Out-Null
 $items = @(
   'commands',
   'config',
+  'Data',
   'Systems',
   'index.js',
   'deploy-commands.js',

@@ -141,7 +141,10 @@ class XPSystem {
       : message.channel;
 
     if (targetChannel?.isTextBased()) {
-      await targetChannel.send({ content: `${message.author}`, embeds: [embed] })
+      await targetChannel.send(configSystem.withGuildBanner(guildConfig, {
+        content: `${message.author}`,
+        embeds: [embed]
+      }, 'xp-levelup-banner'))
         .then(m => setTimeout(() => m.delete().catch(() => {}), 15000))
         .catch(() => {});
     }
@@ -321,7 +324,7 @@ class XPSystem {
       )
     ];
 
-    return payload;
+    return configSystem.withGuildBanner(guildConfig, payload, 'xp-leaderboard-banner');
   }
 
   async getLeaderboard(guild) {

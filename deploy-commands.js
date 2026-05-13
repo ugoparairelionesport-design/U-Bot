@@ -174,6 +174,12 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 ];
 
+for (const command of commands) {
+    if (typeof command.setDMPermission === 'function') {
+        command.setDMPermission(false);
+    }
+}
+
 const token = process.env.TOKEN || process.env.DISCORD_TOKEN;
 const clientId = process.env.CLIENT_ID;
 const guildId = process.env.GUILD_ID;

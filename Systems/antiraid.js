@@ -142,7 +142,7 @@ class AntiRaidSystem {
     guildConfig.antiRaid.lockdown = !currentState;
     configSystem.saveConfig(configSystem.getFullConfig());
 
-    return interaction.reply({
+    return configSystem.replyAndAutoDelete(interaction, {
       content: `🛡️ Mode Lockdown ${!currentState ? '🟢 ACTIVÉ' : '🔴 DÉSACTIVÉ'}`,
       flags: 64
     });
