@@ -188,7 +188,7 @@ client.on('interactionCreate', async interaction => {
     /* ===== COMMANDES ===== */
     if (interaction.isChatInputCommand()) {
       // Liste des commandes nécessitant des permissions Administrateur
-      const adminCommands = ['config_ticket', 'modif_config_ticket', 'config_live', 'modif_config_live', 'test_live', 'config_protection', 'set_config', 'help', 'config_musique'];
+      const adminCommands = ['config_ticket', 'modif_config_ticket', 'config_live', 'modif_config_live', 'test_live', 'config_protection', 'set_config', 'help', 'config_musique', 'status'];
       console.log(`⚡ Command: /${interaction.commandName} by ${interaction.user.tag}`);
       
       if (adminCommands.includes(interaction.commandName)) {
@@ -203,6 +203,10 @@ client.on('interactionCreate', async interaction => {
 
       if (interaction.commandName === 'help') {
         return client.configSystem.sendHelpPanel(interaction);
+      }
+
+      if (interaction.commandName === 'status') {
+        return client.configSystem.sendStatusPanel(interaction);
       }
 
       if (interaction.commandName === 'config_protection') {

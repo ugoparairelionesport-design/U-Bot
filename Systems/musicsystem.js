@@ -80,21 +80,29 @@ class MusicSystem {
         volume: this.getSettings(guildId).defaultVolume || 70,
         textChannelId: null,
         voiceChannelId: null,
+        nowChannelId: null,
+        nowMessageId: null,
+        startedAt: null,
         votes: new Set(),
         history: new Set()
       };
 
-      player.on(AudioPlayerStatus.Idle, () => {
+      player.on(AudioPlayerStatus.Idle, async () => {
+        await this.finishNowMessage(state, 'Titre termine').catch(() => {});
         state.current = null;
         state.resource = null;
+        state.startedAt = null;
         state.votes.clear();
         this.playNext(guildId).catch(err => console.error('[MUSIC] playNext:', err.message));
       });
 
-      player.on('error', err => {
+      player.on('error', async err => {
         console.error('[MUSIC] Player error:', err.message);
+        await this.notifyPlaybackFailure(state, err).catch(() => {});
+        await this.finishNowMessage(state, 'Lecture interrompue').catch(() => {});
         state.current = null;
         state.resource = null;
+        state.startedAt = null;
         state.votes.clear();
         this.playNext(guildId).catch(error => console.error('[MUSIC] recovery:', error.message));
       });
@@ -168,6 +176,7 @@ class MusicSystem {
     state.queue = [];
     state.current = null;
     state.votes.clear();
+    this.finishNowMessage(state, 'Lecture stoppee').catch(() => {});
     state.player.stop(true);
     state.connection?.destroy();
     this.states.delete(guildId);
@@ -214,7 +223,7 @@ class MusicSystem {
           return interaction.reply({ content: 'Commande musique inconnue.', flags: 64 });
       }
     } catch (err) {
-      const content = `Erreur musique : ${err.message}`;
+      const content = this.formatUserError(err);
       if (interaction.deferred || interaction.replied) return interaction.editReply({ content });
       return interaction.reply({ content, flags: 64 });
     }
@@ -386,13 +395,16 @@ class MusicSystem {
       const resource = await this.createResource(track, state.volume);
       state.current = track;
       state.resource = resource;
+      state.startedAt = Date.now();
       state.history.add(track.url);
       state.player.play(resource);
       await this.sendNowPlaying(state, track);
     } catch (err) {
       console.error('[MUSIC] Resource error:', err.message);
+      await this.notifyPlaybackFailure(state, err, track).catch(() => {});
       state.current = null;
       state.resource = null;
+      state.startedAt = null;
       await this.playNext(guildId);
     }
   }
@@ -537,25 +549,42 @@ class MusicSystem {
     const channelId = settings.announceChannelId || state.textChannelId;
     const channel = channelId ? await guild.channels.fetch(channelId).catch(() => null) : null;
     if (channel?.isTextBased()) {
-      await channel.send(payload).catch(() => null);
+      const message = await channel.send(payload).catch(() => null);
+      if (message) {
+        state.nowChannelId = channel.id;
+        state.nowMessageId = message.id;
+      }
     }
   }
 
   async buildNowPayload(guild, track, ephemeral = false) {
     const guildConfig = configSystem.getGuildConfig(guild.id);
+    const state = this.states.get(guild.id);
+    const queueCount = state?.queue?.length || 0;
+    const voteText = state?.votes?.size ? `${state.votes.size} vote(s)` : 'Aucun vote';
+    const elapsed = state?.startedAt ? Math.floor((Date.now() - state.startedAt) / 1000) : 0;
+    const progress = this.buildProgressLine(track, elapsed);
+    const voiceText = state?.voiceChannelId ? `<#${state.voiceChannelId}>` : '`Non connecte`';
+
     const embed = new EmbedBuilder()
-      .setTitle('Lecture en cours')
-      .setDescription(`**${this.shorten(track.title, 180)}**`)
+      .setTitle('U-BOT | Now Playing')
+      .setDescription(
+        `**${this.shorten(track.title, 180)}**\n` +
+        `${progress}`
+      )
       .addFields(
         { name: 'Source', value: `\`${track.sourceLabel || track.source}\``, inline: true },
-        { name: 'Duree', value: `\`${track.isRadio ? 'Radio continue' : this.formatDuration(track.duration)}\``, inline: true },
-        { name: 'Demande par', value: `\`${track.requestedByName || 'Inconnu'}\``, inline: true }
+        { name: 'Salon vocal', value: voiceText, inline: true },
+        { name: 'Queue', value: `\`${queueCount} en attente\``, inline: true },
+        { name: 'Demande par', value: `\`${track.requestedByName || 'Inconnu'}\``, inline: true },
+        { name: 'Votes skip', value: `\`${voteText}\``, inline: true },
+        { name: 'Volume', value: `\`${state?.volume || 70}%\``, inline: true }
       )
       .setURL(track.url)
       .setColor(guildConfig.globalEmbedColor)
       .setThumbnail(track.thumbnail || guild.client.user.displayAvatarURL())
       .setImage(guildConfig.globalEmbedBanner)
-      .setFooter({ text: 'U-Bot Music - Queue, vote skip, radio et playlists' })
+      .setFooter({ text: 'U-Bot Music - boutons actifs sur la lecture en cours' })
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
@@ -580,14 +609,17 @@ class MusicSystem {
     const state = this.states.get(guild.id);
     const lines = [];
 
+    const totalDuration = this.getQueueDuration(state?.queue || []);
+
     if (state?.current) {
-      lines.push(`En cours: **${this.shorten(state.current.title, 80)}**`);
+      lines.push(`**En cours**\n${this.shorten(state.current.title, 90)}`);
     } else {
       lines.push('Aucune lecture en cours.');
     }
 
     if (state?.queue?.length) {
       lines.push('');
+      lines.push(`**A suivre** - ${state.queue.length} titre(s), ${totalDuration}`);
       lines.push(...state.queue.slice(0, 10).map((track, index) =>
         `**${index + 1}.** ${this.shorten(track.title, 70)} - \`${track.isRadio ? 'radio' : this.formatDuration(track.duration)}\``
       ));
@@ -595,8 +627,13 @@ class MusicSystem {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle('Queue Musique')
+      .setTitle('U-BOT | Queue Musique')
       .setDescription(lines.join('\n'))
+      .addFields(
+        { name: 'Volume', value: `\`${state?.volume || 70}%\``, inline: true },
+        { name: 'Salon vocal', value: state?.voiceChannelId ? `<#${state.voiceChannelId}>` : '`Non connecte`', inline: true },
+        { name: 'Mode', value: `\`${state?.current?.isRadio ? 'Radio' : 'Lecture'}\``, inline: true }
+      )
       .setColor(guildConfig.globalEmbedColor)
       .setThumbnail(guild.client.user.displayAvatarURL())
       .setImage(guildConfig.globalEmbedBanner)
@@ -623,6 +660,65 @@ class MusicSystem {
     const hours = Math.floor(mins / 60);
     if (hours > 0) return `${hours}:${String(mins % 60).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
     return `${mins}:${String(secs).padStart(2, '0')}`;
+  }
+
+  buildProgressLine(track, elapsed) {
+    if (track.isRadio || !track.duration) return '`Radio continue`';
+    const current = Math.max(0, Math.min(track.duration, elapsed || 0));
+    const ratio = track.duration > 0 ? current / track.duration : 0;
+    const filled = Math.round(ratio * 14);
+    const bar = '#'.repeat(filled) + '-'.repeat(14 - filled);
+    return `\`${this.formatDuration(current)} ${bar} ${this.formatDuration(track.duration)}\``;
+  }
+
+  getQueueDuration(queue) {
+    const finite = queue.filter(track => !track.isRadio && track.duration);
+    if (!finite.length) return 'duree variable';
+    return this.formatDuration(finite.reduce((total, track) => total + Number(track.duration || 0), 0));
+  }
+
+  async finishNowMessage(state, label) {
+    if (!state?.nowChannelId || !state?.nowMessageId) return;
+    const guild = this.client.guilds.cache.get(state.guildId);
+    const channel = guild ? await guild.channels.fetch(state.nowChannelId).catch(() => null) : null;
+    const message = channel?.isTextBased()
+      ? await channel.messages.fetch(state.nowMessageId).catch(() => null)
+      : null;
+
+    if (message?.editable && message.embeds?.length) {
+      const embeds = message.embeds.map(embed =>
+        EmbedBuilder.from(embed.toJSON()).setFooter({ text: `U-Bot Music - ${label}` })
+      );
+      await message.edit({ embeds, components: [] }).catch(() => {});
+    }
+
+    state.nowChannelId = null;
+    state.nowMessageId = null;
+  }
+
+  async notifyPlaybackFailure(state, err, track = null) {
+    const guild = this.client.guilds.cache.get(state.guildId);
+    const channelId = state.textChannelId || state.nowChannelId;
+    const channel = guild && channelId ? await guild.channels.fetch(channelId).catch(() => null) : null;
+    if (!channel?.isTextBased()) return;
+
+    const title = track?.title ? `**${this.shorten(track.title, 90)}**` : 'le titre en cours';
+    await channel.send({
+      content: `Lecture impossible pour ${title}. Passage au titre suivant si la queue contient encore de la musique.`
+    }).then(message => {
+      setTimeout(() => message.delete().catch(() => {}), 12000);
+    }).catch(() => {});
+  }
+
+  formatUserError(err) {
+    const raw = String(err?.message || err || 'Erreur inconnue');
+    if (/YouTube|Captcha|bot|unusual traffic|playability|private|unavailable|Sign in/i.test(raw)) {
+      return 'Erreur musique : cette source est bloquee ou indisponible. Essaie un autre lien, une recherche texte ou une radio.';
+    }
+    if (/ffmpeg|Flux|stream|403|404|410|429/i.test(raw)) {
+      return 'Erreur musique : le flux audio est indisponible pour le moment. Essaie une autre source.';
+    }
+    return `Erreur musique : ${raw}`;
   }
 
   shorten(text, max) {

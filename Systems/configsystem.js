@@ -3797,7 +3797,7 @@ async function sendHelpPanel(interaction) {
     "📡 Live System": ['config_live', 'modif_config_live', 'test_live'],
     "🎵 Musique": ['config_musique', 'musique'],
     "🤖 IA & Automatisation": ['set_ia', 'annonce'],
-    "🤖 Configuration": ['set_config', 'help']
+    "🤖 Configuration": ['set_config', 'status', 'help']
   };
 
   const embed = new EmbedBuilder()
@@ -3836,6 +3836,7 @@ async function sendHelpPanel(interaction) {
           'rank': 'Voir son profil d\'XP.',
           'leaderboard': 'Voir le classement général.',
           'set_config': 'Changer le nom et l\'image/couleur du bot.',
+          'status': 'Voir l\'etat technique du bot.',
           'help': 'Afficher ce menu d\'assistance.'
         };
         
@@ -4127,21 +4128,38 @@ async function sendMusicConfigPanel(interaction) {
     .setTitle('U-BOT | Audio Protocol')
     .setDescription(
       '**Centre musique du serveur**\n' +
-      'Configure la lecture audio, les permissions DJ, les votes et les ambiances radio.\n\n' +
-      '**Etat du module**\n' +
-      `- Systeme : ${enabledText}\n` +
-      `- Role DJ : ${djText}\n` +
-      `- Annonces : ${announceText}\n` +
-      `- Volume serveur : \`${settings.defaultVolume}%\`\n` +
-      `- Queue max : \`${settings.maxQueue} titres\`\n\n` +
-      '**Sources autorisees**\n' +
-      `${sourcesText}\n\n` +
-      '**Options de lecture**\n' +
-      `- Vote skip : ${settings.voteSkip ? '`ON`' : '`OFF`'} (${Math.round(settings.voteSkipRatio * 100)}%)\n` +
-      `- Autoplay : ${settings.autoplay ? '`ON`' : '`OFF`'}\n` +
-      `- Lyrics : ${settings.lyrics ? '`ON`' : '`OFF`'}\n` +
-      '- Volume individuel : `Discord gere deja le volume cote utilisateur`\n' +
-      '- Clips via stream Discord : `Non disponible via API bot`'
+      'Lecture vocale, queue, playlists, radios et permissions DJ.'
+    )
+    .addFields(
+      {
+        name: 'Etat',
+        value:
+          `Systeme : ${enabledText}\n` +
+          `Role DJ : ${djText}\n` +
+          `Annonces : ${announceText}`,
+        inline: false
+      },
+      {
+        name: 'Lecture',
+        value:
+          `Volume : \`${settings.defaultVolume}%\`\n` +
+          `Queue max : \`${settings.maxQueue}\`\n` +
+          `Vote skip : ${settings.voteSkip ? '`ON`' : '`OFF`'} (${Math.round(settings.voteSkipRatio * 100)}%)`,
+        inline: true
+      },
+      {
+        name: 'Sources',
+        value: sourcesText,
+        inline: true
+      },
+      {
+        name: 'Options',
+        value:
+          `Autoplay : ${settings.autoplay ? '`ON`' : '`OFF`'}\n` +
+          `Lyrics : ${settings.lyrics ? '`ON`' : '`OFF`'}\n` +
+          'Clips Discord : `API bot indisponible`',
+        inline: true
+      }
     )
     .setThumbnail(interaction.client.user.displayAvatarURL())
     .setImage(guildConfig.globalEmbedBanner)
@@ -4268,6 +4286,75 @@ async function toggleMusicSetting(interaction, key) {
   return sendMusicConfigPanel(interaction);
 }
 
+async function sendStatusPanel(interaction) {
+  const guildConfig = getGuildConfig(interaction.guildId);
+  const memory = process.memoryUsage();
+  const uptimeSeconds = Math.floor(process.uptime());
+  const musicState = interaction.client.musicSystem?.states?.get(interaction.guildId);
+  const formatBool = value => value ? '`OK`' : '`Manquant`';
+  const formatModule = value => value ? '`ON`' : '`OFF`';
+
+  const embed = new EmbedBuilder()
+    .setTitle('U-BOT | System Status')
+    .setDescription('Vue rapide de la sante du bot et des modules du serveur.')
+    .addFields(
+      {
+        name: 'Bot',
+        value:
+          `Uptime : \`${formatDurationShort(uptimeSeconds)}\`\n` +
+          `Serveurs : \`${interaction.client.guilds.cache.size}\`\n` +
+          `Memoire : \`${Math.round(memory.rss / 1024 / 1024)} MB\``,
+        inline: true
+      },
+      {
+        name: 'Secrets',
+        value:
+          `Discord : ${formatBool(Boolean(process.env.TOKEN || process.env.DISCORD_TOKEN))}\n` +
+          `Groq IA : ${formatBool(Boolean(process.env.GROQ_API_KEY))}\n` +
+          `Twitch : ${formatBool(Boolean(process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_SECRET))}\n` +
+          `YouTube : ${formatBool(Boolean(process.env.YOUTUBE_API_KEY))}`,
+        inline: true
+      },
+      {
+        name: 'Modules serveur',
+        value:
+          `Tickets : \`ON\`\n` +
+          `Protection : ${formatModule(guildConfig.antiRaid.enabled || guildConfig.antiSpam.enabled || guildConfig.verification.enabled || guildConfig.dmLock.enabled)}\n` +
+          `Musique : ${formatModule(guildConfig.music.enabled)}\n` +
+          `XP : ${formatModule(guildConfig.xp.enabled)}\n` +
+          `IA : ${formatModule(guildConfig.ai.enabled)}`,
+        inline: false
+      },
+      {
+        name: 'Musique',
+        value:
+          `Lecture : ${musicState?.current ? `\`${musicState.current.title.slice(0, 45)}\`` : '`Aucune`'}\n` +
+          `Queue : \`${musicState?.queue?.length || 0}\`\n` +
+          `Vocal : ${musicState?.voiceChannelId ? `<#${musicState.voiceChannelId}>` : '`Non connecte`'}`,
+        inline: false
+      }
+    )
+    .setThumbnail(interaction.client.user.displayAvatarURL())
+    .setImage(guildConfig.globalEmbedBanner)
+    .setColor(guildConfig.globalEmbedColor)
+    .setFooter({ text: 'U-Bot System - diagnostic admin' })
+    .setTimestamp();
+
+  return replyAndAutoDelete(interaction, withGuildBanner(guildConfig, {
+    embeds: [embed],
+    flags: 64
+  }, 'status-banner'));
+}
+
+function formatDurationShort(totalSeconds) {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  if (days > 0) return `${days}j ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m ${totalSeconds % 60}s`;
+}
+
 module.exports = {
   // Core & Tickets
   getGuildConfig,
@@ -4312,6 +4399,7 @@ module.exports = {
   buildMusicSettingsModal,
   saveMusicSettings,
   toggleMusicSetting,
+  sendStatusPanel,
   saveGlobalColorConfig,
   CONFIG_MESSAGE_DELETE_DELAY_MS, // Keep this one, it's a constant
   handleButtons,

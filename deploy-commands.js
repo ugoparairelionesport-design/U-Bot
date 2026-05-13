@@ -164,6 +164,11 @@ const commands = [
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
     new SlashCommandBuilder()
+        .setName('status')
+        .setDescription('Affiche l etat technique du bot et des modules.')
+        .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+
+    new SlashCommandBuilder()
         .setName('help')
         .setDescription('Affiche la liste des commandes et modules du bot.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
