@@ -21,6 +21,7 @@ $items = @(
   'index.js',
   'deploy-commands.js',
   'package.json',
+  'package-lock.json',
   'discloud.config',
   '.env'
 )

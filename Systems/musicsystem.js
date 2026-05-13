@@ -1,5 +1,10 @@
-const ffmpegPath = require('ffmpeg-static');
-if (ffmpegPath) process.env.FFMPEG_PATH = ffmpegPath;
+let ffmpegPath = null;
+try {
+  ffmpegPath = require('ffmpeg-static');
+  if (ffmpegPath) process.env.FFMPEG_PATH = ffmpegPath;
+} catch (_) {
+  console.warn('[MUSIC] ffmpeg-static indisponible. YouTube peut fonctionner, mais les radios/flux directs peuvent etre limites.');
+}
 
 const { Readable } = require('stream');
 const {
