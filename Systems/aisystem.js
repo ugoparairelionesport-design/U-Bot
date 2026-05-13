@@ -51,11 +51,9 @@ class AISystem {
 
       const apiKey = (process.env.GROQ_API_KEY || "").trim();
       if (!apiKey) {
-        console.error("❌ [IA] GROQ_API_KEY est vide ou non définie dans les Secrets.");
-        return message.reply("❌ Erreur : La clé `GROQ_API_KEY` est manquante dans les secrets du bot.");
+        console.error("❌ [IA] Service IA non configuré.");
+        return message.reply("❌ Le service IA n'est pas configuré pour ce bot.");
       }
-
-      console.log(`DEBUG [IA]: Clé API détectée (longueur: ${apiKey.length})`);
 
       // Nettoyage du prompt (retrait de la mention du bot)
       const botId = this.client.user?.id;
@@ -111,7 +109,7 @@ class AISystem {
   async generateEventIdeas(guild) {
     try {
       const apiKey = process.env.GROQ_API_KEY;
-      if (!apiKey) return "❌ Clé API manquante.";
+      if (!apiKey) return "❌ Service IA non configuré.";
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -148,7 +146,7 @@ class AISystem {
       if (!textToSummarize) return "❌ Pas assez de messages récents pour résumer.";
 
       const apiKey = process.env.GROQ_API_KEY;
-      if (!apiKey) return "❌ Clé API manquante.";
+      if (!apiKey) return "❌ Service IA non configuré.";
 
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -262,7 +260,7 @@ class AISystem {
 
     const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      return interaction.editReply("❌ Erreur : La clé `GROQ_API_KEY` est manquante dans les secrets du bot.");
+      return interaction.editReply("❌ Le service IA n'est pas configuré pour ce bot.");
     }
 
     let prompt = `Crée une annonce Discord très esthétique et engageante. Utilise des formats Discord comme le gras, le souligné, les italiques, les blocs de code, les citations, et des emojis pertinents. Le ton doit être professionnel mais amical.

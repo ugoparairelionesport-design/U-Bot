@@ -4291,7 +4291,6 @@ async function sendStatusPanel(interaction) {
   const memory = process.memoryUsage();
   const uptimeSeconds = Math.floor(process.uptime());
   const musicState = interaction.client.musicSystem?.states?.get(interaction.guildId);
-  const formatBool = value => value ? '`OK`' : '`Manquant`';
   const formatModule = value => value ? '`ON`' : '`OFF`';
 
   const embed = new EmbedBuilder()
@@ -4304,15 +4303,6 @@ async function sendStatusPanel(interaction) {
           `Uptime : \`${formatDurationShort(uptimeSeconds)}\`\n` +
           `Serveurs : \`${interaction.client.guilds.cache.size}\`\n` +
           `Memoire : \`${Math.round(memory.rss / 1024 / 1024)} MB\``,
-        inline: true
-      },
-      {
-        name: 'Secrets',
-        value:
-          `Discord : ${formatBool(Boolean(process.env.TOKEN || process.env.DISCORD_TOKEN))}\n` +
-          `Groq IA : ${formatBool(Boolean(process.env.GROQ_API_KEY))}\n` +
-          `Twitch : ${formatBool(Boolean(process.env.TWITCH_CLIENT_ID && process.env.TWITCH_CLIENT_SECRET))}\n` +
-          `YouTube : ${formatBool(Boolean(process.env.YOUTUBE_API_KEY))}`,
         inline: true
       },
       {
