@@ -27,6 +27,7 @@ const {
 } = require('@discordjs/voice');
 const playdl = require('play-dl');
 const { fetch } = require('undici');
+const spotifyInfo = require('spotify-url-info')(fetch);
 const configSystem = require('./configsystem');
 
 const RADIOS = {
@@ -56,6 +57,7 @@ class MusicSystem {
   constructor(client) {
     this.client = client;
     this.states = new Map();
+    this.spotifyTokenConfigured = false;
     console.log('MusicSystem initialise');
   }
 
@@ -473,14 +475,18 @@ class MusicSystem {
       return this.resolveSpotify(query, user, settings, limit);
     }
 
+    const playlistId = this.extractYouTubePlaylistId(query);
+    if (playlistId) {
+      if (!settings.allowYouTube) throw new Error('YouTube est desactive dans /config_musique.');
+      return this.resolveYouTubePlaylist(query, user, limit);
+    }
+
     const ytType = playdl.yt_validate(query);
     if (ytType) {
       if (!settings.allowYouTube) throw new Error('YouTube est desactive dans /config_musique.');
 
       if (ytType === 'playlist') {
-        const playlist = await playdl.playlist_info(query, { incomplete: true });
-        const videos = await playlist.all_videos();
-        return videos.slice(0, limit).map(video => this.videoToTrack(video, user));
+        return this.resolveYouTubePlaylist(query, user, limit);
       }
 
       const info = await playdl.video_info(query);
@@ -495,25 +501,137 @@ class MusicSystem {
     return results.slice(0, 1).map(video => this.videoToTrack(video, user));
   }
 
-  async resolveSpotify(url, user, settings, limit) {
-    const spotify = await playdl.spotify(url);
-    const tracks = [];
+  async resolveYouTubePlaylist(input, user, limit) {
+    const playlistId = this.extractYouTubePlaylistId(input);
+    if (!playlistId) throw new Error('Playlist YouTube invalide.');
 
-    if (spotify.type === 'track') {
-      tracks.push(spotify);
-    } else if (typeof spotify.fetch === 'function') {
-      const fetched = await spotify.fetch();
-      const maps = fetched?.fetched_tracks ? Array.from(fetched.fetched_tracks.values()).flat() : [];
-      if (Array.isArray(fetched?.tracks)) tracks.push(...fetched.tracks);
-      tracks.push(...maps);
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    if (apiKey) {
+      const tracks = await this.resolveYouTubePlaylistWithApi(playlistId, user, limit);
+      if (tracks.length) return tracks;
+    }
+
+    try {
+      const playlist = await playdl.playlist_info(input, { incomplete: true });
+      const videos = await playlist.all_videos();
+      return videos
+        .filter(video => video?.url && video?.title)
+        .slice(0, limit)
+        .map(video => this.videoToTrack(video, user));
+    } catch (err) {
+      throw new Error('Playlist YouTube indisponible. Configure YOUTUBE_API_KEY dans les variables Discloud pour une lecture fiable des playlists.');
+    }
+  }
+
+  async resolveYouTubePlaylistWithApi(playlistId, user, limit) {
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    const tracks = [];
+    let pageToken = '';
+
+    while (tracks.length < limit) {
+      const params = new URLSearchParams({
+        part: 'snippet,contentDetails',
+        maxResults: String(Math.min(50, Math.max(1, limit - tracks.length))),
+        playlistId,
+        key: apiKey
+      });
+      if (pageToken) params.set('pageToken', pageToken);
+
+      const response = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?${params.toString()}`);
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message = data?.error?.message || `HTTP ${response.status}`;
+        throw new Error(`Playlist YouTube API indisponible : ${message}`);
+      }
+
+      for (const item of data.items || []) {
+        const videoId = item.contentDetails?.videoId;
+        const title = item.snippet?.title;
+        if (!videoId || !title || /^Deleted video|Private video$/i.test(title)) continue;
+
+        const thumbnailSet = item.snippet?.thumbnails || {};
+        const thumbnail = thumbnailSet.maxres?.url ||
+          thumbnailSet.standard?.url ||
+          thumbnailSet.high?.url ||
+          thumbnailSet.medium?.url ||
+          thumbnailSet.default?.url ||
+          null;
+
+        tracks.push({
+          title,
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+          duration: 0,
+          thumbnail,
+          source: 'youtube',
+          sourceLabel: 'YouTube Playlist',
+          requestedById: user.id,
+          requestedByName: user.username,
+          videoId
+        });
+
+        if (tracks.length >= limit) break;
+      }
+
+      pageToken = data.nextPageToken || '';
+      if (!pageToken) break;
+    }
+
+    await this.applyYouTubeDurations(tracks);
+    return tracks;
+  }
+
+  async applyYouTubeDurations(tracks) {
+    const apiKey = process.env.YOUTUBE_API_KEY;
+    const ids = tracks.map(track => track.videoId).filter(Boolean);
+    if (!apiKey || !ids.length) return;
+
+    const durations = new Map();
+    for (let index = 0; index < ids.length; index += 50) {
+      const params = new URLSearchParams({
+        part: 'contentDetails',
+        id: ids.slice(index, index + 50).join(','),
+        key: apiKey
+      });
+      const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?${params.toString()}`).catch(() => null);
+      const data = response?.ok ? await response.json().catch(() => null) : null;
+      for (const item of data?.items || []) {
+        durations.set(item.id, this.parseIsoDuration(item.contentDetails?.duration));
+      }
+    }
+
+    for (const track of tracks) {
+      if (durations.has(track.videoId)) track.duration = durations.get(track.videoId);
+      delete track.videoId;
+    }
+  }
+
+  async resolveSpotify(url, user, settings, limit) {
+    if (!settings.allowYouTube) throw new Error('Spotify utilise YouTube comme source audio. Active YouTube.');
+
+    let tracks = [];
+    try {
+      tracks = await spotifyInfo.getTracks(url);
+    } catch (_) {
+      await this.configureSpotifyToken().catch(() => {});
+      const spotify = await playdl.spotify(url);
+
+      if (spotify.type === 'track') {
+        tracks.push(spotify);
+      } else if (typeof spotify.fetch === 'function') {
+        const fetched = await spotify.fetch();
+        const maps = fetched?.fetched_tracks ? Array.from(fetched.fetched_tracks.values()).flat() : [];
+        if (Array.isArray(fetched?.tracks)) tracks.push(...fetched.tracks);
+        tracks.push(...maps);
+      }
     }
 
     if (!tracks.length) throw new Error('Lien Spotify non resolu.');
-    if (!settings.allowYouTube) throw new Error('Spotify utilise YouTube comme source audio. Active YouTube.');
 
     const resolved = [];
     for (const track of tracks.slice(0, limit)) {
-      const artists = Array.isArray(track.artists) ? track.artists.map(artist => artist.name).join(' ') : '';
+      const artists = Array.isArray(track.artists)
+        ? track.artists.map(artist => artist.name || artist).join(' ')
+        : (track.artist || track.artists || '');
       const search = `${track.name || track.title || ''} ${artists}`.trim();
       if (!search) continue;
       const videos = await playdl.search(search, { limit: 1, source: { youtube: 'video' } }).catch(() => []);
@@ -525,6 +643,25 @@ class MusicSystem {
     }
 
     return resolved;
+  }
+
+  async configureSpotifyToken() {
+    if (this.spotifyTokenConfigured) return;
+
+    const client_id = process.env.SPOTIFY_CLIENT_ID;
+    const client_secret = process.env.SPOTIFY_CLIENT_SECRET;
+    const refresh_token = process.env.SPOTIFY_REFRESH_TOKEN;
+
+    if (!client_id || !client_secret || !refresh_token) return;
+    await playdl.setToken({
+      spotify: {
+        client_id,
+        client_secret,
+        refresh_token,
+        market: process.env.SPOTIFY_MARKET || 'FR'
+      }
+    });
+    this.spotifyTokenConfigured = true;
   }
 
   videoToTrack(video, user) {
@@ -651,6 +788,26 @@ class MusicSystem {
 
   isSpotifyUrl(value) {
     return /^https?:\/\/open\.spotify\.com\//i.test(value);
+  }
+
+  extractYouTubePlaylistId(value) {
+    const text = String(value || '').trim();
+    if (/^(PL|UU|LL|RD|OL)[a-zA-Z0-9_-]{10,}$/i.test(text)) return text;
+
+    try {
+      const parsed = new URL(text);
+      if (!/(^|\.)youtube\.com$/i.test(parsed.hostname) && !/(^|\.)youtu\.be$/i.test(parsed.hostname)) return null;
+      const list = parsed.searchParams.get('list');
+      return /^(PL|UU|LL|RD|OL)[a-zA-Z0-9_-]{10,}$/i.test(list || '') ? list : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  parseIsoDuration(value) {
+    const match = String(value || '').match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/);
+    if (!match) return 0;
+    return (Number(match[1] || 0) * 3600) + (Number(match[2] || 0) * 60) + Number(match[3] || 0);
   }
 
   formatDuration(seconds) {
